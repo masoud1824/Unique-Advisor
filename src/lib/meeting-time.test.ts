@@ -35,7 +35,7 @@ describe("meeting clock", () => {
   });
 
   it("shows the day, date, and start-to-end time in the advisor time zone", () => {
-    assert.equal(formatMeetingSpan(new Date("2026-11-09T19:00:00.000Z"), 30, "America/Toronto"), "Mon, Nov 9 \u00b7 2:00\u20132:30 PM");
+    assert.equal(formatMeetingSpan(new Date("2026-11-09T19:00:00.000Z"), 30, "America/Toronto"), "Mon, Nov 9 · 2:00–2:30 PM");
     assert.equal(formatMeetingSpan(new Date("invalid"), 30, "America/Toronto"), "");
   });
 });
