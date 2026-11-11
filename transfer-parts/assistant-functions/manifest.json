@@ -1,0 +1,146 @@
+{
+  "destination": "src/lib/assistant.functions.ts",
+  "byte_length": 142216,
+  "sha256": "b6642bf90567f10f41bc61c3dd0e6f7e47467c5e0b8df613499c1d10caf9d3b9",
+  "encoding": "base64",
+  "part_format": "ASCII base64 wrapped at 76 columns, one trailing LF after the last line. Strip all whitespace before concatenating and decoding.",
+  "parts_dir": "transfer-parts/assistant-functions",
+  "parts": [
+    {
+      "order": 1,
+      "name": "part-001.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "3345a74100c71243c8cbec106edfa0191e0b6d0d083f126d4312758f39295230",
+      "payload_sha256": "d989f01d93963113893850ee6e814fece6135c8371741991775d6c0a6690a566"
+    },
+    {
+      "order": 2,
+      "name": "part-002.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "55d1102789b767fb06cf3b7d328f3bd317e107a0e538e0cba6691cd24c13effe",
+      "payload_sha256": "37b128c6e7d3dbe97ce09de3647825daa9927974b4b24c36eb396f3b4b14edeb"
+    },
+    {
+      "order": 3,
+      "name": "part-003.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "0d09dbec0adca2173be05911fbaa6b73c52bd796904d458dc7fef985594ad54a",
+      "payload_sha256": "db74dbf70178c3e3cdd48c0b3e7b394cfadfce97c56e2a729b02d01ce9710929"
+    },
+    {
+      "order": 4,
+      "name": "part-004.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "56e9ab3dd69e3f34ec909f001e5979ed8a749a67cc88f1d0a108f4fb6df23a47",
+      "payload_sha256": "18fb97fe25799fd42d54b2087ffe77cddd339171d5802718c5863b2955187d80"
+    },
+    {
+      "order": 5,
+      "name": "part-005.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "32005ee2d7f24bf86517a2ecbbb7bc393a3ec1df48bcbcadc516d66569e50959",
+      "payload_sha256": "11c2991b780a366e12a209297ba27e9e79f4d28535d5269c4c23b96220e80f10"
+    },
+    {
+      "order": 6,
+      "name": "part-006.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "1512f33f57750bbe50b86f708056eb18b591ad616789fa9e450a9940956860f1",
+      "payload_sha256": "c35381d344a981ab6ec9907d1e86f2babf2f4c10c6ac2181981a13e5204636a2"
+    },
+    {
+      "order": 7,
+      "name": "part-007.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "5168d259374b34f483dbdc94f3e76fb62462367725cd3ce9c4feab8b5679f35e",
+      "payload_sha256": "529e7986bf2898c099abd7d860f6da289c652834e820466317aa61d9c3b35fa0"
+    },
+    {
+      "order": 8,
+      "name": "part-008.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "bbdb701c34cbbbc7c117f672af51717125204076ffc2736cd9b96cdf474ed160",
+      "payload_sha256": "3020dac9c094deb1fafab948f9cfdc048a11709d06394d3d8cde5479b1579d50"
+    },
+    {
+      "order": 9,
+      "name": "part-009.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "382c94b84a6a1d84541b17ff864c89e2f64975c50891957ce66ee7f05f75fe27",
+      "payload_sha256": "b5f36a5819e5b22bb5e499b7a202c2dfee872bd045cac84ea6dea7a127dd7e2d"
+    },
+    {
+      "order": 10,
+      "name": "part-010.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "91e25ec7f7faea0ffb240064098e9f697192e818fe41b59d553ec7bd769cdd49",
+      "payload_sha256": "375f85c1b89268f7dc8d9e04b56eb141107cf78d6e5df4ad159422b5624514ae"
+    },
+    {
+      "order": 11,
+      "name": "part-011.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "a4cce39f376346a77ed5ba76089849044c8c5c736e7a9f3963fcd52eb4731583",
+      "payload_sha256": "e21bfbc816310fab8e28bf58d2bd8dd420c18fd3c13682f58c60bab7c7a616dd"
+    },
+    {
+      "order": 12,
+      "name": "part-012.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "797e3d1aa9942faee947defbc91f7a7d5aa92867447c2353bcc4516a8790c890",
+      "payload_sha256": "7609c56ebb7d10cef60a10344ef9d16e264c53056acf514730a59d5471a2d469"
+    },
+    {
+      "order": 13,
+      "name": "part-013.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "98e6e5f4812ac954e6b26edf225fd2f6bff324ff874b903d54cd3166601db59e",
+      "payload_sha256": "3b16b91991a73e3ae7d1a885a7225438020047a1dc6496bda20f45f84d354776"
+    },
+    {
+      "order": 14,
+      "name": "part-014.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "8943b458b39e61e92eb95a303096ed3bd0ba2b1679f0adeea54637f2b20bc3f1",
+      "payload_sha256": "163a7a8ac825f6d8189d115cd29fff510236490e45c555cc936d1358c5b608f0"
+    },
+    {
+      "order": 15,
+      "name": "part-015.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "a5d221e0325c9adc5c7594cebc9823ac0e3be828fdccb6349336f246bb30031d",
+      "payload_sha256": "e8eff3aa6db27c4f55101a6a4828790885ba9233327231f31489b63ace610614"
+    },
+    {
+      "order": 16,
+      "name": "part-016.txt",
+      "file_chars": 11935,
+      "payload_chars": 11780,
+      "file_sha256": "5a2a2ece7eb674b43cda7c55e279752c58e686aee2f94158a0a5c8e24664ac0e",
+      "payload_sha256": "c72afc425f14006238c1b37898bbb8933d29382684aef57588737932440bdd9b"
+    },
+    {
+      "order": 17,
+      "name": "part-017.txt",
+      "file_chars": 1160,
+      "payload_chars": 1144,
+      "file_sha256": "d754f61a417fc3b396f788935f1b70ea37663b8c2d51996557ed19f035312717",
+      "payload_sha256": "394767723057bce3426ba8f73f14378b499c587598c9d746a9340f4f899446a4"
+    }
+  ]
+}
