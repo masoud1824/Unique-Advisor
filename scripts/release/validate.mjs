@@ -8,7 +8,6 @@ import { assertReleaseProcess } from "../../src/lib/release-env.ts";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const releaseName = process.env.UA_RELEASE_ENV === "staging" ? "staging" : "development";
 const port = Number(process.env.UA_RELEASE_PORT || (releaseName === "staging" ? 8093 : 8092));
-process.env.UA_RELEASE_ENV = releaseName;
 assertReleaseProcess({ cwd: root, port });
 if (process.env.DATABASE_URL?.trim()) {
   console.error("Refusing validation while DATABASE_URL is set.");
@@ -45,6 +44,7 @@ run(
   "regression",
   "node",
   ["--experimental-strip-types", "--test", ...tests],
+  { UA_RELEASE_ENV: "" },
 );
 run("disposable-database", "node", ["--experimental-strip-types", "scripts/release/disposable-db.mjs"], {
   UA_RELEASE_ENV: releaseName,
