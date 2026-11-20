@@ -37,6 +37,12 @@ const SOURCE_LETTER = [
   "Nothing in this draft has been sent.",
 ].join("\n\n");
 const PARTIAL_LETTER = "This paragraph confirms the combined edit works.";
+const FULL_LETTER = [
+  "Dear [Contact Name],",
+  "This acceptance letter is a fictional draft about reviewing retirement income.",
+  "This paragraph confirms the combined edit works.",
+  "Nothing in this draft has been sent.",
+].join("\n\n");
 const CARD_BODY = "Thank you for your trust. It is a pleasure working with you.";
 
 function hashCode(code) {
@@ -44,6 +50,16 @@ function hashCode(code) {
 }
 function secret() {
   return randomBytes(18).toString("base64url");
+}
+function torontoClock(hour, minute) {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Toronto", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+  const bag = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const guess = new Date(Date.UTC(Number(bag.year), Number(bag.month) - 1, Number(bag.day), hour, minute));
+  const shown = new Intl.DateTimeFormat("en-US", { timeZone: "America/Toronto", hour12: false, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).formatToParts(guess);
+  const got = Object.fromEntries(shown.map((part) => [part.type, part.value]));
+  const asUtc = Date.UTC(Number(got.year), Number(got.month) - 1, Number(got.day), Number(got.hour) % 24, Number(got.minute));
+  return new Date(guess.getTime() - (asUtc - guess.getTime()));
 }
 function social() {
   return { linkedin: "", instagram: "", facebook: "", youtube: "" };
@@ -124,7 +140,7 @@ for (const contact of fixture.contacts) {
 
 await pg.query(
   "insert into saved_letters (advisor_id, title, subject, body) values ($1, $2, $2, $3)",
-  [advisorId, fixture.letter.title, packLetter(fixture.letter.title, PARTIAL_LETTER)],
+  [advisorId, fixture.letter.title, packLetter(fixture.letter.title, FULL_LETTER)],
 );
 await pg.query(
   "insert into saved_letters (advisor_id, title, subject, body) values ($1, $2, $2, $3)",
@@ -218,8 +234,7 @@ await pg.query(
   [advisorId, "Birthday check is off for this staging practice. Nothing was sent."],
 );
 
-const when = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
-when.setUTCMinutes(0, 0, 0);
+const when = torontoClock(16, 0);
 await pg.exec(`create table if not exists desk_calendar_events (
   id serial primary key,
   advisor_id integer not null,
@@ -252,8 +267,9 @@ const parsedSteps = JSON.parse(drip.rows[0].steps);
 const report = {
   kind: "staging-fictional-seed",
   notADatabaseBackup: true,
-  fullEditedLetterAvailable: false,
-  partialLetterOnly: parsedLetter.body === PARTIAL_LETTER,
+  partialLetterOnly: fixture.letter.body === PARTIAL_LETTER,
+  fullLetterStored: parsedLetter.body === FULL_LETTER,
+  oneSentenceFixtureIsNotTheStoredLetter: fixture.letter.body !== FULL_LETTER,
   sourceSeedIsOriginalDraft: parsedSource.body === SOURCE_LETTER,
   sourceSeedIsNotThePartialLetter: parsedSource.body !== PARTIAL_LETTER,
   cardMatches: card.rows[0].message === CARD_BODY,
@@ -272,7 +288,7 @@ const report = {
   otherNewsletterId,
   database: sourceDir,
 };
-const ok = report.partialLetterOnly && report.sourceSeedIsOriginalDraft && report.cardMatches && report.dripInactive && report.step2Wait && report.everyDays === 7 && report.birthdayEnabled === false && report.operatorStillDefault && report.draftHidden && report.publishedArticles === 5;
+const ok = report.partialLetterOnly && report.fullLetterStored && report.oneSentenceFixtureIsNotTheStoredLetter && report.sourceSeedIsOriginalDraft && report.cardMatches && report.dripInactive && report.step2Wait && report.everyDays === 7 && report.birthdayEnabled === false && report.operatorStillDefault && report.draftHidden && report.publishedArticles === 5;
 if (!ok) {
   console.error(JSON.stringify(report, null, 2));
   await pg.close();

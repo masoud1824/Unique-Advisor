@@ -28,6 +28,7 @@ const tests = [
   "src/lib/platform-features.test.ts",
   "src/lib/library-store.test.ts",
   "src/lib/birthday-worker.test.ts",
+  "src/lib/birthday-desk.test.ts",
 ];
 
 function run(label, command, args, env = {}) {

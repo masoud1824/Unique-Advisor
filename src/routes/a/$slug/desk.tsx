@@ -40,6 +40,7 @@ import { contactMatchesQuery } from "@/lib/contact-match";
 import { NewsRibbon } from "@/components/news-ribbon";
 import { deskStatusBanner } from "@/lib/staging-banner";
 import { ArticleLibraryDesk } from "@/components/article-library-desk";
+import { BirthdayDesk } from "@/components/birthday-desk";
 import { clearDeskToken, installDeskSessionFetch, readDeskToken, saveDeskToken } from "@/lib/desk-session-client";
 import { clearPhoneLogin, readPhoneLogin, savePhoneLogin } from "@/lib/phone-app";
 
@@ -270,6 +271,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		cards: "E-Cards",
 		letters: "E-Newsletters",
 		library: "Article library",
+		birthdays: "Birthdays",
 		eletters: "E-Letters",
 		drips: "Drip Campaigns",
 		links: "Useful Links",
@@ -289,6 +291,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		["cards", "E-Cards"],
 		["letters", "E-Newsletters"],
 		["library", "Article library"],
+		["birthdays", "Birthdays"],
 		["eletters", "E-Letters"],
 		["drips", "Drip Campaigns"],
 		["links", "Useful Links"],
@@ -452,7 +455,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 							})
 						]
 					}),
-					/* @__PURE__ */ jsx(NewsRibbon, { slug: desk.slug, code, language: "en" }),
+					/* @__PURE__ */ jsx(NewsRibbon, { slug: desk.slug, code }),
 					tab === "dashboard" && /* @__PURE__ */ jsx(Dashboard, {
 						code,
 						desk,
@@ -478,6 +481,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 						ping
 					}),
 					tab === "library" && /* @__PURE__ */ jsx(ArticleLibraryDesk, { slug: desk.slug, code, ping }),
+					tab === "birthdays" && /* @__PURE__ */ jsx(BirthdayDesk, { slug: desk.slug, code, ping }),
 					tab === "letters" && /* @__PURE__ */ jsx(NewsletterDesk, {
 						key: desk.letters.map((letter) => `${letter.id}:${letter.body.length}`).join("|"),
 						code,
@@ -612,7 +616,7 @@ function Dashboard({ code, desk, go, meetings, zone }) {
 					children: "No upcoming meetings."
 				}) : /* @__PURE__ */ jsx("ul", {
 					className: "mt-3",
-					children: meetings.map((meeting: { id: string; when: string; time: string; schedule?: string; minutes?: number; start?: string; client: string; title: string; join: string }) => {
+					children: meetings.map((meeting: { id: string; when: string; time: string; schedule?: string; minutes?: number; start?: string; client: string; title: string; join: string; location?: string }) => {
 						const schedule = formatMeetingSpan(new Date(meeting.start || ""), Number(meeting.minutes) || 30, zone || "America/Toronto") || meeting.schedule || meeting.when || meeting.time;
 						return /* @__PURE__ */ jsxs("li", {
 						className: "flex flex-wrap items-center gap-3 border-b py-3 text-sm",
@@ -630,7 +634,11 @@ function Dashboard({ code, desk, go, meetings, zone }) {
 										className: "block",
 										style: { color: "#5a6a7a" },
 										children: meeting.title
-									})
+									}),
+									meeting.location ? /* @__PURE__ */ jsx("span", {
+										className: "block",
+										children: meeting.location
+									}) : null
 								]
 							}),
 							(meeting.join || "").startsWith("https://") && cancelId !== meeting.id ? /* @__PURE__ */ jsx("a", {

@@ -57,6 +57,8 @@ async function ready() {
     minutes integer not null default 30
   )`);
   await sql.query("alter table desk_calendar_events add column if not exists external_id text not null default ''");
+  await sql.query("alter table desk_calendar_events add column if not exists location text not null default ''");
+  await sql.query("alter table desk_calendar_events add column if not exists join_url text not null default ''");
   await sql.query(`create table if not exists zoom_pending (
     advisor_id integer primary key,
     contact_id integer not null,
@@ -573,8 +575,8 @@ export async function listUpcomingMeetings(advisorId: number) {
     where advisor_id = ${advisorId} and start_at >= ${window.start.toISOString()} and start_at < ${window.end.toISOString()} and join_url <> ''
     order by start_at
   `;
-  const others = await sql<{ id: number; source: string; title: string; start_at: string; minutes: number }>`
-    select id, source, title, start_at, minutes
+  const others = await sql<{ id: number; source: string; title: string; start_at: string; minutes: number; location: string }>`
+    select id, source, title, start_at, minutes, location
     from desk_calendar_events
     where advisor_id = ${advisorId} and source <> 'Zoom' and start_at >= ${window.start.toISOString()} and start_at < ${window.end.toISOString()}
     order by start_at
@@ -597,7 +599,7 @@ export async function listUpcomingMeetings(advisorId: number) {
       if (!onDeskDays(start, now, zone)) return [];
       const clock = clockLabel(start, zone, Number(row.minutes) || 30);
       if (!clock.when || !clock.time) return [];
-      return [{ id: `desk-${row.id}`, when: clock.when, time: clock.time, schedule: clock.when, minutes: Number(row.minutes) || 30, client: row.title || "Appointment", title: row.source || "Calendar", join: "", start: start.toISOString() }];
+      return [{ id: `desk-${row.id}`, when: clock.when, time: clock.time, schedule: clock.when, minutes: Number(row.minutes) || 30, client: row.title || "Appointment", title: row.source || "Calendar", join: "", location: row.location || "", start: start.toISOString() }];
     }),
   ].sort((left, right) => left.start.localeCompare(right.start));
   return { timeZone: zone, meetings };

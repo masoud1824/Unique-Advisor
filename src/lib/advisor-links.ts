@@ -1183,11 +1183,11 @@ async function loadDeskCalendar(advisorId, year, month) {
   await ensureDeskCalendar();
   const { start, end } = monthRange(year, month);
   const rows = await (await getSql())`
-    select id, source, title, start_at, minutes from desk_calendar_events
+    select id, source, title, start_at, minutes, location from desk_calendar_events
     where advisor_id = ${advisorId} and start_at >= ${start.toISOString()} and start_at < ${end.toISOString()}
     order by start_at
   `;
-  const events = rows.map((row) => ({ id: Number(row.id), source: row.source, title: row.title, start: new Date(row.start_at).toISOString(), minutes: Number(row.minutes) || 30 }));
+  const events = rows.map((row) => ({ id: Number(row.id), source: row.source, title: row.title, start: new Date(row.start_at).toISOString(), minutes: Number(row.minutes) || 30, location: String(row.location || "") }));
   await (await getSql()).query("alter table advisors add column if not exists time_zone text not null default 'America/Toronto'");
   const zone = (await (await getSql())`select time_zone from advisors where id = ${advisorId}`)[0];
   return { events, accounts: await calendarAccounts(advisorId), timeZone: safeZone(zone?.time_zone || "America/Toronto") };

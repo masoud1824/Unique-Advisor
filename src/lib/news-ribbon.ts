@@ -39,3 +39,14 @@ export function visibleAnnouncements(items: Announcement[], now: Date, language?
 export function ribbonDirection(language: string) {
   return language === "fa" ? "rtl" : "ltr";
 }
+
+/** Empty or unknown values use English. Only Farsi selects the Farsi ribbon. */
+export function advisorRibbonLanguage(value: string): "en" | "fa" {
+  const raw = String(value || "").trim().toLowerCase().replace(/_/g, "-");
+  if (raw === "fa" || raw === "fa-ir" || raw === "farsi" || raw === "persian") return "fa";
+  return "en";
+}
+
+export const RIBBON_LANGUAGE_FALLBACK =
+  "If the desk language is empty or not English or Farsi, the ribbon uses English. English shows English items and items marked both. Farsi shows Farsi items and items marked both. Expired, draft, and archived items stay hidden.";
+

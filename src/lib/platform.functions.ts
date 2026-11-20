@@ -14,7 +14,7 @@ import {
 } from "@/lib/article-library";
 import { applyCopyEdits } from "@/lib/library-store";
 import { packNewsletter, unpackNewsletter, type NewsletterIssue } from "@/lib/newsletter";
-import { cleanAnnouncementLink, visibleAnnouncements, type Announcement } from "@/lib/news-ribbon";
+import { cleanAnnouncementLink, advisorRibbonLanguage, ribbonDirection, visibleAnnouncements, RIBBON_LANGUAGE_FALLBACK, type Announcement } from "@/lib/news-ribbon";
 import { planBirthdayRun, summarizeAdvisorNotice, type BirthdaySettings } from "@/lib/birthday-job";
 import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
@@ -180,9 +180,36 @@ export const listDeskAnnouncements = createServerFn({ method: "POST" }).validato
   const gate = await gateAdvisor(body.slug || "", body.code || "");
   if (!gate.ok) return gate;
   const sql = await getSql();
+  let stored = "";
+  try {
+    const rows = await sql<{ desk_language: string }>`select desk_language from advisors where id = ${gate.row.id}`;
+    stored = String(rows[0]?.desk_language || "");
+  } catch {
+    stored = "";
+  }
+  const language = body.language ? advisorRibbonLanguage(body.language) : advisorRibbonLanguage(stored);
   const rows = await sql`select * from desk_announcements order by priority, id`;
   const items = rows.map((row) => announcement(row as Record<string, unknown>));
-  return { ok: true as const, items: visibleAnnouncements(items, new Date(), body.language) };
+  return {
+    ok: true as const,
+    language,
+    direction: ribbonDirection(language),
+    fallback: RIBBON_LANGUAGE_FALLBACK,
+    items: visibleAnnouncements(items, new Date(), language),
+  };
+});
+
+export const setDeskLanguage = createServerFn({ method: "POST" }).validator((input: unknown) => input).handler(async ({ data }) => {
+  const body = data as { slug?: string; code?: string; language?: string; advisorId?: number };
+  const gate = await gateAdvisor(body.slug || "", body.code || "");
+  if (!gate.ok) return gate;
+  if (body.advisorId && Number(body.advisorId) !== Number(gate.row.id)) {
+    return { ok: false as const, error: "That language belongs to another advisor." };
+  }
+  const language = advisorRibbonLanguage(body.language || "");
+  const sql = await getSql();
+  await sql`update advisors set desk_language = ${language} where id = ${gate.row.id}`;
+  return { ok: true as const, language, direction: ribbonDirection(language), fallback: RIBBON_LANGUAGE_FALLBACK };
 });
 
 export const previewBirthdayPlan = createServerFn({ method: "POST" }).validator((input: unknown) => input).handler(async ({ data }) => {

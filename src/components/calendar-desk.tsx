@@ -5,7 +5,7 @@ import { signInConnection } from "@/lib/advisor-links.functions";
 import { loadAdvisorCalendar, saveAdvisorCalendarEvent, syncAdvisorCalendar, cancelAdvisorMeeting } from "@/lib/advisor-links.functions";
 import { tidyMeetingTitle } from "@/lib/meeting-time";
 
-type EventRow = { id: number; source: string; title: string; start: string; minutes: number };
+type EventRow = { id: number; source: string; title: string; start: string; minutes: number; location?: string };
 type Accounts = { google: boolean; outlook: boolean; icloud: boolean; googleAccount: string; outlookAccount: string; icloudAccount: string };
 type Source = "outlook" | "google" | "desk";
 
@@ -342,6 +342,7 @@ export function CalendarDesk({ code, slug, ping }: { code: string; slug: string;
             <p className="text-lg font-semibold">{tidyMeetingTitle(picked.title)}</p>
             <p className="mt-1 text-sm">{clock(picked.start, true)}</p>
             <p className="text-sm">{picked.minutes} minutes · {picked.source}</p>
+            {picked.location ? <p className="text-sm">{picked.location} Not an Outlook or Zoom meeting.</p> : null}
             {!confirmRemove ? (
               <button type="button" className="ua-btn-line mt-3" onClick={() => { setConfirmRemove(true); setNotifyClient(true); }}>Remove</button>
             ) : (
@@ -370,6 +371,7 @@ export function CalendarDesk({ code, slug, ping }: { code: string; slug: string;
                 <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { setPicked(event); setConfirmRemove(false); }}>
                   <p className="font-semibold">{tidyMeetingTitle(event.title)}</p>
                   <p className="text-sm" style={{ color: "#5a6a7a" }}>{clock(event.start)} · {event.minutes} minutes · {event.source}</p>
+                  {event.location ? <p className="text-sm">{event.location} Not an Outlook or Zoom meeting.</p> : null}
                 </button>
                 <button type="button" className="ua-btn-line" onClick={() => { setPicked(event); setConfirmRemove(true); setNotifyClient(event.source === "Zoom"); }}>Remove</button>
               </div>
