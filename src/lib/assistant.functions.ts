@@ -66,6 +66,8 @@ import { contentHoldKind, holdNote } from "@/lib/workspace-policy";
 import { holdCampaign as persistCampaignControl, runQueuedCampaign as deliverCampaign, sendProposedNewsletter as deliverNewsletter, sendQueuedCard as deliverCard, sendQueuedEletter as deliverLetter, cancelPendingDesk } from "@/lib/desk-handlers";
 import { ensureAcceptanceRecords } from "@/lib/acceptance-records";
 import { cancelExplanation, claimVoiceTurn, prepareDeskCommand, releaseVoiceTurn, transcriptHold, verifiedFarsiMoveNote, voiceTurnKey } from "@/lib/voice-desk";
+import { asksLibraryConversation } from "@/lib/library-conversation";
+import { performLibraryTurn } from "@/lib/library-store";
 
 var EMAIL2 = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 var OPENAI = "https://api.openai.com/v1";
@@ -3070,6 +3072,11 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
   if (asksIssueDates(command) || asksIssueDates(text)) {
     await discardPreviewActions(advisorId, true);
     return replyWith(advisorId, chatId, await issueDateBrief(advisorId, command), onDelta, []);
+  }
+  if (asksLibraryConversation(command) || asksLibraryConversation(text)) {
+    await discardPreviewActions(advisorId, true);
+    const reply = await performLibraryTurn(await getSql(), advisorId, asksLibraryConversation(command) ? command : text);
+    return replyWith(advisorId, chatId, reply, onDelta, []);
   }
   const heldKind = contentHoldKind(command) || contentHoldKind(tidy) || contentHoldKind(text);
   if (heldKind === "e-letter" || isLetterParagraphEdit(command, lastAssistant)) {

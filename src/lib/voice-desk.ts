@@ -118,6 +118,14 @@ function mapFarsiCommand(text: string) {
   const savedContact = farsiSavedContact(raw);
   if (savedContact) return savedContact;
   const quoted = raw.match(/[“"']([^"”']{2,80})[”"']/)?.[1]?.trim();
+  if (/کتابخانه/.test(raw) && /مقاله/.test(raw)) {
+    const term = quoted || (/ارزش زمانی/.test(raw) ? "time value of money" : "the named subject");
+    if (/کپی|بگذار/.test(raw)) {
+      const titles = [/ارزش زمانی/.test(raw) ? "Time Value Of Money" : "", /بیمه عمر|بیمه زندگی/.test(raw) ? "Life Insurance" : ""].filter(Boolean);
+      return `Copy these article library articles into a ${/موجود/.test(raw) ? "existing" : "new"} newsletter: ${titles.join("; ") || term}. Do not add recipients. Do not send.`;
+    }
+    return `Search the article library for ${term}. Do not send.`;
+  }
   if (/خبرنامه/.test(raw) && /بایگانی|آرشیو/.test(raw) && /پیدا|جستجو|بگرد/.test(raw)) {
     return `Search the saved newsletter archive for ${quoted || "the named article"}. List matching saved copies and their IDs. Do not create, edit or send.`;
   }

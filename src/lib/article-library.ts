@@ -23,6 +23,10 @@ export type LibrarySnapshot = {
   libraryVersion: number;
   title: string;
   body: string;
+  bodyHtml: string;
+  imageUrl: string;
+  imageAlt: string;
+  sourceNote: string;
 };
 
 const STATUSES = new Set<LibraryStatus>(["draft", "published", "archived"]);
@@ -105,11 +109,15 @@ export function snapshotPublished(article: LibraryArticle): LibrarySnapshot {
     libraryVersion: article.version,
     title: article.title,
     body: article.bodyText,
+    bodyHtml: article.bodyHtml,
+    imageUrl: article.imageUrl,
+    imageAlt: article.imageAlt,
+    sourceNote: article.sourceNote,
   };
 }
 
 export function copySnapshotsIntoNewsletter(
-  issue: { title: string; articles: Array<{ title: string; body: string; libraryArticleId?: number; libraryVersion?: number }> },
+  issue: { title: string; articles: Array<{ title: string; body: string; libraryArticleId?: number; libraryVersion?: number; bodyHtml?: string; imageUrl?: string; imageAlt?: string; sourceNote?: string }> },
   snapshots: LibrarySnapshot[],
   mode: "new" | "append",
 ) {
@@ -127,11 +135,18 @@ export function libraryEditLeavesSnapshot(snapshot: LibrarySnapshot, edited: Lib
     : snapshot;
 }
 
-export function editOwnCopy<T extends { title: string; body: string }>(article: T, patch: { title?: string; body?: string }): T {
+export function editOwnCopy<T extends { title: string; body: string; bodyHtml?: string }>(article: T, patch: { title?: string; body?: string; bodyHtml?: string }): T {
+  const bodyHtml = patch.bodyHtml === undefined ? article.bodyHtml : sanitizeArticleHtml(patch.bodyHtml);
+  const body = patch.body !== undefined
+    ? String(patch.body).slice(0, 8000)
+    : patch.bodyHtml !== undefined
+      ? htmlToText(bodyHtml || "")
+      : article.body;
   return {
     ...article,
     title: patch.title === undefined ? article.title : String(patch.title).trim().slice(0, 140),
-    body: patch.body === undefined ? article.body : String(patch.body).slice(0, 8000),
+    body,
+    ...(bodyHtml === undefined ? {} : { bodyHtml }),
   };
 }
 

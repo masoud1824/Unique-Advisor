@@ -11,7 +11,16 @@ export const NEWSLETTER_DESIGNS = [
 
 export type NewsletterDesign = (typeof NEWSLETTER_DESIGNS)[number]["id"];
 
-export type NewsletterArticle = { title: string; body: string; libraryArticleId?: number; libraryVersion?: number };
+export type NewsletterArticle = {
+  title: string;
+  body: string;
+  libraryArticleId?: number;
+  libraryVersion?: number;
+  bodyHtml?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  sourceNote?: string;
+};
 
 export type NewsletterSocial = { linkedin: string; instagram: string; facebook: string; youtube: string };
 
@@ -88,7 +97,14 @@ export function unpackNewsletter(body: string): NewsletterIssue | null {
         title: String(item?.title ?? "").slice(0, 140),
         body: String(item?.body ?? "").slice(0, 8000),
         ...(Number(item?.libraryArticleId) > 0
-          ? { libraryArticleId: Number(item.libraryArticleId), libraryVersion: Number(item.libraryVersion || 0) }
+          ? {
+              libraryArticleId: Number(item.libraryArticleId),
+              libraryVersion: Number(item.libraryVersion || 0),
+              bodyHtml: String(item.bodyHtml || ""),
+              imageUrl: String(item.imageUrl || ""),
+              imageAlt: String(item.imageAlt || ""),
+              sourceNote: String(item.sourceNote || ""),
+            }
           : {}),
       })),
       social: {

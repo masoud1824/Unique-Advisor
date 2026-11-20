@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { sanitizeArticleHtml } from "@/lib/article-library";
 import { saveLibraryArticle, searchLibrary } from "@/lib/platform.functions";
 
@@ -27,17 +28,17 @@ function AdminArticles() {
   return (
     <main style={{ maxWidth: 760, margin: "24px auto", padding: 16 }}>
       <h1>Article library</h1>
-      <p>Superadmin only. Publishing adds the article to the internal library. It does not email anyone.</p>
+      <p>Superadmin only. Write the article in the box below. Publishing adds it to the internal library. It does not email anyone.</p>
       <input value={code} onChange={(event) => setCode(event.target.value)} type="password" placeholder="Superadmin password" aria-label="Superadmin password" />
       <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Title" aria-label="Title" />
-      <textarea value={bodyHtml} onChange={(event) => setBodyHtml(event.target.value)} placeholder="Article HTML" aria-label="Article HTML" rows={8} style={{ width: "100%" }} />
-      <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="Optional https image" aria-label="Image" />
-      <input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="Image description" aria-label="Alt text" />
-      <input value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Source" aria-label="Source" />
+      <RichTextEditor value={bodyHtml} onChange={setBodyHtml} label="Article" />
+      <input value={imageUrl} onChange={(event) => setImageUrl(event.target.value)} placeholder="Optional https image" aria-label="Image address" />
+      <input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="What the image shows" aria-label="Image description" />
+      <input value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Where this article came from" aria-label="Source" />
       <input value={authorNote} onChange={(event) => setAuthorNote(event.target.value)} placeholder="Author" aria-label="Author" />
       <input value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="Topics" aria-label="Topics" />
       <input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language" aria-label="Language" />
-      <button type="button" onClick={() => setPreview(sanitizeArticleHtml(bodyHtml))}>Preview</button>
+      <button type="button" onClick={() => setPreview(sanitizeArticleHtml(bodyHtml))}>Preview the cleaned article</button>
       <button type="button" onClick={() => void save(false)}>Save draft</button>
       <button type="button" onClick={() => void save(true)}>Publish internally</button>
       <button type="button" onClick={() => void searchLibrary({ data: { code, superadmin: true, text: title } }).then((result) => result.ok && setRows(result.articles))}>Search</button>

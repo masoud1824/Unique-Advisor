@@ -12,6 +12,7 @@ import {
   type LibraryArticle,
   type LibraryStatus,
 } from "@/lib/article-library";
+import { applyCopyEdits } from "@/lib/library-store";
 import { packNewsletter, unpackNewsletter, type NewsletterIssue } from "@/lib/newsletter";
 import { cleanAnnouncementLink, visibleAnnouncements, type Announcement } from "@/lib/news-ribbon";
 import { planBirthdayRun, summarizeAdvisorNotice, type BirthdaySettings } from "@/lib/birthday-job";
@@ -97,14 +98,14 @@ export const searchLibrary = createServerFn({ method: "POST" }).validator((input
 });
 
 export const copyLibraryIntoNewsletter = createServerFn({ method: "POST" }).validator((input: unknown) => input).handler(async ({ data }) => {
-  const body = data as { slug?: string; code?: string; articleIds?: number[]; newsletterId?: number; title?: string; mode?: "new" | "append" };
+  const body = data as { slug?: string; code?: string; articleIds?: number[]; newsletterId?: number; title?: string; mode?: "new" | "append"; edits?: Array<{ id: number; title?: string; bodyHtml?: string }> };
   const gate = await gateAdvisor(body.slug || "", body.code || "");
   if (!gate.ok) return gate;
   const sql = await getSql();
   const ids = (body.articleIds || []).map(Number).filter((id) => id > 0);
   const list = (await articles(sql)).filter((article) => ids.includes(article.id));
   if (list.length !== ids.length) return { ok: false as const, error: "One of those articles is not in the library." };
-  const snapshots = list.map(snapshotPublished);
+  const snapshots = applyCopyEdits(list.map(snapshotPublished), body.edits || []);
   let issue: NewsletterIssue;
   let newsletterId = Number(body.newsletterId || 0);
   if (body.mode === "append" && newsletterId) {
