@@ -21,6 +21,7 @@ describe("release environment refuses the acceptance desk", () => {
       }
       assert.throws(() => assertReleaseDatabase("/tmp/not-the-release-root"), /outside/);
       assert.doesNotThrow(() => assertReleaseDatabase("/opt/ua-release/data/dev"));
+      assert.doesNotThrow(() => assertReleaseDatabase("/opt/ua-release/data/staging"));
       process.env.DATABASE_URL = "postgres://example";
       assert.throws(() => assertReleaseDatabase("/opt/ua-release/data/dev"), /hosted DATABASE_URL/);
     } finally {
@@ -35,6 +36,7 @@ describe("release environment refuses the acceptance desk", () => {
     assert.throws(() => assertReleaseProcess({ cwd: "/opt/ua-release/repos/dev", port: ACCEPTANCE_PORT }), /8080/);
     assert.throws(() => assertReleaseProcess({ cwd: "/workspace", port: 8092 }), /acceptance source/);
     assert.doesNotThrow(() => assertReleaseProcess({ cwd: "/opt/ua-release/repos/dev", port: 8092 }));
+    assert.doesNotThrow(() => assertReleaseProcess({ cwd: "/opt/ua-release/repos/staging", port: 8093 }));
   });
 
   it("blocks outbound work when the release environment is set", () => {

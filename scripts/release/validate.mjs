@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 import { assertReleaseProcess } from "../../src/lib/release-env.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const port = Number(process.env.UA_RELEASE_PORT || 8092);
+const releaseName = process.env.UA_RELEASE_ENV === "staging" ? "staging" : "development";
+const port = Number(process.env.UA_RELEASE_PORT || (releaseName === "staging" ? 8093 : 8092));
+process.env.UA_RELEASE_ENV = releaseName;
 assertReleaseProcess({ cwd: root, port });
 if (process.env.DATABASE_URL?.trim()) {
   console.error("Refusing validation while DATABASE_URL is set.");
@@ -45,8 +47,9 @@ run(
   ["--experimental-strip-types", "--test", ...tests],
 );
 run("disposable-database", "node", ["--experimental-strip-types", "scripts/release/disposable-db.mjs"], {
-  UA_RELEASE_ENV: "development",
+  UA_RELEASE_ENV: releaseName,
   UA_RELEASE_DATA_ROOT: process.env.UA_RELEASE_DATA_ROOT || "/opt/ua-release/data",
+  UA_RELEASE_DB_NAME: process.env.UA_RELEASE_DB_NAME || (releaseName === "staging" ? "staging" : "dev"),
 });
 if (process.env.UA_RELEASE_SKIP_BUILD === "1") {
   console.log("# build skipped by UA_RELEASE_SKIP_BUILD");
@@ -58,7 +61,7 @@ run(
   ["scripts/with-app-env.mjs", "node_modules/vite/bin/vite.js", "build"],
   {
     DATABASE_URL: "",
-    UA_RELEASE_CACHE: process.env.UA_RELEASE_CACHE || "/opt/ua-release/cache/dev",
+    UA_RELEASE_CACHE: process.env.UA_RELEASE_CACHE || (releaseName === "staging" ? "/opt/ua-release/cache/staging" : "/opt/ua-release/cache/dev"),
   },
 );
 console.log("# validate exit 0");

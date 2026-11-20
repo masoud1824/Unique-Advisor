@@ -12,11 +12,23 @@ import { assertReleaseDatabase } from "../../src/lib/release-env.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const dataRoot = process.env.UA_RELEASE_DATA_ROOT || "/opt/ua-release/data";
-const sourceDir = resolve(dataRoot, "dev");
-const restoreDir = resolve(dataRoot, "restore-check");
-process.env.UA_RELEASE_ENV = "development";
+const requestedEnv = process.env.UA_RELEASE_ENV || "development";
+if (requestedEnv !== "development" && requestedEnv !== "staging") {
+  throw new Error("Disposable database accepts only development or staging.");
+}
+process.env.UA_RELEASE_ENV = requestedEnv;
 process.env.UA_RELEASE_DATA_ROOT = dataRoot;
 delete process.env.DATABASE_URL;
+
+const dbName = process.env.UA_RELEASE_DB_NAME || (requestedEnv === "staging" ? "staging" : "dev");
+if (!/^[a-z][a-z0-9-]{0,30}$/.test(dbName)) {
+  throw new Error(`Refusing database name ${dbName}.`);
+}
+const sourceDir = resolve(dataRoot, dbName);
+const restoreDir = resolve(dataRoot, dbName === "dev" ? "restore-check" : `${dbName}-restore-check`);
+const dumpPath = dbName === "dev"
+  ? "/opt/ua-release/artifacts/sanitized-fixture-backup.tar.gz"
+  : `/opt/ua-release/artifacts/sanitized-fixture-backup-${dbName}.tar.gz`;
 
 assertReleaseDatabase(sourceDir);
 assertReleaseDatabase(restoreDir);
@@ -106,7 +118,6 @@ await seed(created);
 const before = await readBack(created);
 const dump = await created.dumpDataDir("gzip");
 const dumpBytes = new Uint8Array(await dump.arrayBuffer());
-const dumpPath = "/opt/ua-release/artifacts/sanitized-fixture-backup.tar.gz";
 await mkdir("/opt/ua-release/artifacts", { recursive: true });
 await writeFile(dumpPath, dumpBytes);
 await created.close();

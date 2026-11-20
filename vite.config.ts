@@ -171,16 +171,23 @@ function authPopupPlugin(): Plugin {
   };
 }
 
-// `0.0.0.0:8080` is the live-preview contract — don't change host/port.
-// The dev server starts once `src/router.tsx` and `src/routes/` exist — see
-// AGENTS.md § "First scaffold".
+// This copy is not the acceptance desk. Port 8080 stays on /workspace.
+function releaseDevServer() {
+  const raw = process.env.UA_RELEASE_PORT || "8092";
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port === 8080) {
+    throw new Error(`This release copy refuses port ${raw}. Port 8080 belongs to the acceptance desk.`);
+  }
+  return {
+    host: process.env.UA_RELEASE_HOST || "127.0.0.1",
+    port,
+    strictPort: true,
+  };
+}
+
 export default defineConfig(({ command, isPreview }) => ({
   ...(process.env.UA_RELEASE_CACHE ? { cacheDir: process.env.UA_RELEASE_CACHE } : {}),
-  server: {
-    host: process.env.UA_RELEASE_HOST || "0.0.0.0",
-    port: Number(process.env.UA_RELEASE_PORT || 8080),
-    strictPort: true,
-  },
+  server: releaseDevServer(),
   preview: {
     host: "127.0.0.1",
     port: 8081,
