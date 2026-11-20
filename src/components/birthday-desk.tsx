@@ -52,7 +52,7 @@ export function BirthdayDesk({ slug, code, ping }: { slug: string; code: string;
     const result = await previewBirthdayDeskPlan({ data: { slug, code } });
     if (!result.ok) { ping(result.error); return; }
     const sample = result.samples.map((item) => item.text).join(" ");
-    setPreview(`${result.offNotice} Preview only, saved setting stays off: ${result.pretendNotice} ${sample} No provider was called.`);
+    setPreview(`${result.offNotice} Preview only. The saved check stays off. Pretend clock: ${result.pretendNotice} Sample card wording, not a send: ${sample} No provider was called.`);
   }
 
   async function refuseOn() {
