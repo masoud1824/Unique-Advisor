@@ -2,6 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { ensureLinkTables, saveAdvisorLink } from "@/lib/advisor-links";
 import { openSecret, signingKey } from "@/lib/microsoft-mail";
+import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
 export const ZOOM_REDIRECT = "https://youradviser.grok.me/api/zoom/callback";
 
@@ -83,6 +84,7 @@ export async function completeZoomSignIn(request: Request) {
   try {
     const app = await zoomApp();
     if (!app) return Response.redirect(deskUrl(saved.slug, "error", "Add the Zoom app in Superadmin first."), 302);
+    if (outboundBlocked()) return Response.redirect(deskUrl(saved.slug, "error", OUTBOUND_BLOCKED), 302);
     const body = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: ZOOM_REDIRECT });
     const response = await fetch("https://zoom.us/oauth/token", {
       method: "POST",

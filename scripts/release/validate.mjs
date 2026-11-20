@@ -25,6 +25,7 @@ const tests = [
   "src/lib/workspace-policy.test.ts",
   "src/lib/workflow-entry.test.ts",
   "src/lib/delivery-safeguards.test.ts",
+  "src/lib/platform-features.test.ts",
 ];
 
 function run(label, command, args, env = {}) {

@@ -5,10 +5,12 @@ import { accessToken } from "@/lib/advisor-links";
 import { getSql } from "@/lib/db";
 import { chooseForm, formsFromPage, insurerLinksForFill } from "@/lib/desk-workflows";
 import { planC1001Fill } from "@/lib/c1001-form-plan";
+import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
 const REQUEST = "Fill the ivari insurance application LP257 for client id C-1001. Do not send it.";
 
 export async function buildFormPreview(advisorId: number) {
+  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
   const sql = await getSql();
   await sql.query(`create table if not exists useful_links (
     id serial primary key,

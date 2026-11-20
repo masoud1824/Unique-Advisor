@@ -11,7 +11,7 @@ export const NEWSLETTER_DESIGNS = [
 
 export type NewsletterDesign = (typeof NEWSLETTER_DESIGNS)[number]["id"];
 
-export type NewsletterArticle = { title: string; body: string };
+export type NewsletterArticle = { title: string; body: string; libraryArticleId?: number; libraryVersion?: number };
 
 export type NewsletterSocial = { linkedin: string; instagram: string; facebook: string; youtube: string };
 
@@ -87,6 +87,9 @@ export function unpackNewsletter(body: string): NewsletterIssue | null {
       articles: articles.map((item) => ({
         title: String(item?.title ?? "").slice(0, 140),
         body: String(item?.body ?? "").slice(0, 8000),
+        ...(Number(item?.libraryArticleId) > 0
+          ? { libraryArticleId: Number(item.libraryArticleId), libraryVersion: Number(item.libraryVersion || 0) }
+          : {}),
       })),
       social: {
         linkedin: String(parsed.social?.linkedin ?? ""),

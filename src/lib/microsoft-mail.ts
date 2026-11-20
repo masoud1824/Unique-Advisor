@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { getSql } from "@/lib/db";
 import { previewWritesBlocked, PREVIEW_WRITE_BLOCK } from "@/lib/preview-readonly";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
 const MAIL_SCOPES = "offline_access Mail.Send User.Read Calendars.ReadWrite";
 const CALENDAR_READ_SCOPES = "offline_access User.Read Calendars.Read";
@@ -213,6 +214,7 @@ export function assertCallbackUrl(candidate: string, request: Request) {
 }
 
 async function tokenRequest(body: URLSearchParams) {
+  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -274,6 +276,7 @@ export async function refreshAccess(refreshToken: string) {
 }
 
 export async function graphInbox(accessToken: string) {
+  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
   const response = await fetch("https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=8&$select=subject,from,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -291,6 +294,7 @@ export async function graphInbox(accessToken: string) {
 }
 
 export async function graphMe(accessToken: string) {
+  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
   const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -317,6 +321,7 @@ export async function graphSendMail(input: {
   inline?: { name: string; contentType: string; contentId: string; bytes: Buffer }[];
   files?: { name: string; contentType: string; bytes: Buffer }[];
 }) {
+  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
   if (previewWritesBlocked()) throw new Error(PREVIEW_WRITE_BLOCK);
   const attachments = [
     ...(input.image

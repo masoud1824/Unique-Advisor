@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { accessTokenForAdvisor, graphSendMail } from "@/lib/microsoft-mail";
+import { outboundBlocked } from "@/lib/outbound-guard";
 
 export const TICKET_STATUSES = ["Open", "In progress", "Waiting on advisor", "Resolved", "Closed"] as const;
 export const TICKET_PRIORITIES = ["Low", "Normal", "High", "Urgent"] as const;
@@ -157,6 +158,7 @@ async function saveFiles(ticketId: number, messageId: number, files: SupportFile
 }
 
 async function sendPlain(to: string, subject: string, text: string, advisorId: number) {
+  if (outboundBlocked()) return;
   const address = to.trim();
   if (!address.includes("@")) return;
   const host = process.env.SUPPORT_SMTP_HOST?.trim() || "";
@@ -195,6 +197,7 @@ async function sendPlain(to: string, subject: string, text: string, advisorId: n
 }
 
 async function notify(ticket: TicketRow, latest: string, kind: "created" | "advisor" | "reply" | "status") {
+  if (outboundBlocked()) return;
   const advisor = await advisorOf(ticket.advisor_id);
   const settings = await readSupportSettings();
   const link = `https://youradviser.grok.me/admin?ticket=${encodeURIComponent(ticket.number)}`;

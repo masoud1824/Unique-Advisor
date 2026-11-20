@@ -37,7 +37,8 @@ import { allowsCustom, PLAN_LABELS } from "@/lib/site-types";
 import { contactDeliveryBlock } from "@/lib/desk-workflows";
 import { PRODUCT_OPTIONS } from "@/lib/contact-records";
 import { contactMatchesQuery } from "@/lib/contact-match";
-import { clearPhoneLogin, readPhoneLogin, savePhoneLogin } from "@/lib/phone-app";
+import { NewsRibbon } from "@/components/news-ribbon";
+import { ArticleLibraryDesk } from "@/components/article-library-desk";
 import { clearDeskToken, installDeskSessionFetch, readDeskToken, saveDeskToken } from "@/lib/desk-session-client";
 
 installDeskSessionFetch();
@@ -264,6 +265,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		contacts: "Contacts",
 		cards: "E-Cards",
 		letters: "E-Newsletters",
+		library: "Article library",
 		eletters: "E-Letters",
 		drips: "Drip Campaigns",
 		links: "Useful Links",
@@ -282,6 +284,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		["contacts", "Contacts"],
 		["cards", "E-Cards"],
 		["letters", "E-Newsletters"],
+		["library", "Article library"],
 		["eletters", "E-Letters"],
 		["drips", "Drip Campaigns"],
 		["links", "Useful Links"],
@@ -445,6 +448,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 							})
 						]
 					}),
+					/* @__PURE__ */ jsx(NewsRibbon, { slug: desk.slug, code, language: "en" }),
 					tab === "dashboard" && /* @__PURE__ */ jsx(Dashboard, {
 						code,
 						desk,
@@ -469,6 +473,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 						reload,
 						ping
 					}),
+					tab === "library" && /* @__PURE__ */ jsx(ArticleLibraryDesk, { slug: desk.slug, code, ping }),
 					tab === "letters" && /* @__PURE__ */ jsx(NewsletterDesk, {
 						key: desk.letters.map((letter) => `${letter.id}:${letter.body.length}`).join("|"),
 						code,

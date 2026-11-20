@@ -12,7 +12,9 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/app'
+import { Route as LibraryAdminRouteImport } from './routes/library-admin'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as NewsAdminRouteImport } from './routes/news-admin'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
@@ -56,9 +58,19 @@ const AppRoute = AppRouteImport.update({
   path: '/app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LibraryAdminRoute = LibraryAdminRouteImport.update({
+  id: '/library-admin',
+  path: '/library-admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NewsAdminRoute = NewsAdminRouteImport.update({
+  id: '/news-admin',
+  path: '/news-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SetupRoute = SetupRouteImport.update({
@@ -201,7 +213,9 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/library-admin': typeof LibraryAdminRoute
   '/login': typeof LoginRoute
+  '/news-admin': typeof NewsAdminRoute
   '/setup': typeof SetupRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
@@ -234,7 +248,9 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/library-admin': typeof LibraryAdminRoute
   '/login': typeof LoginRoute
+  '/news-admin': typeof NewsAdminRoute
   '/setup': typeof SetupRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
@@ -268,7 +284,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
+  '/library-admin': typeof LibraryAdminRoute
   '/login': typeof LoginRoute
+  '/news-admin': typeof NewsAdminRoute
   '/setup': typeof SetupRoute
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
@@ -303,7 +321,9 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/library-admin'
     | '/login'
+    | '/news-admin'
     | '/setup'
     | '/signup'
     | '/studio'
@@ -336,7 +356,9 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/library-admin'
     | '/login'
+    | '/news-admin'
     | '/setup'
     | '/signup'
     | '/studio'
@@ -369,7 +391,9 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/app'
+    | '/library-admin'
     | '/login'
+    | '/news-admin'
     | '/setup'
     | '/signup'
     | '/studio'
@@ -403,7 +427,9 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   AppRoute: typeof AppRoute
+  LibraryAdminRoute: typeof LibraryAdminRoute
   LoginRoute: typeof LoginRoute
+  NewsAdminRoute: typeof NewsAdminRoute
   SetupRoute: typeof SetupRoute
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
@@ -456,11 +482,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/library-admin': {
+      id: '/library-admin'
+      path: '/library-admin'
+      fullPath: '/library-admin'
+      preLoaderRoute: typeof LibraryAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/news-admin': {
+      id: '/news-admin'
+      path: '/news-admin'
+      fullPath: '/news-admin'
+      preLoaderRoute: typeof NewsAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/setup': {
@@ -659,7 +699,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   AppRoute: AppRoute,
+  LibraryAdminRoute: LibraryAdminRoute,
   LoginRoute: LoginRoute,
+  NewsAdminRoute: NewsAdminRoute,
   SetupRoute: SetupRoute,
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK, isolatedProviderNotice } from "@/lib/isolated-test-desk";
+import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 import { archiveMessages, listDrips, saveDrip, sendApprovedAdvisorMail, startDrip } from "@/lib/advisor.functions";
 import { createCalendarEvent, createZoomMeeting, ensureLinkTables, accessToken, readCalendars, readDropbox, readZoom, saveDropboxNote, storedAdvisorLink, storedMailboxLink } from "@/lib/advisor-links";
 import { bookZoom, advisorZone, confirmPendingZoom, clearPendingZoom, findNamedContacts, listUpcomingMeetings, meetingReply } from "@/lib/zoom-bookings";
@@ -179,6 +180,7 @@ async function saveAssistantDiagnostic(advisorId, handledBy, calls) {
 export const speakAssistant = createServerFn({ method: "POST" }).validator((input) => input).handler(async ({ data }) => {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   const text = String(data.text || "").replace(/\s+/g, " ").trim().slice(0, 700);
   if (!text) return { ok: false, error: "Nothing to say." };
   const apiKey = await companyApiKey();
@@ -197,6 +199,7 @@ export const speakAssistant = createServerFn({ method: "POST" }).validator((inpu
 });
 var voiceWarmed = null;
 export async function warmVoiceLink() {
+  if (outboundBlocked()) return;
   if (!voiceWarmed) {
     voiceWarmed = (async () => {
       const started = Date.now();
@@ -215,6 +218,7 @@ export async function warmVoiceLink() {
   return voiceWarmed;
 }
 export async function speakSentence(text, onChunk, advisorId = 0) {
+  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
   const apiKey = await companyApiKey();
   if (!apiKey) throw new Error("No voice key.");
   const started = Date.now();
@@ -248,6 +252,7 @@ export const warmAssistantVoice = createServerFn({ method: "POST" }).validator((
 export const transcribeAssistant = createServerFn({ method: "POST" }).validator((input) => input).handler(async ({ data }) => {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   const audio = String(data.audio || "");
   if (audio.length < 80) return { ok: false, error: "No speech was captured." };
   if (audio.length > 8e6) return { ok: false, error: "That recording is too long. Speak one sentence, then pause." };
@@ -1134,6 +1139,7 @@ async function runModel(settings, advisorId, advisorName, turns, slug, code, rul
   const made = [];
   let ready5 = "";
   let lastProblem = "";
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   for (let round = 0; round < 4; round += 1) {
     const payload = { model: OPENAI_CHAT, temperature: 0.3, max_tokens: 4e3, messages, ...allowTools ? { tools, tool_choice: "auto" } : {} };
     let failure = null;
@@ -1380,6 +1386,7 @@ export const testOpenAiAccount = createServerFn({ method: "POST" }).validator((i
     }
   }
   if (!apiKey) return { ok: false, error: "No OpenAI key is saved yet. Paste the key, then choose Test connection or Save." };
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   if (typed && (!typed.startsWith("sk-") || typed.length < 20)) return { ok: false, error: "That key does not look like an OpenAI key. It should start with sk-." };
   const check = await fetch(`${OPENAI}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!check.ok) return { ok: false, error: "OpenAI did not accept this key." };
@@ -1400,6 +1407,7 @@ export const connectOpenAiAccount = createServerFn({ method: "POST" }).validator
   if (!gate.ok) return gate;
   const apiKey = String(data.apiKey || "").trim();
   if (!apiKey.startsWith("sk-") || apiKey.length < 20) return { ok: false, error: "Paste the OpenAI API key. It starts with sk-." };
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   const check = await fetch(`${OPENAI}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!check.ok) return { ok: false, error: "That OpenAI key was not accepted." };
   await ensureAssistantTables();
@@ -2068,6 +2076,7 @@ async function formBrief(advisorId, text) {
   } else if (/\.pdf(?:$|\?)/i.test(pageUrl)) {
     forms = [{ title: matched[0].label, href: pageUrl, purpose: "unknown", jurisdiction: "unknown", version: "unknown" }];
   } else {
+    if (outboundBlocked()) return OUTBOUND_BLOCKED;
     let html = "";
     try {
       const response = await fetch(pageUrl, { signal: AbortSignal.timeout(20000) });
@@ -3342,6 +3351,7 @@ export async function runDeskTurn(advisorId, slug, code, chatId, text) {
   return directAdvisorCommand(advisorId, slug, code, chatId, text);
 }
 async function hearWithGrok(advisorId, text, rulesNote, lastAssistant, calls) {
+  if (outboundBlocked()) return null;
   const apiKey = await companyApiKey();
   if (!apiKey) return null;
   let titles = "";
@@ -3774,6 +3784,7 @@ export const approveAssistantAction = createServerFn({ method: "POST" }).validat
   const kind = known ? action.kind : "calendar";
   const decision = decideAction({ status: gate.row.status, plan: gate.site.plan, settings, actorId: gate.row.id, actionAdvisorId: action ? Number(action.advisor_id) : -1, actionStatus: action?.status ?? "missing", kind });
   if (!decision.ok) return decision;
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   if (!action) return { ok: false, error: "That request belongs to another advisor." };
   let payload = {};
   try {
@@ -3807,6 +3818,7 @@ export const discardAssistantAction = createServerFn({ method: "POST" }).validat
   return { ok: true };
 });
 export async function openAiSpeech(text, voice) {
+  if (outboundBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
   const chosen = openAiVoice(voice);
   try {
     const apiKey = await companyApiKey();
