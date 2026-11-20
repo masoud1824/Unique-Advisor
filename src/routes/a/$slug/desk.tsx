@@ -38,6 +38,7 @@ import { contactDeliveryBlock } from "@/lib/desk-workflows";
 import { PRODUCT_OPTIONS } from "@/lib/contact-records";
 import { contactMatchesQuery } from "@/lib/contact-match";
 import { NewsRibbon } from "@/components/news-ribbon";
+import { deskStatusBanner } from "@/lib/staging-banner";
 import { ArticleLibraryDesk } from "@/components/article-library-desk";
 import { clearDeskToken, installDeskSessionFetch, readDeskToken, saveDeskToken } from "@/lib/desk-session-client";
 
@@ -105,11 +106,13 @@ function shrinkCardPhoto(file) {
 }
 function DeskPage() {
 	const site = Route.useLoaderData();
-	const banner = site?.isolatedTest ? /* @__PURE__ */ jsx("div", {
+	const statusBanner = deskStatusBanner(site);
+	const banner = statusBanner ? /* @__PURE__ */ jsx("div", {
 		role: "status",
+		"data-practice-banner": statusBanner.kind,
 		className: "sticky top-0 z-50 px-4 py-3 text-center text-sm font-semibold tracking-wide",
-		style: { background: "#7a1f2b", color: "#fff" },
-		children: "ISOLATED TEST COPY — reconstructed practice data, not recovered original data."
+		style: { background: statusBanner.background, color: "#fff" },
+		children: statusBanner.text
 	}) : null;
 	if (!site) return /* @__PURE__ */ jsxs("div", { children: [banner, /* @__PURE__ */ jsx("main", {
 		className: "mx-auto max-w-lg px-6 py-24",

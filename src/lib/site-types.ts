@@ -42,6 +42,8 @@ export type PublicSite = SiteSettings & {
   publicSocial: string;
   siteContent: string;
   isolatedTest?: boolean;
+  /** "staging" only on the separate fictional practice. Empty on the acceptance desk. */
+  releaseLabel?: string;
 };
 
 export type Contact = {

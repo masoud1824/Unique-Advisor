@@ -23,6 +23,8 @@ import {
   type BirthdaySettings,
 } from "./birthday-job.ts";
 import { ribbonDirection, visibleAnnouncements, type Announcement } from "./news-ribbon.ts";
+import { ISOLATED_TEST_BANNER } from "./isolated-test-desk.ts";
+import { STAGING_BANNER, deskStatusBanner } from "./staging-banner.ts";
 import { outboundBlocked, OUTBOUND_BLOCKED } from "./outbound-guard.ts";
 import { externalSideEffectsBlocked } from "./isolated-test-desk.ts";
 import { asksArchiveSearch, asksContactRecord, asksEmailThreadStatus, asksIssueDates, asksMeetingPreview, asksSavedCampaignReview, archiveSearchTerm, classifyAudience, matchingNewsletterCopies, meetingDetailReply, meetingPreviewFacts, namedPeople } from "./delivery-audience.ts";
@@ -351,5 +353,19 @@ describe("protected acceptance wording still routes", () => {
     assert.deepEqual(audience.excluded.map((item) => item.name), ["Quinn Sample", "Avery Sample"]);
     assert.equal(draftWithdrawalUpdate().approval_state, "withdrawn");
     assert.equal(draftWithdrawalUpdate().deletesRows, false);
+  });
+});
+
+describe("staging practice banner", () => {
+  it("uses staging wording only for the staging label and keeps the isolated sentence", () => {
+    const staging = deskStatusBanner({ isolatedTest: true, releaseLabel: "staging" });
+    assert.equal(staging?.kind, "staging");
+    assert.equal(staging?.text, STAGING_BANNER);
+    assert.match(staging?.text || "", /not the tested acceptance desk/);
+    assert.match(staging?.text || "", /Birthday checks are off/);
+    const isolated = deskStatusBanner({ isolatedTest: true, releaseLabel: "" });
+    assert.equal(isolated?.text, ISOLATED_TEST_BANNER);
+    assert.equal(deskStatusBanner({ isolatedTest: false, releaseLabel: "" }), null);
+    assert.equal(deskStatusBanner(null), null);
   });
 });

@@ -16,6 +16,7 @@ import {
   type SiteSettings,
 } from "@/lib/site-types";
 import { externalSideEffectsBlocked } from "@/lib/isolated-test-desk";
+import { releaseEnv } from "@/lib/release-env";
 
 const FOLLOWUP_STEPS: { key: string; days: number; title: string; detail: string }[] = [
   {
@@ -50,7 +51,7 @@ export const getPublicSite = createServerFn({ method: "GET" })
     const slug = cleanSlug(data.slug ?? "");
     if (!slug) return null;
     const row = await findAdvisorBySlug(slug);
-    return row ? { ...toPublic(row), isolatedTest: externalSideEffectsBlocked() } : null;
+    return row ? { ...toPublic(row), isolatedTest: externalSideEffectsBlocked(), releaseLabel: releaseEnv() === "staging" ? "staging" : "" } : null;
   });
 
 export const saveAdvisorWebsite = createServerFn({ method: "POST" })
