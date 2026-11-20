@@ -2,6 +2,12 @@
 # Roll the release copy back to the acceptance source tag.
 # Default is dry-run. This script refuses the acceptance tree and its databases.
 set -eu
+case "$(pwd)" in
+  /workspace|/workspace/*)
+    echo "Refusing to run from the acceptance source tree." >&2
+    exit 2
+    ;;
+esac
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
 TAG="${UA_RELEASE_TAG:-acceptance-20261119-2232}"
 DRY="${UA_RELEASE_ROLLBACK_CONFIRM:-dry-run}"
