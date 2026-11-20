@@ -29,4 +29,4 @@ if [ -f /opt/ua-release/run/staging-operator.password ]; then
 fi
 echo $$ > /opt/ua-release/run/staging.pid
 exec >> /opt/ua-release/logs/staging-review.log 2>&1
-exec "$ROOT/scripts/release/start-isolated.sh"
+exec sh "$ROOT/scripts/release/start-isolated.sh"

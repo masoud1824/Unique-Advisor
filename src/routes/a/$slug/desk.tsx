@@ -41,6 +41,7 @@ import { NewsRibbon } from "@/components/news-ribbon";
 import { deskStatusBanner } from "@/lib/staging-banner";
 import { ArticleLibraryDesk } from "@/components/article-library-desk";
 import { clearDeskToken, installDeskSessionFetch, readDeskToken, saveDeskToken } from "@/lib/desk-session-client";
+import { clearPhoneLogin, readPhoneLogin, savePhoneLogin } from "@/lib/phone-app";
 
 installDeskSessionFetch();
 import { AssistantDesk } from "@/components/assistant-desk";

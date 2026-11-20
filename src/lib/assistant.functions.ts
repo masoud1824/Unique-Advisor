@@ -3551,6 +3551,12 @@ export async function answerAdvisor(data, onDelta) {
     console.info("[assistant] ask");
     const lastSaid = [...thread].reverse().find((turn) => turn.role === "assistant")?.content || "";
     const control = orchestrationControl(command);
+    if (asksLibraryConversation(command) || asksLibraryConversation(latest.content)) {
+      await discardPreviewActions(gate.row.id, true);
+      const reply = await performLibraryTurn(sql, gate.row.id, asksLibraryConversation(command) ? command : latest.content);
+      handled = "fixed";
+      return replyWith(gate.row.id, chatId, reply, onDelta, []);
+    }
     const facts = control.cancelStaged ? await cancellationFacts(gate.row.id) : { pending: 0, completed: "" };
     await applyOrchestration(gate.row.id, control);
     if (control.cancelStaged && !control.conversational) {
