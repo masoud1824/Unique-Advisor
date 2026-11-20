@@ -175,9 +175,10 @@ function authPopupPlugin(): Plugin {
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
 export default defineConfig(({ command, isPreview }) => ({
+  ...(process.env.UA_RELEASE_CACHE ? { cacheDir: process.env.UA_RELEASE_CACHE } : {}),
   server: {
-    host: "0.0.0.0",
-    port: 8080,
+    host: process.env.UA_RELEASE_HOST || "0.0.0.0",
+    port: Number(process.env.UA_RELEASE_PORT || 8080),
     strictPort: true,
   },
   preview: {

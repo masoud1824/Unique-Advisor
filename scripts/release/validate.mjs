@@ -55,10 +55,10 @@ if (process.env.UA_RELEASE_SKIP_BUILD === "1") {
 run(
   "production-build",
   "node",
-  ["scripts/with-app-env.mjs", "vite", "build", "--cacheDir", process.env.UA_RELEASE_CACHE || "/opt/ua-release/cache/dev"],
+  ["scripts/with-app-env.mjs", "node_modules/vite/bin/vite.js", "build"],
   {
     DATABASE_URL: "",
-    UA_RELEASE_ENV: "",
+    UA_RELEASE_CACHE: process.env.UA_RELEASE_CACHE || "/opt/ua-release/cache/dev",
   },
 );
 console.log("# validate exit 0");
