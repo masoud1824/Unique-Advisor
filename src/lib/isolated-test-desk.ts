@@ -18,6 +18,8 @@ export function isolatedDataDir() {
 
 /** True only when this process was started as the isolated test desk. */
 export function externalSideEffectsBlocked() {
+  const release = process.env.UA_RELEASE_ENV;
+  if (release === "development" || release === "staging") return true;
   return isolatedTestRequested() && isolatedDataDir() === ISOLATED_TEST_DIR;
 }
 

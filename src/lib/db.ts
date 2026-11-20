@@ -1,5 +1,6 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { isolatedTestRequested, refusePreviewDataDir } from "@/lib/isolated-test-desk";
+import { assertReleaseDatabase, releaseEnv } from "@/lib/release-env";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -110,8 +111,16 @@ function releasePreviewLock(lock: PreviewLock | undefined) {
 
 /** Preview-only file. Production uses Neon and never opens this directory. */
 function previewDataDir(): string {
-  const chosen = process.env.PGLITE_DATA_DIR?.trim() || "/workspace/.preview-data/pglite";
-  return chosen === "memory" ? "" : chosen;
+  const chosen = process.env.PGLITE_DATA_DIR?.trim() || "";
+  if (releaseEnv()) {
+    if (!chosen || chosen === "memory") {
+      throw new Error("UA_RELEASE_ENV requires PGLITE_DATA_DIR and refuses the acceptance database default.");
+    }
+    assertReleaseDatabase(chosen);
+    return chosen;
+  }
+  const fallback = chosen || "/workspace/.preview-data/pglite";
+  return fallback === "memory" ? "" : fallback;
 }
 
 /**

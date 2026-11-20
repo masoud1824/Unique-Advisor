@@ -1,0 +1,22 @@
+# Prepared configuration only. This file is not installed on GitHub.
+# It has no credentials and does not deploy.
+name: validate
+on:
+  workflow_dispatch:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/release/validate.mjs
+        env:
+          DATABASE_URL: ""
+          UA_RELEASE_ENV: development
+          UA_RELEASE_DATA_ROOT: ${{ github.workspace }}/.release-data
+          UA_RELEASE_CACHE: ${{ github.workspace }}/.release-cache
+          UA_RELEASE_PORT: "8092"

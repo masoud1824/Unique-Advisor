@@ -1,0 +1,59 @@
+{
+  "kind": "sanitized-test-fixture",
+  "notADatabaseBackup": true,
+  "provenance": "User-stated Nov 19 acceptance contract plus source seed text. The locked acceptance database was not read or copied.",
+  "newsletterCopy1": {
+    "id": 1,
+    "title": "Test Newsletter",
+    "articles": [
+      { "title": "Life Insurance", "body": "Life insurance is the money a family can use if the person earning the income is no longer there. This acceptance copy is fictional." },
+      { "title": "Time Value Of Money", "body": "A dollar available now can be put to work, so waiting has a cost. This acceptance copy is fictional." },
+      { "title": "Retirement Planning", "body": "Retirement planning is a check of income for later years." },
+      { "title": "Keeping Beneficiary Information Updated", "body": "Beneficiary information should name the people who are meant to receive the proceeds. This acceptance copy is fictional." },
+      { "title": "Practice Follow-Up", "body": "This is a fictional acceptance-test article." }
+    ]
+  },
+  "newsletterCopy2": {
+    "id": 2,
+    "title": "Test Newsletter",
+    "articles": [
+      { "title": "Life Insurance", "body": "Life insurance is the money a family can use if the person earning the income is no longer there. This acceptance copy is fictional." },
+      { "title": "Retirement Planning", "body": "Retirement planning is a check of income for later years. This acceptance copy is fictional." },
+      { "title": "Keeping Beneficiary Information Updated", "body": "Beneficiary information should name the people who are meant to receive the proceeds. This acceptance copy is fictional." },
+      { "title": "Time Value Of Money", "body": "A dollar available now can be put to work, so waiting has a cost. This acceptance copy is fictional." }
+    ]
+  },
+  "letter": {
+    "title": "Acceptance — Retirement Note",
+    "body": "This paragraph confirms the combined edit works."
+  },
+  "card": {
+    "title": "Thank You",
+    "body": "Thank you for your trust. It is a pleasure working with you."
+  },
+  "drip": {
+    "name": "Acceptance — Welcome Drip",
+    "design": "Royal Plum",
+    "everyDays": 7,
+    "active": false,
+    "step2WaitDays": 3,
+    "steps": [
+      { "title": "Welcome", "body": "This is the first fictional article in the acceptance campaign. It has not been started." },
+      { "title": "Next step", "body": "This second article stays in the saved campaign until a recipient and approval are given." }
+    ]
+  },
+  "eligibility": {
+    "included": ["Casey Sample", "Jordan Example", "Riley Sample"],
+    "unsubscribed": "Quinn Sample",
+    "missingEmail": "Avery Sample",
+    "tfsaOnly": "Morgan Sample"
+  },
+  "contacts": [
+    { "name": "Casey Sample", "email": "casey.sample@example.invalid", "tags": "Acceptance, Life Insurance Client" },
+    { "name": "Riley Sample", "email": "riley.sample@example.invalid", "tags": "Acceptance, Life Insurance Client" },
+    { "name": "Quinn Sample", "email": "quinn.sample@example.invalid", "tags": "Acceptance, Unsubscribed, Life Insurance Client" },
+    { "name": "Avery Sample", "email": "", "tags": "Acceptance, Life Insurance Client" },
+    { "name": "Morgan Sample", "email": "morgan.sample@example.invalid", "tags": "Acceptance, TFSA Client" },
+    { "name": "Jordan Example", "email": "jordan.example@example.invalid", "tags": "Acceptance, Dropbox fictional, Life Insurance Client" }
+  ]
+}
