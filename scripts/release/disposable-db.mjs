@@ -88,6 +88,16 @@ async function seed(pg) {
     [advisorId, fixture.letter.title, fixture.letter.body],
   );
   await pg.query(
+    "insert into saved_cards (advisor_id, title, message) values ($1, $2, $3)",
+    [advisorId, fixture.card.title, fixture.card.body],
+  );
+  for (const copy of [fixture.newsletterCopy1, fixture.newsletterCopy2]) {
+    await pg.query(
+      "insert into newsletters (advisor_id, token, payload) values ($1, $2, $3)",
+      [advisorId, `fixture-copy-${copy.id}`, JSON.stringify({ id: copy.id, title: copy.title, articles: copy.articles })],
+    );
+  }
+  await pg.query(
     "insert into drip_campaigns (advisor_id, name, steps, every_days, active, design) values ($1, $2, $3, $4, false, 'plum')",
     [advisorId, fixture.drip.name, JSON.stringify(fixture.drip.steps.map((step, index) => ({ ...step, waitDays: index === 1 ? fixture.drip.step2WaitDays : 0 }))), fixture.drip.everyDays],
   );
@@ -97,11 +107,15 @@ async function seed(pg) {
 async function readBack(pg) {
   const contacts = await pg.query("select full_name, email, tags from contacts order by full_name");
   const letter = await pg.query("select title, body from saved_letters");
+  const card = await pg.query("select title, message from saved_cards");
+  const newsletters = await pg.query("select token, payload from newsletters order by token");
   const drip = await pg.query("select name, steps, every_days, active from drip_campaigns");
   const migrations = await pg.query("select count(*)::int as n from _migrations");
   return {
-    contacts: contacts.rows.length,
+    contacts: contacts.rows.map((row) => ({ name: row.full_name, email: row.email, tags: row.tags })),
     letter: letter.rows[0]?.body,
+    card: card.rows[0]?.message,
+    newsletters: newsletters.rows.map((row) => JSON.parse(row.payload)),
     dripActive: drip.rows[0]?.active,
     everyDays: Number(drip.rows[0]?.every_days),
     steps: JSON.parse(drip.rows[0]?.steps || "[]"),
@@ -131,6 +145,8 @@ await restored.waitReady;
 const after = await readBack(restored);
 await restored.close();
 
+const expectedContacts = [...fixture.contacts].sort((a, b) => a.name.localeCompare(b.name));
+const expectedNews = [fixture.newsletterCopy1, fixture.newsletterCopy2];
 const report = {
   kind: "sanitized-fixture-restore",
   notADatabaseBackup: true,
@@ -140,11 +156,13 @@ const report = {
   dumpPath,
   dumpBytes: dumpBytes.byteLength,
   letterMatches: before.letter === fixture.letter.body && after.letter === fixture.letter.body,
-  contactsMatch: before.contacts === fixture.contacts.length && after.contacts === fixture.contacts.length,
+  cardMatches: before.card === fixture.card.body && after.card === fixture.card.body,
+  contactsMatch: JSON.stringify(before.contacts) === JSON.stringify(expectedContacts) && JSON.stringify(after.contacts) === JSON.stringify(expectedContacts),
+  newslettersMatch: JSON.stringify(before.newsletters) === JSON.stringify(expectedNews) && JSON.stringify(after.newsletters) === JSON.stringify(expectedNews),
   dripInactive: before.dripActive === false && after.dripActive === false,
   step2Wait: before.steps[1]?.waitDays === 3 && after.steps[1]?.waitDays === 3,
 };
-if (!report.letterMatches || !report.contactsMatch || !report.dripInactive || !report.step2Wait) {
+if (!report.letterMatches || !report.cardMatches || !report.contactsMatch || !report.newslettersMatch || !report.dripInactive || !report.step2Wait) {
   console.error(JSON.stringify(report, null, 2));
   process.exit(1);
 }
