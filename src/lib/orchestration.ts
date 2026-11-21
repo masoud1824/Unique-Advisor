@@ -8,6 +8,7 @@ export type StagedAction = {
   kind: string;
   status: string;
   approval: string;
+  summary?: string;
 };
 
 export type OrchestrationControl = {
@@ -62,7 +63,7 @@ export function resolveConfirmation(userText: string, staged: StagedAction[]) {
   return { action: "missing" as const };
 }
 
-/** A yes approves delivery only when the last line is the rendered preview. */
+/** A yes approves only the pending action named by the latest confirm line. Other valid pending actions stay pending. */
 export function previewApprovalDecision(userText: string, lastAssistant: string, staged: StagedAction[]) {
   if (!/just to confirm:/i.test(String(lastAssistant || ""))) return { action: "skip" as const };
   const named = recipientAfterDirection(userText);
@@ -71,7 +72,41 @@ export function previewApprovalDecision(userText: string, lastAssistant: string,
   if (named && previewPerson && !previewPerson.toLowerCase().includes(named.toLowerCase()) && named.toLowerCase() !== previewPerson.toLowerCase()) {
     return { action: "skip" as const };
   }
-  return resolveConfirmation(userText, staged);
+  const kind = confirmKind(lastAssistant);
+  const names = confirmNames(lastAssistant);
+  const rows = Array.isArray(staged) ? staged : [];
+  const pool = kind ? rows.filter((row) => row.kind === kind) : rows;
+  const pending = pool.filter((row) => row.status === "pending" && row.approval !== "withdrawn" && row.approval !== "cancelled" && row.approval !== "superseded");
+  const matched = pending.filter((row) => confirmMatches(row, names));
+  if (matched.length > 1) return { action: "ambiguous" as const, ids: matched.map((row) => row.id) };
+  if (matched.length === 1) return { action: "send" as const, id: matched[0].id, kind: matched[0].kind };
+  if (pool.some((row) => row.status !== "pending" || row.approval === "withdrawn" || row.approval === "cancelled" || row.approval === "superseded")) {
+    return { action: "stale" as const };
+  }
+  return { action: "missing" as const };
+}
+
+function confirmKind(lastAssistant: string) {
+  const last = String(lastAssistant || "");
+  if (/\be-?cards?\b/i.test(last)) return "card";
+  if (/\be-?letters?\b/i.test(last)) return "eletter";
+  if (/\bcampaign\b/i.test(last)) return "campaign";
+  if (/\bnewsletter\b/i.test(last)) return "newsletter";
+  return "";
+}
+
+function confirmNames(lastAssistant: string) {
+  const last = String(lastAssistant || "").trim();
+  const tail = last.split(/\b(?:to|for)\s+/i).pop() || "";
+  const person = tail.replace(/\?\s*$/, "").trim();
+  return person.split(/\s*,\s*|\s+\band\b\s+/i).map((name) => name.replace(/[<>].*$/g, "").trim()).filter((name) => name.length > 1 && !/^(?:your contacts|confirm:.*)$/i.test(name));
+}
+
+function confirmMatches(row: StagedAction, names: string[]) {
+  if (!names.length) return true;
+  const summary = String(row.summary || "").toLowerCase();
+  if (!summary) return true;
+  return names.every((name) => summary.includes(name.toLowerCase()));
 }
 
 export function modelContext(input: {

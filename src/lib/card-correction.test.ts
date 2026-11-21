@@ -14,6 +14,7 @@ import {
   keepCardCorrection,
   newsletterRecipients,
   resolveCardCorrection,
+  summaryMentionsPerson,
 } from "./advisor-intent.ts";
 import { orchestrationControl, previewApprovalDecision, resolveConfirmation } from "./orchestration.ts";
 import { claimVoiceTurn, farsiCardCorrection, prepareDeskCommand, resetVoiceTurns } from "./voice-desk.ts";
@@ -80,6 +81,10 @@ describe("card recipient correction", () => {
     const fromFarsi = resolveCardCorrection(typed);
     assert.equal(fromFarsi?.kind, "use");
     if (fromFarsi?.kind === "use") assert.equal(fromFarsi.name, "Quinn Sample");
+    assert.equal(orchestrationControl(typed).cancelStaged, false);
+    assert.equal(summaryMentionsPerson("Birthday Wishes · Jordan Example", "Jordan Example"), true);
+    assert.equal(summaryMentionsPerson("Thank You · Casey Sample, Riley Sample", "Jordan Example"), false);
+    assert.equal(summaryMentionsPerson("Thank You · Casey Sample, Riley Sample", "Riley Sample"), true);
     const avery = prepareDeskCommand("کارت تولد برای جردن. استاپ. برای اِوری بفرست.");
     const averyFix = resolveCardCorrection(avery);
     assert.equal(averyFix?.kind, "use");
@@ -158,6 +163,20 @@ describe("identity confirmation is not delivery approval", () => {
     assert.equal(previewApprovalDecision("Send it.", PREVIEW, STALE).action, "stale");
     assert.equal(previewApprovalDecision("Yes.", PREVIEW, PENDING).action, "send");
     assert.equal(previewApprovalDecision("Yes, send it to Riley Sample.", PREVIEW, PENDING).action, "skip");
+    const thankYou = "Just to confirm: send the Thank You e-card to Casey Sample and Riley Sample?";
+    const bothPending = [
+      { id: 8, kind: "card", status: "pending", approval: "pending", summary: "Thank You · Casey Sample and Riley Sample" },
+      { id: 9, kind: "newsletter", status: "pending", approval: "pending", summary: "Life insurance · Casey Sample and Riley Sample" },
+      { id: 10, kind: "card", status: "pending", approval: "pending", summary: "Birthday Wishes · Jordan Example" },
+    ];
+    const chosen = previewApprovalDecision("Yes.", PREVIEW, bothPending);
+    assert.equal(chosen.action, "send");
+    if (chosen.action === "send") assert.equal(chosen.id, 10);
+    const superseded = previewApprovalDecision("Yes.", thankYou, [
+      { id: 8, kind: "card", status: "superseded", approval: "superseded", summary: "Thank You · Casey Sample and Riley Sample" },
+      { id: 10, kind: "card", status: "pending", approval: "pending", summary: "Birthday Wishes · Jordan Example" },
+    ]);
+    assert.equal(superseded.action, "stale");
     assert.equal(resolveConfirmation("Send it.", STALE).action, "stale");
     assert.equal(prepareDeskCommand("بله", IDENTITY), "Yes.");
     assert.equal(prepareDeskCommand("بله، برای کوین بفرست", IDENTITY), "Yes, send it to Quinn Sample.");

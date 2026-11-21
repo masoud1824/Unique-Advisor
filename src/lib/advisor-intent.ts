@@ -316,6 +316,13 @@ export function blockedRecipientReply(name: string, tags: string, email: string,
   return `${who} — ${reason}.${earlier} Nothing was sent.`;
 }
 
+/** A cancelled recipient withdraws only previews that name that person. */
+export function summaryMentionsPerson(summary: string, person: string) {
+  const name = String(person || "").trim().toLowerCase();
+  if (name.length < 2) return false;
+  return String(summary || "").toLowerCase().includes(name);
+}
+
 export function cardIdentityQuestion(lastAssistant: string) {
   const last = String(lastAssistant || "");
   if (/just to confirm:/i.test(last)) return null;

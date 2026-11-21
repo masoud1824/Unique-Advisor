@@ -99,6 +99,6 @@ export function decideAction(input: {
         : input.settings.tools.calendar;
   if (!allowed) return { ok: false, error: "That connection is turned off." };
   if (input.actorId !== input.actionAdvisorId) return { ok: false, error: "That request belongs to another advisor." };
-  if (input.actionStatus !== "pending") return { ok: false, error: "That request was already handled." };
+  if (input.actionStatus !== "pending") return { ok: false, error: "That request was already handled. Nothing was sent." };
   return { ok: true };
 }

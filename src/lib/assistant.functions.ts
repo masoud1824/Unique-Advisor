@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment } from "@/lib/calendar-span";
@@ -527,16 +527,7 @@ function withDroppedRecipient(dropped: string, reply: string) {
   if (!dropped || String(reply || "").includes(dropped)) return reply;
   return `I cancelled the request for ${dropped}. ${reply}`;
 }
-async function withdrawSendableCards(advisorId) {
-  try {
-    await ensureLinkTables();
-    await (await getSql())`update assistant_actions set status = 'withdrawn' where advisor_id = ${advisorId} and kind = 'card' and status = 'pending'`;
-  } catch (error) {
-    console.error("[assistant] card-withdraw", error instanceof Error ? error.message : "failed");
-  }
-}
 async function cardSendAction(advisorId: number, card: { id: string; title: string; message?: string; image?: string }, people: Array<{ id: number; full_name: string }>) {
-  await withdrawSendableCards(advisorId);
   await stagePreparedCard(advisorId, card, people);
   const name = whoLine2(people);
   const summary = `${card.title} · ${name}`.slice(0, 180);
@@ -1704,13 +1695,19 @@ async function deliverPendingCardAction(advisorId, slug, code) {
   await sql`update assistant_actions set status = 'done' where id = ${action.id} and advisor_id = ${advisorId}`;
   return sent;
 }
-async function cancelWaitingCard(advisorId) {
+async function cancelWaitingCard(advisorId, onlyPerson = "") {
   await ensureCardPending();
   const sql = await getSql();
   await sql`delete from assistant_card_pending where advisor_id = ${advisorId}`;
+  const person = String(onlyPerson || "").trim();
+  if (!summaryMentionsPerson(person, person)) return;
   try {
     await ensureLinkTables();
-    await sql`update assistant_actions set status = 'discarded' where advisor_id = ${advisorId} and kind = 'card' and status = 'pending'`;
+    const rows = await sql`select id, summary from assistant_actions where advisor_id = ${advisorId} and kind = 'card' and status = 'pending'`;
+    for (const row of rows) {
+      if (!summaryMentionsPerson(String(row.summary || ""), person)) continue;
+      await sql`update assistant_actions set status = 'discarded' where id = ${row.id} and advisor_id = ${advisorId} and status = 'pending'`;
+    }
   } catch (error) {
     console.error("[assistant] card-cancel", error);
   }
@@ -2707,7 +2704,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     if (paused) return preparedWork(paused);
     const correction = resolveCardCorrection(tidy);
     if (correction?.kind === "cancelled" || correction?.kind === "ambiguous") {
-      await cancelWaitingCard(advisorId);
+      await cancelWaitingCard(advisorId, correction.kind === "cancelled" ? correction.dropped : "");
       return preparedWork(correction.reply);
     }
     const cards = await cardsForAdvisor(advisorId);
@@ -2753,7 +2750,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     const person = people[0];
     const blocked = await deliveryBlockFor(advisorId, person, dropped);
     if (blocked) {
-      await cancelWaitingCard(advisorId);
+      await cancelWaitingCard(advisorId, dropped);
       return preparedWork(blocked);
     }
     if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
@@ -3418,7 +3415,7 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     const previewFor = lastAssistant.match(/\bto ([^?\n]+)\?/i)?.[1]?.replace(/[<>].*$/g, "").trim() || "";
     const changingPreview = Boolean(namedNow && previewFor && namedNow.toLowerCase() !== previewFor.toLowerCase() && !previewFor.toLowerCase().includes(namedNow.toLowerCase()));
     if (changingPreview) {
-      await cancelWaitingCard(advisorId);
+      await cancelWaitingCard(advisorId, previewFor);
       const title = lastAssistant.match(/send the (.+?) e-card to/i)?.[1]?.trim() || "";
       const prepared = await fulfillSecretary(advisorId, slug, code, title ? `Send the ${title} e-card to ${namedNow}` : `Send an e-card to ${namedNow}`);
       const reply = prepared?.reply || `I cancelled the request for ${previewFor}. Nothing was sent.`;
@@ -3437,7 +3434,7 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
   async function stageCard(card, person, dropped = "") {
     const blocked = await deliveryBlockFor(advisorId, person, dropped);
     if (blocked) {
-      await cancelWaitingCard(advisorId);
+      await cancelWaitingCard(advisorId, dropped);
       return replyWith(advisorId, chatId, blocked, onDelta);
     }
     const action = await cardSendAction(advisorId, card, [{ id: Number(person.id), full_name: person.full_name }]);
@@ -3625,12 +3622,12 @@ async function stagedRecords(advisorId) {
   let actions: Array<Record<string, unknown>> = [];
   try {
     await ensureLinkTables();
-    actions = await sql`select id, kind, status from assistant_actions where advisor_id = ${advisorId} and status in ('pending', 'stale', 'cancelled') order by id desc limit 8`;
+    actions = await sql`select id, kind, status, summary from assistant_actions where advisor_id = ${advisorId} and status in ('pending', 'stale', 'cancelled', 'withdrawn', 'discarded', 'superseded') order by id desc limit 20`;
   } catch {
     actions = [];
   }
   return [
-    ...actions.map((row) => ({ id: Number(row.id), kind: String(row.kind), status: String(row.status), approval: String(row.status) === "pending" ? "pending" : String(row.status) })),
+    ...actions.map((row) => ({ id: Number(row.id), kind: String(row.kind), status: String(row.status), summary: String(row.summary || ""), approval: String(row.status) === "pending" ? "pending" : String(row.status) })),
     ...drafts.map((row) => ({
       id: Number(row.id),
       kind: "draft",
@@ -3659,6 +3656,32 @@ function confirmationReply(decision) {
   if (decision.action === "stale") return "That approval is no longer valid. The saved draft was not deleted, and nothing was sent.";
   if (decision.action === "ambiguous") return "More than one action is waiting. Tell me which one to approve. I did not send anything.";
   return "";
+}
+async function deliverStagedById(advisorId: number, slug: string, code: string, actionId: number) {
+  await ensureLinkTables();
+  const action = (await (await getSql())`
+    select id, kind, payload, status from assistant_actions
+    where id = ${Number(actionId)} and advisor_id = ${advisorId} limit 1
+  `)[0];
+  if (!action) return { ok: false, error: "Nothing is staged for approval. I did not send anything." };
+  if (String(action.status || "") !== "pending") return { ok: false, error: "That approval is no longer valid. The saved draft was not deleted, and nothing was sent." };
+  if (String(action.kind || "").endsWith("-preview")) return { ok: false, error: "This preview is not for sending. Nothing was sent." };
+  if (outboundBlocked() || externalSideEffectsBlocked()) return { ok: false, error: OUTBOUND_BLOCKED };
+  const payloadText = typeof action.payload === "string" ? action.payload : JSON.stringify(action.payload || {});
+  let payloadObject = {};
+  try { payloadObject = JSON.parse(payloadText); } catch { payloadObject = {}; }
+  const sent = action.kind === "campaign"
+    ? await runQueuedCampaign({ slug, code, payload: payloadText })
+    : action.kind === "newsletter"
+      ? await sendProposedNewsletter({ slug, code, payload: payloadText })
+      : action.kind === "card"
+        ? await sendQueuedCard({ slug, code, payload: payloadObject })
+        : action.kind === "eletter"
+          ? await sendQueuedEletter({ slug, code, payload: payloadText })
+          : { ok: false, error: "The staged action could not be completed. Nothing was sent." };
+  if (!sent?.ok) return { ok: false, error: String(sent && "error" in sent ? sent.error : "Nothing was sent.") };
+  await (await getSql())`update assistant_actions set status = 'done' where id = ${action.id} and advisor_id = ${advisorId}`;
+  return { ok: true, detail: String("detail" in sent && sent.detail ? sent.detail : "Done.") };
 }
 export async function answerAdvisor(data, onDelta) {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
@@ -3740,6 +3763,14 @@ export async function answerAdvisor(data, onDelta) {
           await remember(gate.row.id, chatId, "assistant", refused);
           onDelta?.(refused);
           return { ok: true, reply: refused, drafts: [], actions: [] };
+        }
+        if (decision.action === "send" && Number(decision.id) > 0) {
+          const sent = await deliverStagedById(gate.row.id, data.slug || "", data.code || "", Number(decision.id));
+          const reply = sent.ok ? String(sent.detail || "Done.") : String(sent.error || "Nothing was sent.");
+          handled = "fixed-confirm";
+          await remember(gate.row.id, chatId, "assistant", reply);
+          onDelta?.(reply);
+          return { ok: true, reply, drafts: [], actions: [] };
         }
         const kept = await directAdvisorCommand(gate.row.id, data.slug || "", data.code || "", chatId, command, onDelta, preferredNewsletter);
         if (kept) {
