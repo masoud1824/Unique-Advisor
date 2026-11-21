@@ -8,8 +8,8 @@ import { missingSignatureProviderMessage, prepareSignature, signatureIntent } fr
 import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
-import { modelContext, orchestrationControl, resolveConfirmation } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, contactPhrase, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment } from "@/lib/calendar-span";
@@ -21,6 +21,7 @@ import { loadClientBook, readDefaultRules, readRules, runAdvisorMorning, sourceC
 import { CARDS, personalize } from "@/lib/catalog";
 import { factsFromResponse, publicAssistantError } from "@/lib/assistant-diagnostics";
 import { getSql } from "@/lib/db";
+import { attachPreviews, bindPreviewMessages, readChatPreviewRows } from "@/lib/chat-previews";
 import { composeAdvisorPrompt, OPERATING_INSTRUCTIONS, operatingSystemBlock } from "@/lib/assistant-operating";
 import { nameQuestion, resolveSpokenContact, spokenNameOptions } from "@/lib/contact-match";
 import { ELETTER_DESIGNS, ELETTER_GREETING, isEletterPack, packEletter, plainEletter, renderEletter, unpackEletter } from "@/lib/eletter";
@@ -295,11 +296,12 @@ async function latestChat(advisorId) {
 async function advisorThread(advisorId, chatId) {
   await ensureAssistantTables();
   const rows = await (await getSql())`
-    select role, content, created_at from assistant_messages
+    select id, role, content, created_at from assistant_messages
     where advisor_id = ${advisorId} and chat_id = ${chatId}
     order by id desc limit 40
   `;
   return rows.reverse().map((row) => ({
+    id: Number(row.id),
     role: row.role === "assistant" ? "assistant" : "user",
     content: row.content,
     at: new Date(row.created_at).toISOString()
@@ -325,16 +327,18 @@ async function loadCalendarSnapshot(advisorId, chatId) {
 async function remember(advisorId, chatId, role, content) {
   await ensureAssistantTables();
   const text = content.slice(0, 4e3);
-  await (await getSql())`
+  const rows = await (await getSql())`
     insert into assistant_messages (advisor_id, chat_id, role, content)
     values (${advisorId}, ${chatId}, ${role}, ${text})
+    returning id
   `;
   if (role === "user") {
     await (await getSql())`
-      update assistant_chats set title = ${text.slice(0, 42)}
+      update assistant_chats set title = ${assistantChatTitle(text)}
       where id = ${chatId} and advisor_id = ${advisorId} and title = 'New chat'
     `;
   }
+  return Number(rows[0]?.id || 0);
 }
 function cleanTurns(input) {
   if (!Array.isArray(input)) return [];
@@ -509,6 +513,50 @@ function cardPreviewHtml(image, message, name, website = "", recipient = "") {
   const button = websiteButtonHtml(website);
   const who = recipient ? `To: ${escapePreview(recipient)}` : `For ${escapePreview(name)}`;
   return `<!DOCTYPE html><html><body style="margin:0;background:#f3efe6"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:12px"><table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:#ffffff">${picture}<tr><td style="padding:22px 24px 8px;font-family:Georgia,serif;font-size:18px;line-height:1.5;color:#1c1915">${note}</td></tr><tr><td style="padding:0 24px 22px;font-family:Georgia,serif;font-size:14px;color:#1a1916">${button}<div style="margin-top:12px;color:#6b655c">${who}</div></td></tr></table></td></tr></table></body></html>`;
+}
+async function deliveryBlockFor(advisorId, person, dropped = "") {
+  const row = (await (await getSql())`
+    select full_name, email, tags from contacts where advisor_id = ${advisorId} and id = ${Number(person.id)}
+  `)[0];
+  const name = String(row?.full_name || person.full_name || "");
+  const email = String(row?.email ?? "");
+  const tags = String(row?.tags || "");
+  return blockedRecipientReply(name, tags, email, dropped);
+}
+function withDroppedRecipient(dropped, reply) {
+  if (!dropped || String(reply || "").includes(dropped)) return reply;
+  return `I cancelled the request for ${dropped}. ${reply}`;
+}
+async function withdrawSendableCards(advisorId) {
+  try {
+    await ensureLinkTables();
+    await (await getSql())`update assistant_actions set status = 'withdrawn' where advisor_id = ${advisorId} and kind = 'card' and status = 'pending'`;
+  } catch (error) {
+    console.error("[assistant] card-withdraw", error instanceof Error ? error.message : "failed");
+  }
+}
+async function cardSendAction(advisorId, card, people) {
+  await withdrawSendableCards(advisorId);
+  await stagePreparedCard(advisorId, card, people);
+  const name = whoLine2(people);
+  const summary = `${card.title} · ${name}`.slice(0, 180);
+  const saved = await saveAction(advisorId, "card", summary, {
+    title: card.title,
+    message: String(card.message || ""),
+    image: String(card.image || ""),
+    contactIds: people.map((person) => Number(person.id)).filter((id) => id > 0),
+    contactName: name,
+  });
+  const previewHtml = cardPreviewHtml(String(card.image || ""), String(card.message || ""), String(card.title || ""), "", name);
+  return {
+    id: saved.actionId,
+    kind: "card",
+    summary,
+    status: "pending",
+    preview: String(card.message || ""),
+    previewHtml,
+    previewImage: String(card.image || ""),
+  };
 }
 async function stagePreparedCard(advisorId, card, people) {
   await ensureCardPending();
@@ -1487,9 +1535,10 @@ export const listAssistantMessages = createServerFn({ method: "POST" }).validato
       coalesce((select max(m.created_at) from assistant_messages m where m.chat_id = c.id and m.advisor_id = c.advisor_id), c.created_at) as at
     from assistant_chats c where c.advisor_id = ${gate.row.id} order by at desc limit 30
   `;
+  const messages = await advisorThread(gate.row.id, chatId);
   return {
     ok: true,
-    messages: await advisorThread(gate.row.id, chatId),
+    messages: attachPreviews(messages, await linkedChatPreviews(gate.row.id, chatId, data.slug || "", data.code || "", gate.site)),
     chats: chats.map((row) => ({ id: Number(row.id), title: row.title, at: new Date(row.at).toISOString() })),
     chatId,
     rules: await readRules(gate.row.id)
@@ -1664,7 +1713,8 @@ async function cancelWaitingCard(advisorId) {
 }
 async function replyWith(advisorId, chatId, reply, onDelta, actions = []) {
   await saveCalendarSnapshot(advisorId, chatId, reply);
-  await remember(advisorId, chatId, "assistant", reply);
+  const messageId = await remember(advisorId, chatId, "assistant", reply);
+  await bindPreviewMessages(await getSql(), advisorId, Number(chatId), messageId, (actions || []).map((item) => Number(item?.id || 0)));
   onDelta?.(reply);
   return { ok: true, reply, drafts: [], actions };
 }
@@ -1915,10 +1965,15 @@ async function revisePendingNewsletter(advisorId, slug, code, text, choosing) {
     const preview = plainNewsletter(issue);
     const html = next2.length ? await newsletterPreviewHtml(slug, code, issue) : "";
     const summary = `${title} \xB7 to ${names.join(", ") || "your contacts"}`.slice(0, 180);
-    await sql`update assistant_actions set payload = ${JSON.stringify({ ...parsed, title, articles: next2, preview: preview.slice(0, 500) })}, summary = ${summary} where id = ${action.id} and advisor_id = ${advisorId}`;
+    const nextPayload = { ...parsed, title, articles: next2, preview: preview.slice(0, 500) };
+    if (nextPayload.approvedSnapshot && typeof nextPayload.approvedSnapshot === "object") {
+      nextPayload.approvedSnapshot = { ...nextPayload.approvedSnapshot, subject: title, body: JSON.stringify(next2) };
+    }
+    await sql`update assistant_actions set status = 'withdrawn' where id = ${action.id} and advisor_id = ${advisorId} and status = 'pending'`;
+    const stored = await saveAction(advisorId, "newsletter", summary, nextPayload);
     return { reply: `${note}
 
-${newsletterReadyLine(title, names, next2.map((item) => item.title))}`, actions: [{ id: Number(action.id), kind: "newsletter", summary, preview, previewHtml: html, previewImage: "" }] };
+${newsletterReadyLine(title, names, next2.map((item) => item.title))}`, actions: [{ id: Number(stored.actionId), kind: "newsletter", summary, preview, previewHtml: html, previewImage: "" }] };
   };
   const list = titles.map((item, index) => `${index + 1}. ${item}`).join("\n");
   if (articles.length === 0) return { reply: "That newsletter has no parts left. What should the articles be about?", actions: [] };
@@ -2620,7 +2675,13 @@ async function fulfillSecretary(advisorId, slug, code, text) {
     }
     const paused = await taskReady(advisorId, "cards");
     if (paused) return preparedWork(paused);
-    const name = contactPhrase(tidy);
+    const correction = resolveCardCorrection(tidy);
+    if (correction?.kind === "cancelled" || correction?.kind === "ambiguous") {
+      await cancelWaitingCard(advisorId);
+      return preparedWork(correction.reply);
+    }
+    const name = correction?.kind === "use" ? correction.name : contactPhrase(tidy);
+    const dropped = correction?.kind === "use" ? correction.dropped : "";
     const cards = await cardsForAdvisor(advisorId);
     const picked = matchCardByName(tidy, cards);
     if (name.length < 2) {
@@ -2629,13 +2690,18 @@ async function fulfillSecretary(advisorId, slug, code, text) {
       return preparedWork("Which contact should I send the e-card to?");
     }
     const people = await findNamedContacts(advisorId, name);
-    if (people.length === 0) return preparedWork(`I could not find ${name} in your contacts. Which contact should I use?`);
-    if (people.length > 1) return preparedWork(`Did you mean ${people.slice(0, 4).map((row) => row.full_name).join(" or ")}?`);
+    if (people.length === 0) return preparedWork(withDroppedRecipient(dropped, `I could not find ${name} in your contacts. Which contact should I use?`));
+    if (people.length > 1) return preparedWork(withDroppedRecipient(dropped, `Did you mean ${people.slice(0, 4).map((row) => row.full_name).join(" or ")}?`));
     const person = people[0];
-    if (!picked) return preparedWork(cardDoubtLine(cards.slice(0, 4).map((item) => item.title), person.full_name));
-    if ("cards" in picked) return preparedWork(cardDoubtLine(picked.cards.map((item) => item.title), person.full_name));
-    await stagePreparedCard(advisorId, picked.card, [{ id: Number(person.id), full_name: person.full_name }]);
-    return preparedWork(cardConfirmLine(picked.card.title, person.full_name));
+    const blocked = await deliveryBlockFor(advisorId, person, dropped);
+    if (blocked) {
+      await cancelWaitingCard(advisorId);
+      return preparedWork(blocked);
+    }
+    if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => item.title), person.full_name)));
+    if ("cards" in picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(picked.cards.map((item) => item.title), person.full_name)));
+    const action = await cardSendAction(advisorId, picked.card, [{ id: Number(person.id), full_name: person.full_name }]);
+    return preparedWork(withDroppedRecipient(dropped, cardConfirmLine(picked.card.title, person.full_name)), [action]);
   }
   if (isZoomAsk(tidy)) {
     const paused = await taskReady(advisorId, "meetings");
@@ -3276,6 +3342,16 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     return replyWith(advisorId, chatId, sent.detail, onDelta);
   }
   if (agreesToSendCard(tidy) && waitingCard) {
+    const namedNow = recipientAfterDirection(tidy);
+    const previewFor = lastAssistant.match(/\bto ([^?\n]+)\?/i)?.[1]?.replace(/[<>].*$/g, "").trim() || "";
+    const changingPreview = Boolean(namedNow && previewFor && namedNow.toLowerCase() !== previewFor.toLowerCase() && !previewFor.toLowerCase().includes(namedNow.toLowerCase()));
+    if (changingPreview) {
+      await cancelWaitingCard(advisorId);
+      const title = lastAssistant.match(/send the (.+?) e-card to/i)?.[1]?.trim() || "";
+      const prepared = await fulfillSecretary(advisorId, slug, code, title ? `Send the ${title} e-card to ${namedNow}` : `Send an e-card to ${namedNow}`);
+      const reply = prepared?.reply || `I cancelled the request for ${previewFor}. Nothing was sent.`;
+      return replyWith(advisorId, chatId, withDroppedRecipient(previewFor, reply), onDelta, prepared?.actions || []);
+    }
     let sent = cardAwaitingYes(thread) ? await deliverConfirmedCard(advisorId, slug, code) : { ok: false, error: "I don't have an e-card waiting to send. Tell me the card and the contact again." };
     if (!sent.ok && /don't have an e-card waiting/i.test(sent.error)) sent = await deliverPendingCardAction(advisorId, slug, code);
     if (!sent.ok) return replyWith(advisorId, chatId, `Sorry, something went wrong \u2014 please try again. ${sent.error}`, onDelta);
@@ -3286,9 +3362,14 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     const reply = row ? cardSentLine(row.title, [row.contact_name]) : "I have not sent a card yet. Tell me the card and who it is for, and I will ask you to confirm before I send it.";
     return replyWith(advisorId, chatId, reply, onDelta);
   }
-  async function stageCard(card, person) {
-    await stagePreparedCard(advisorId, card, [{ id: Number(person.id), full_name: person.full_name }]);
-    return replyWith(advisorId, chatId, cardConfirmLine(card.title, person.full_name), onDelta);
+  async function stageCard(card, person, dropped = "") {
+    const blocked = await deliveryBlockFor(advisorId, person, dropped);
+    if (blocked) {
+      await cancelWaitingCard(advisorId);
+      return replyWith(advisorId, chatId, blocked, onDelta);
+    }
+    const action = await cardSendAction(advisorId, card, [{ id: Number(person.id), full_name: person.full_name }]);
+    return replyWith(advisorId, chatId, withDroppedRecipient(dropped, cardConfirmLine(card.title, person.full_name)), onDelta, [action]);
   }
   const last = [...thread].reverse().find((turn) => turn.role === "assistant")?.content || "";
   const whichCard = last.match(/which e-card should i send to (.+?)\?/i);
@@ -3308,13 +3389,15 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     const answer = needContact?.[1] || (agreesToSendCard(tidy) && named.length === 1 ? named[0] : tidy);
     const picked = matchCardByName(answer, cards);
     if (picked && "card" in picked) {
-      const who = personHint || (needContact ? tidy : "");
+      const spoken = recipientAfterDirection(tidy);
+      const changingRecipient = Boolean(spoken && personHint && spoken.toLowerCase() !== personHint.toLowerCase());
+      const who = changingRecipient ? spoken : (personHint || (needContact ? tidy : ""));
       if (looksLikeInstruction(who) || isOnboardingDemo(who)) return replyWith(advisorId, chatId, onboardingDraft(text), onDelta);
       if (who.trim().length < 2) return replyWith(advisorId, chatId, `The ${picked.card.title} card. Which contact should I send it to?`, onDelta);
       const people = await findNamedContacts(advisorId, who);
       const person = people.find((row) => row.full_name.toLowerCase() === who.trim().toLowerCase()) || people[0];
       if (!person) return replyWith(advisorId, chatId, `I could not find ${who.trim()} in your contacts.`, onDelta);
-      return stageCard(picked.card, { id: Number(person.id), full_name: person.full_name });
+      return stageCard(picked.card, { id: Number(person.id), full_name: person.full_name }, changingRecipient ? personHint : "");
     }
     const choices = picked && "cards" in picked ? picked.cards : cards.slice(0, 4);
     const shortAnswer = tidy.length <= 80 && !/\b(?:newsletter|e-?letter|campaign|meeting|zoom|book)\b/i.test(tidy);
@@ -3559,32 +3642,35 @@ export async function answerAdvisor(data, onDelta) {
     }
     const facts = control.cancelStaged ? await cancellationFacts(gate.row.id) : { pending: 0, completed: "" };
     await applyOrchestration(gate.row.id, control);
-    if (control.cancelStaged && !control.conversational) {
-      const reply = cancelExplanation(facts);
+    if (control.cancelStaged && !control.conversational && !keepCardCorrection(command)) {
+      const cardFix = resolveCardCorrection(command);
+      const reply = cardFix?.kind === "cancelled" ? cardFix.reply : cancelExplanation(facts);
       handled = "fixed-cancel";
       await remember(gate.row.id, chatId, "assistant", reply);
       onDelta?.(reply);
       return { ok: true, reply, drafts: [], actions: [] };
     }
     if (control.confirm) {
-      const decision = resolveConfirmation(command, await stagedRecords(gate.row.id));
-      const refused = confirmationReply(decision);
-      if (refused) {
+      const decision = previewApprovalDecision(command, lastSaid, await stagedRecords(gate.row.id));
+      if (decision.action !== "skip") {
+        const refused = confirmationReply(decision);
+        if (refused) {
+          handled = "fixed-confirm";
+          await remember(gate.row.id, chatId, "assistant", refused);
+          onDelta?.(refused);
+          return { ok: true, reply: refused, drafts: [], actions: [] };
+        }
+        const kept = await directAdvisorCommand(gate.row.id, data.slug || "", data.code || "", chatId, command, onDelta, preferredNewsletter);
+        if (kept) {
+          handled = "fixed-confirm";
+          return kept;
+        }
+        const reply = "The staged action could not be completed. Nothing was sent.";
         handled = "fixed-confirm";
-        await remember(gate.row.id, chatId, "assistant", refused);
-        onDelta?.(refused);
-        return { ok: true, reply: refused, drafts: [], actions: [] };
+        await remember(gate.row.id, chatId, "assistant", reply);
+        onDelta?.(reply);
+        return { ok: true, reply, drafts: [], actions: [] };
       }
-      const kept = await directAdvisorCommand(gate.row.id, data.slug || "", data.code || "", chatId, command, onDelta, preferredNewsletter);
-      if (kept) {
-        handled = "fixed-confirm";
-        return kept;
-      }
-      const reply = "The staged action could not be completed. Nothing was sent.";
-      handled = "fixed-confirm";
-      await remember(gate.row.id, chatId, "assistant", reply);
-      onDelta?.(reply);
-      return { ok: true, reply, drafts: [], actions: [] };
     }
     if (control.conversational) {
       const context = await orchestrationNote(gate.row.id, control);
@@ -3593,7 +3679,8 @@ export async function answerAdvisor(data, onDelta) {
       const result = await runModel(settings, gate.row.id, gate.row.advisor_name || gate.row.slug, thread, data.slug || "", data.code || "", `${note}\n\n${context}${grounding ? `\n\n${grounding}` : ""}${page ? `\n\nThe advisor is on the ${page} page of the desk.` : ""}`, onDelta, calls, chatId);
       if (result.ok) {
         handled = "openai";
-        await remember(gate.row.id, chatId, "assistant", result.reply);
+        const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
+        await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
       } else {
         handled = calls.length ? "openai" : "model-unavailable";
       }
@@ -3668,7 +3755,8 @@ export async function answerAdvisor(data, onDelta) {
 The advisor is on the ${page} page of the desk. Use that when it is relevant.` : note, onDelta, calls, chatId);
     if (result.ok) {
       handled = "openai";
-      await remember(gate.row.id, chatId, "assistant", result.reply);
+      const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
+      await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
     } else if (calls.length) handled = "openai";
     return result;
   } catch (error) {
@@ -3705,6 +3793,90 @@ export const discardAssistantDraft = createServerFn({ method: "POST" }).validato
   await (await getSql())`update assistant_drafts set status = 'discarded' where id = ${Number(data.draftId)} and advisor_id = ${gate.row.id} and status = 'pending'`;
   return { ok: true };
 });
+async function renderActionPreview(row, slug, code, site) {
+  let preview = "";
+  let previewHtml = "";
+  let previewImage = "";
+  if (row.kind === "signature") {
+    try { preview = String(JSON.parse(row.payload).preview || ""); } catch { preview = ""; }
+  }
+  if (row.kind === "newsletter" || row.kind === "newsletter-preview") {
+    const issue = issueFromAction(row.payload);
+    if (issue) previewHtml = await newsletterPreviewHtml(slug, code, issue);
+  }
+  if (row.kind === "card" || row.kind === "card-preview") {
+    try {
+      const parsed = JSON.parse(row.payload);
+      previewImage = String(parsed.image || "");
+      preview = String(parsed.message || "");
+      previewHtml = cardPreviewHtml(previewImage, preview, String(parsed.title || row.summary), shownWebsite(site));
+    } catch {
+      previewHtml = "";
+    }
+  }
+  if (row.kind === "campaign" || row.kind === "campaign-preview") {
+    try {
+      const parsed = JSON.parse(row.payload);
+      if (row.kind === "campaign-preview") {
+        const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
+        const everyDays = Number(parsed.everyDays) || 7;
+        preview = campaignPreviewText(String(parsed.name || row.summary), steps, everyDays, false);
+        previewHtml = campaignPreviewHtml(String(parsed.name || row.summary), steps, everyDays);
+      } else {
+        const brand = await advisorBrand(slug, code);
+        if (brand.ok && ELETTER_DESIGNS.some((item) => item.id === parsed.design)) {
+          previewHtml = renderEletter({
+            letter: { kind: "eletter", design: parsed.design, kicker: "A note", title: String(parsed.previewTitle || "Article"), subject: String(parsed.previewTitle || "Article"), body: String(parsed.previewBody || ""), social: brand.social },
+            contact: brand.contact,
+            logoSrc: "",
+            mode: "preview"
+          });
+        }
+      }
+    } catch {
+      previewHtml = "";
+    }
+  }
+  if (row.kind === "eletter" || row.kind === "eletter-preview") {
+    try {
+      const parsed = JSON.parse(row.payload);
+      preview = String(parsed.body || "");
+      const brand = await advisorBrand(slug, code);
+      const design = ELETTER_DESIGNS.some((item) => item.id === parsed.design) ? parsed.design : ELETTER_DESIGNS[0].id;
+      previewHtml = renderEletter({
+        letter: { kind: "eletter", design, kicker: "A letter", title: String(parsed.title || "Letter"), subject: String(parsed.title || "Letter"), body: preview, social: brand.ok ? brand.social : { linkedin: "", instagram: "", facebook: "", youtube: "" } },
+        contact: brand.ok ? brand.contact : { name: "", title: "", phone: "", email: "", place: "", website: "" },
+        logoSrc: "",
+        mode: "preview"
+      });
+    } catch {
+      previewHtml = "";
+    }
+  }
+  return { preview, previewHtml, previewImage };
+}
+async function linkedChatPreviews(advisorId, chatId, slug, code, site) {
+  try {
+    await ensureLinkTables();
+    const rows = await readChatPreviewRows(await getSql(), advisorId, chatId);
+    const linked = [];
+    for (const row of rows) {
+      const fields = await renderActionPreview(row, slug, code, site);
+      linked.push({
+        id: Number(row.id),
+        messageId: Number(row.message_id),
+        kind: String(row.kind || ""),
+        status: String(row.status || ""),
+        summary: String(row.summary || ""),
+        ...fields,
+      });
+    }
+    return linked;
+  } catch (error) {
+    console.error("[assistant] preview-history", error instanceof Error ? error.message : "failed");
+    return [];
+  }
+}
 export const listAssistantActions = createServerFn({ method: "POST" }).validator((input) => input).handler(async ({ data }) => {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
@@ -3713,70 +3885,12 @@ export const listAssistantActions = createServerFn({ method: "POST" }).validator
   await ensureLinkTables();
   const rows = await (await getSql())`
     select id, kind, summary, payload from assistant_actions
-    where advisor_id = ${gate.row.id} and status = 'pending' order by created_at desc limit 10
+    where advisor_id = ${gate.row.id} and status = 'pending' and coalesce(message_id, 0) = 0 and kind not like '%-preview' order by created_at desc limit 10
   `;
   const actions = [];
   for (const row of rows) {
-    let preview = "";
-    let previewHtml = "";
-    let previewImage = "";
-    if (row.kind === "signature") {
-      try { preview = String(JSON.parse(row.payload).preview || ""); } catch { preview = ""; }
-    }
-    if (row.kind === "newsletter" || row.kind === "newsletter-preview") {
-      const issue = issueFromAction(row.payload);
-      if (issue) previewHtml = await newsletterPreviewHtml(data.slug || "", data.code || "", issue);
-    }
-    if (row.kind === "card" || row.kind === "card-preview") {
-      try {
-        const parsed = JSON.parse(row.payload);
-        previewImage = String(parsed.image || "");
-        preview = String(parsed.message || "");
-        previewHtml = cardPreviewHtml(previewImage, preview, String(parsed.title || row.summary), shownWebsite(gate.site));
-      } catch {
-        previewHtml = "";
-      }
-    }
-    if (row.kind === "campaign" || row.kind === "campaign-preview") {
-      try {
-        const parsed = JSON.parse(row.payload);
-        if (row.kind === "campaign-preview") {
-          const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
-          const everyDays = Number(parsed.everyDays) || 7;
-          preview = campaignPreviewText(String(parsed.name || row.summary), steps, everyDays, false);
-          previewHtml = campaignPreviewHtml(String(parsed.name || row.summary), steps, everyDays);
-        } else {
-          const brand = await advisorBrand(data.slug || "", data.code || "");
-          if (brand.ok && ELETTER_DESIGNS.some((item) => item.id === parsed.design)) {
-            previewHtml = renderEletter({
-              letter: { kind: "eletter", design: parsed.design, kicker: "A note", title: String(parsed.previewTitle || "Article"), subject: String(parsed.previewTitle || "Article"), body: String(parsed.previewBody || ""), social: brand.social },
-              contact: brand.contact,
-              logoSrc: "",
-              mode: "preview"
-            });
-          }
-        }
-      } catch {
-        previewHtml = "";
-      }
-    }
-    if (row.kind === "eletter" || row.kind === "eletter-preview") {
-      try {
-        const parsed = JSON.parse(row.payload);
-        preview = String(parsed.body || "");
-        const brand = await advisorBrand(data.slug || "", data.code || "");
-        const design = ELETTER_DESIGNS.some((item) => item.id === parsed.design) ? parsed.design : ELETTER_DESIGNS[0].id;
-        previewHtml = renderEletter({
-          letter: { kind: "eletter", design, kicker: "A letter", title: String(parsed.title || "Letter"), subject: String(parsed.title || "Letter"), body: preview, social: brand.ok ? brand.social : { linkedin: "", instagram: "", facebook: "", youtube: "" } },
-          contact: brand.ok ? brand.contact : { name: "", title: "", phone: "", email: "", place: "", website: "" },
-          logoSrc: "",
-          mode: "preview"
-        });
-      } catch {
-        previewHtml = "";
-      }
-    }
-    actions.push({ id: Number(row.id), kind: row.kind, summary: row.summary, preview, previewHtml, previewImage });
+    const fields = await renderActionPreview(row, data.slug || "", data.code || "", gate.site);
+    actions.push({ id: Number(row.id), kind: row.kind, summary: row.summary, status: "pending", ...fields });
   }
   return { ok: true, actions };
 });

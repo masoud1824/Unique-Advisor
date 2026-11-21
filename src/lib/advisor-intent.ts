@@ -2,6 +2,7 @@ import { hasMeetingWhen, isTimeAgreement } from "./meeting-time.ts";
 import { refersToAppointment } from "./calendar-span.ts";
 import { contentHoldKind, deliveryRequested, withoutNegatedDelivery } from "./workspace-policy.ts";
 import { asksArchiveSearch, asksContactRecord, namedPeople } from "./delivery-audience.ts";
+import { contactDeliveryBlock } from "./desk-workflows.ts";
 import { isSignatureAsk } from "./signature-request.ts";
 
 export { isSignatureAsk };
@@ -118,6 +119,176 @@ export function contactPhrase(text: string) {
   if (question && !found) return "";
   const tail = (found ? found[1] : tidy).replace(/\b(?:tomorrow|today|tonight|monday|tuesday|wednesday|thursday|friday|saturday|sunday|january|february|march|april|may|june|july|august|september|october|november|december)\b.*$/i, " ");
   return keptNameWords(tail);
+}
+
+const TRAILING_NAME = new Set(["instead", "please", "now", "thanks", "again", "only"]);
+
+function cleanPerson(name: string) {
+  const words = String(name || "").split(/\s+/).filter((word) => word && !TRAILING_NAME.has(word.toLowerCase()));
+  return words.slice(0, 3).join(" ");
+}
+
+function uniquePeople(names: string[]) {
+  const kept: string[] = [];
+  for (const name of names) {
+    const tidy = cleanPerson(name);
+    if (tidy.length < 2) continue;
+    if (kept.some((item) => item.toLowerCase() === tidy.toLowerCase())) continue;
+    kept.push(tidy);
+  }
+  return kept;
+}
+
+function isStopClause(clause: string) {
+  const tidy = clause.replace(/[.!?؟]+$/g, "").trim();
+  if (!tidy) return false;
+  if (/^(?:please\s+)?(?:stop|cancel|never\s?mind|nevermind)$/i.test(tidy)) return true;
+  if (/^(?:please\s+)?(?:do not|don't|never)\s+send(?:\s+it)?$/i.test(tidy)) return true;
+  return /^(?:لطفا\s*)?(?:لغو کن|لغو|کنسل|ارسال نکن|نفرستید|استاپ)$/u.test(tidy);
+}
+
+function namesInClause(clause: string) {
+  if (isStopClause(clause)) return [];
+  const proper = namedPeople(clause);
+  if (proper.length) return uniquePeople(proper);
+  const one = cleanPerson(contactPhrase(clause));
+  if (one.length >= 2 && !/^(?:yes|yeah|yep|yup|ok|okay|stop|cancel|please)$/i.test(one)) return [one];
+  return [];
+}
+
+function clauseIntent(clause: string) {
+  if (isStopClause(clause)) return { stop: true, names: [] as string[] };
+  const names = namesInClause(clause);
+  const refusal = /\b(?:do not|don't|never)\s+send\b/i.test(clause);
+  if (refusal) return { stop: true, names };
+  return { stop: false, names };
+}
+
+function cardClauses(text: string) {
+  let tidy = tidyHeard(text);
+  if (isCardAsk(tidy) || /\b(?:e-?card|birthday)\b/i.test(tidy)) {
+    tidy = tidy.replace(/\s+[—–]\s+/g, ". ").replace(/\s+-\s+/g, ". ");
+    tidy = tidy.replace(/\s+\b(stop|cancel|never mind|nevermind)\b/gi, ". $1");
+  }
+  return tidy.split(/[.!?؟]+/).map((clause) => clause.trim()).filter(Boolean);
+}
+
+export type CardCorrection =
+  | { kind: "use"; name: string; dropped: string }
+  | { kind: "cancelled"; dropped: string; reply: string }
+  | { kind: "ambiguous"; names: string[]; reply: string };
+
+/**
+ * A later recipient replaces an earlier one after stop/cancel.
+ * One recipient and no stop returns null so contactPhrase stays in charge.
+ * The first-name helper is unchanged: it still stops at the first "to".
+ */
+export function resolveCardCorrection(text: string): CardCorrection | null {
+  const clauses = cardClauses(text);
+  if (!isCardAsk(text) && !clauses.some((clause) => isCardAsk(clause))) return null;
+  const pieces = clauses.map(clauseIntent);
+  const stopped = pieces.some((piece) => piece.stop);
+  const everyone = uniquePeople(pieces.flatMap((piece) => piece.names));
+  if (!stopped && everyone.length <= 1) return null;
+  if (!stopped) {
+    return {
+      kind: "ambiguous",
+      names: everyone,
+      reply: `Did you mean ${everyone.join(" or ")}? I did not choose ${everyone[0]}. Nothing was sent.`,
+    };
+  }
+  let dropped: string[] = [];
+  let current: string[] = [];
+  for (const piece of pieces) {
+    if (piece.stop) {
+      dropped = dropped.concat(current, piece.names);
+      current = [];
+      continue;
+    }
+    if (piece.names.length) {
+      dropped = dropped.concat(current);
+      current = piece.names;
+    }
+  }
+  if (current.length > 1) {
+    return {
+      kind: "ambiguous",
+      names: current,
+      reply: `Did you mean ${current.join(" or ")}? I did not keep an earlier name. Nothing was sent.`,
+    };
+  }
+  if (current.length === 0) {
+    const prior = uniquePeople(dropped);
+    const last = prior[prior.length - 1] || "";
+    return {
+      kind: "cancelled",
+      dropped: last,
+      reply: last ? `I cancelled the request for ${last}. Nothing was sent.` : "Cancelled. Nothing was sent.",
+    };
+  }
+  const name = current[0];
+  const prior = uniquePeople(dropped).filter((item) => item.toLowerCase() !== name.toLowerCase());
+  return { kind: "use", name, dropped: prior[prior.length - 1] || "" };
+}
+
+export function keepCardCorrection(text: string) {
+  const fix = resolveCardCorrection(text);
+  return fix?.kind === "use" || fix?.kind === "ambiguous";
+}
+
+/** Recipient named with to/for. A bare yes has none. */
+export function recipientAfterDirection(text: string) {
+  const tidy = tidyHeard(text);
+  const found = tidy.match(/\b(?:to|for)\s+([^.?!]+)/i);
+  if (!found) return "";
+  return namesInClause(`to ${found[1]}`)[0] || "";
+}
+
+export function blockedRecipientReply(name: string, tags: string, email: string, dropped = "") {
+  const reason = contactDeliveryBlock(tags, email);
+  if (!reason) return "";
+  const who = String(name || "").trim() || "That contact";
+  const earlier = dropped && dropped.toLowerCase() !== who.toLowerCase() ? ` I cancelled the request for ${dropped}.` : "";
+  return `${who} — ${reason}.${earlier} Nothing was sent.`;
+}
+
+export function cardIdentityQuestion(lastAssistant: string) {
+  const last = String(lastAssistant || "");
+  if (/just to confirm:/i.test(last)) return null;
+  if (!/did you mean\b/i.test(last) || !/\bcard\b/i.test(last)) return null;
+  const titles = [...last.matchAll(/\bthe (.+?) card\b/gi)].map((match) => match[1].trim()).filter(Boolean);
+  const unique = [...new Set(titles)];
+  if (!unique.length) return null;
+  const name = last.match(/\bfor ([^?\n]+)\?/i)?.[1]?.trim() || "";
+  return { titles: unique, name };
+}
+
+export type IdentityAnswer =
+  | { kind: "not-identity" }
+  | { kind: "unclear" }
+  | { kind: "accept"; title: string; name: string }
+  | { kind: "change"; title: string; name: string; previous: string };
+
+/** Yes to "Did you mean this card for this person?" is not permission to send. */
+export function interpretIdentityAnswer(userText: string, lastAssistant: string): IdentityAnswer {
+  const identity = cardIdentityQuestion(lastAssistant);
+  if (!identity) return { kind: "not-identity" };
+  const tidy = tidyHeard(userText);
+  if (!tidy || declinesCard(tidy) || isBareRefusal(tidy)) return { kind: "not-identity" };
+  if (!agreesToSendCard(tidy) && !isTimeAgreement(tidy)) return { kind: "unclear" };
+  if (identity.titles.length !== 1) return { kind: "unclear" };
+  const named = recipientAfterDirection(tidy);
+  const title = identity.titles[0];
+  if (named && identity.name && named.toLowerCase() !== identity.name.toLowerCase()) {
+    return { kind: "change", title, name: named, previous: identity.name };
+  }
+  if (!identity.name && !named) return { kind: "unclear" };
+  return { kind: "accept", title, name: identity.name || named };
+}
+
+/** Sidebar title is the first message, clipped. The clock is a separate stamp. */
+export function assistantChatTitle(content: string) {
+  return String(content || "").slice(0, 42);
 }
 
 export function cardTitleHint(text: string) {

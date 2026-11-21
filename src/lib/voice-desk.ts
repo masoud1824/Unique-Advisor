@@ -170,9 +170,66 @@ function mapFarsiCommand(text: string) {
   return raw;
 }
 
+function foldFa(text: string) {
+  return text.normalize("NFKD").replace(/\u200c/g, "").replace(/[يى]/g, "ی").replace(/ك/g, "ک").replace(/\p{M}/gu, "");
+}
+
+function farsiStopClause(clause: string) {
+  const tidy = foldFa(clause).replace(/[.!?؟،]+$/g, "").trim();
+  if (/^(?:لطفا\s*)?(?:لغو کن|لغو|کنسل|ارسال نکن|نفرستید|استاپ)$/u.test(tidy)) return true;
+  return /^(?:لطفا\s*)?نفرست$/u.test(tidy);
+}
+
+/** English card command for a Farsi correction. Empty when this is not a card correction. */
+export function farsiCardCorrection(text: string) {
+  const raw = String(text || "").trim();
+  if (!/[\u0600-\u06FF]/.test(raw) || raw.length > 160) return "";
+  const folded = foldFa(raw);
+  if (!/کارت|تولد/.test(folded)) return "";
+  const marked = folded.replace(/[.!?؟]+/g, ".").replace(/ارسال نکن|لغو کن|نفرستید|کنسل|لغو|استاپ|(?<!ب)نفرست/g, ".$&.");
+  const clauses = marked.split(".").map((part) => part.trim()).filter(Boolean);
+  const parts: string[] = [];
+  for (const clause of clauses) {
+    if (farsiStopClause(clause)) {
+      parts.push("Stop.");
+      continue;
+    }
+    const people = farsiPeople(clause);
+    if (!people.length) continue;
+    const card = /تولد/.test(clause) || /تولد/.test(folded) ? "birthday card" : "e-card";
+    if (people.length > 1) {
+      for (const person of people) parts.push(`Send a ${card} to ${person}.`);
+      continue;
+    }
+    parts.push(`Send a ${card} to ${people[0]}.`);
+  }
+  if (!parts.some((part) => part.startsWith("Send"))) return "";
+  return parts.join(" ");
+}
+
+function farsiIdentityCommand(text: string, lastAssistant: string) {
+  const raw = String(text || "").trim();
+  if (!/[\u0600-\u06FF]/.test(raw) || raw.length > 160) return "";
+  const last = String(lastAssistant || "");
+  const identity = /did you mean\b/i.test(last) && /\bcard\b/i.test(last) && !/just to confirm:/i.test(last);
+  const preview = /just to confirm:/i.test(last);
+  if (!identity && !preview) return "";
+  const folded = foldFa(raw);
+  if (/لغو|کنسل|استاپ|ارسال نکن/.test(folded)) return "Cancel.";
+  const people = farsiPeople(folded);
+  const yes = /بله|آره|باشه/.test(folded);
+  if (people.length > 1) return `Send a birthday card to ${people[0]}. Send a birthday card to ${people[1]}.`;
+  if (people.length === 1 && (yes || /بفرست|ارسال کن/.test(folded))) return `Yes, send it to ${people[0]}.`;
+  if (yes && /^(?:لطفا\s*)?(?:بله|آره|باشه)[.!؟?\s]*$/u.test(folded)) return "Yes.";
+  return "";
+}
+
 export function prepareDeskCommand(text: string, lastAssistant = "") {
+  const identity = farsiIdentityCommand(text, lastAssistant);
   const mapped = mapFarsiCommand(text).replace(/\s+/g, " ").trim();
-  if (!/^(?:please\s+)?(?:move|bring|shift)\s+(?:it|that|this)\s+(up|down)\b/i.test(mapped)) return mapped;
+  const card = !identity && /[\u0600-\u06FF]/.test(mapped) ? farsiCardCorrection(text) : "";
+  const base = (identity || card || mapped).replace(/\s+/g, " ").trim();
+  if (!/^(?:please\s+)?(?:move|bring|shift)\s+(?:it|that|this)\s+(up|down)\b/i.test(base)) return base;
   const title = articleInFocus(lastAssistant);
   const direction = /\bdown\b/i.test(mapped) ? "down" : "up";
   if (!title) return mapped;

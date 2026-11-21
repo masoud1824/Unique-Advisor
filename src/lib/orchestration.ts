@@ -1,4 +1,4 @@
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, blocksLookup, isBareRefusal, isCalendarAsk, isNewsletterHold, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, taskKind, tidyHeard } from "./advisor-intent.ts";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, blocksLookup, isBareRefusal, isCalendarAsk, isNewsletterHold, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, recipientAfterDirection, taskKind, tidyHeard } from "./advisor-intent.ts";
 import { contentHoldKind } from "./workspace-policy.ts";
 import { refersToAppointment } from "./calendar-span.ts";
 import { isTimeAgreement } from "./meeting-time.ts";
@@ -59,6 +59,18 @@ export function resolveConfirmation(userText: string, staged: StagedAction[]) {
   if (pending.length === 1) return { action: "send" as const, id: pending[0].id, kind: pending[0].kind };
   if (rows.some((row) => row.status !== "pending" || row.approval === "withdrawn" || row.approval === "cancelled")) return { action: "stale" as const };
   return { action: "missing" as const };
+}
+
+/** A yes approves delivery only when the last line is the rendered preview. */
+export function previewApprovalDecision(userText: string, lastAssistant: string, staged: StagedAction[]) {
+  if (!/just to confirm:/i.test(String(lastAssistant || ""))) return { action: "skip" as const };
+  const named = recipientAfterDirection(userText);
+  const previewName = String(lastAssistant || "").match(/\bto ([^?\n]+)\?/i)?.[1]?.trim() || "";
+  const previewPerson = previewName.replace(/[<>].*$/g, "").trim();
+  if (named && previewPerson && !previewPerson.toLowerCase().includes(named.toLowerCase()) && named.toLowerCase() !== previewPerson.toLowerCase()) {
+    return { action: "skip" as const };
+  }
+  return resolveConfirmation(userText, staged);
 }
 
 export function modelContext(input: {

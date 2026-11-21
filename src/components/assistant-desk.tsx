@@ -10,13 +10,55 @@ import { keepUtterance } from "@/lib/speech-utterance";
 import { AdvisorVoiceChooser } from "@/components/advisor-voice";
 import { emptyTurn, pushRecognition, readVoiceAutoSend, shouldAutoSend, turnText, voiceDebugEnabled, type TurnState } from "@/lib/voice-turn";
 import { appendVoiceLog } from "@/lib/voice-log.functions";
+import { previewCanSend, previewTitle, trayOffers } from "@/lib/chat-previews";
 import type { DeskData } from "@/lib/site-types";
 
-type Turn = { role: "user" | "assistant"; content: string; at?: string };
+type Turn = { id?: number; role: "user" | "assistant"; content: string; at?: string; previews?: Action[] };
 type Draft = { id: number; to: string; name: string; subject: string; body: string };
-type Action = { id: number; kind: string; summary: string; preview?: string; previewHtml?: string; previewImage?: string };
+type Action = { id: number; kind: string; summary: string; status?: string; canSend?: boolean; preview?: string; previewHtml?: string; previewImage?: string };
 type Chat = { id: number; title: string; at?: string };
 type SavedRule = { id?: string; category?: string; text: string; on: boolean };
+
+function previewAllowsSend(action: Action) {
+  return previewCanSend(action);
+}
+
+function MailPreview({ action, busy, onApprove, onDiscard }: { action: Action; busy: boolean; onApprove: (id: number) => void; onDiscard: (id: number) => void }) {
+  const sendable = previewAllowsSend(action);
+  const historical = Boolean(action.status && action.status !== "pending");
+  return (
+    <article className="ua-mail-preview rounded-lg border p-3" data-preview-id={action.id} data-can-send={sendable ? "yes" : "no"} data-preview-status={action.status || "pending"} style={{ borderColor: sendable ? "#b42318" : "#d5e4f2", background: sendable ? "#fff8f6" : "#f7fbfe" }}>
+      <p className="text-sm font-extrabold" style={{ color: sendable ? "#b42318" : "#0f4c81" }}>{previewTitle(action.kind)}</p>
+      <p className="mt-1 text-sm font-semibold">{action.summary}</p>
+      {historical && <p className="mt-2 text-sm" style={{ color: "#5a6a7a" }}>Earlier preview kept with this message. Nothing can be sent from it.</p>}
+      {sendable && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" className="ua-btn" disabled={busy} onClick={() => onApprove(action.id)}>{action.kind === "campaign" ? "Run the campaign" : action.kind === "signature" || action.kind === "card" || action.kind === "eletter" || action.kind === "newsletter" ? "Approve and send" : "Approve"}</button>
+          <button type="button" className="ua-btn-line" disabled={busy} onClick={() => onDiscard(action.id)}>Discard</button>
+        </div>
+      )}
+      {action.previewImage && (
+        <img src={action.previewImage} alt="" className="mt-3 w-full rounded-lg border bg-white" style={{ borderColor: "#e1e8ef" }} />
+      )}
+      {action.previewHtml ? (
+        <iframe
+          title={`Mail preview ${action.id}`}
+          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          srcDoc={action.previewHtml}
+          className="mt-3 w-full rounded-lg border bg-white"
+          style={{ height: 320, borderColor: "#e1e8ef" }}
+          onLoad={(event) => {
+            const frame = event.currentTarget;
+            const height = frame.contentDocument?.documentElement?.scrollHeight || 0;
+            if (height > 0) frame.style.height = `${height}px`;
+          }}
+        />
+      ) : (
+        action.preview && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-white p-4 text-sm">{action.preview}</p>
+      )}
+    </article>
+  );
+}
 
 function asRules(value: unknown): SavedRule[] {
   if (!Array.isArray(value)) return [];
@@ -800,7 +842,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     const log = logRef.current;
     if (!log) return;
     const pin = () => {
-      const preview = log.querySelector(".ua-mail-preview");
+      const previews = log.querySelectorAll(".ua-mail-preview");
+      const preview = previews[previews.length - 1];
       if (preview instanceof HTMLElement) {
         log.scrollTop = Math.max(0, preview.offsetTop - 8);
         return;
@@ -831,7 +874,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     if (token !== request.current) return;
     if (result.ok) setDrafts(result.drafts);
     else setError(result.error);
-    if (pending.ok) setActions(pending.actions);
+    if (pending.ok) setActions((pending.actions as Action[]).filter((item) => previewCanSend(item)));
     if (history.ok) {
       setTurns(history.messages);
       setChats(history.chats);
@@ -1198,10 +1241,10 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         const replacePreview = shouldReplacePreview(content) || shouldReplacePreview(routed);
         if (userCancels) setActions([]);
         else if (result.actions?.length || replacePreview) {
-          const fresh = result.actions || [];
+          const fresh = (result.actions || []).filter((item) => previewCanSend(item));
           setActions((current) => [
             ...fresh,
-            ...current.filter((item) => !fresh.some((next) => next.id === item.id) && !String(item.kind).endsWith("-preview") && item.kind !== "signature"),
+            ...current.filter((item) => !fresh.some((next) => next.id === item.id) && previewCanSend(item) && item.kind !== "signature"),
           ]);
           if (fresh.some((item) => item.kind === "newsletter-preview" || item.kind === "eletter-preview" || item.kind === "card-preview" || item.kind === "campaign-preview")) {
             window.dispatchEvent(new Event("ua-newsletter"));
@@ -1401,6 +1444,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     await refresh();
   }
 
+  const linkedPreviewIds = new Set(turns.flatMap((turn) => (turn.previews || []).map((item) => item.id)));
+  const trayActions = actions.filter((item) => trayOffers(item, linkedPreviewIds));
   return (
     <div className="grid gap-4">
       <section id="ai-assistant" className="ua-panel p-6">
@@ -1548,52 +1593,31 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               ))}
             </div>
           </aside>
-          <div className="ua-assist-talk" id="ai-assistant-chat" style={actions.length > 0 ? { height: "auto", overflow: "visible" } : undefined}>
+          <div className="ua-assist-talk" id="ai-assistant-chat">
             <p className="ua-assist-head">This chat</p>
-            <div className="ua-assist-log" ref={logRef} style={actions.length > 0 ? { maxHeight: 220, flex: "none" } : undefined}>
+            <div className="ua-assist-log" ref={logRef}>
               {turns.map((turn, index) => (
-                <div key={`${turn.role}-${index}`} className="rounded-lg px-4 py-3 text-sm" style={{ background: turn.role === "user" ? "#e8f4fd" : "#f7f9fc" }}>
+                <div key={`${turn.role}-${turn.id || index}`} className="rounded-lg px-4 py-3 text-sm" style={{ background: turn.role === "user" ? "#e8f4fd" : "#f7f9fc" }}>
                   <div className="flex items-baseline justify-between gap-3">
                     <strong>{turn.role === "user" ? "You" : "AI assistant"}</strong>
                     {stamp(turn.at) && <span className="text-xs" style={{ color: "#5a6a7a" }}>{stamp(turn.at)}</span>}
                   </div>
                   <p className="mt-1 whitespace-pre-wrap">{turn.role === "assistant" ? <AssistantText text={turn.content} /> : turn.content}</p>
+                  {turn.previews && turn.previews.length > 0 && (
+                    <div className="mt-3 grid gap-3">
+                      {turn.previews.map((action) => (
+                        <MailPreview key={action.id} action={action} busy={busy} onApprove={(id) => void approveAction(id)} onDiscard={(id) => void discardAction(id)} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               {turns.length === 0 && <p className="text-sm" style={{ color: "#5a6a7a" }}>Ask who needs a call, whose yearly KYC is due, or where an upsell or cross-sell may exist.</p>}
             </div>
-            {actions.length > 0 && (
-              <div ref={(node) => { if (node) node.scrollIntoView({ block: "nearest" }); }} className="ua-mail-preview grid gap-3 border-t p-3" style={{ borderColor: "#e1e8ef" }}>
-                {actions.map((action) => (
-                  <article key={action.id} className="rounded-lg border p-3" style={{ borderColor: "#b42318", background: "#fff8f6" }}>
-                    <p className="text-sm font-extrabold" style={{ color: "#b42318" }}>{action.kind === "card" || action.kind === "card-preview" ? "E-card preview" : action.kind === "eletter" || action.kind === "eletter-preview" ? "E-letter preview" : action.kind === "newsletter" || action.kind === "newsletter-preview" ? "Newsletter preview" : action.kind === "campaign" || action.kind === "campaign-preview" ? "Campaign preview" : action.kind === "signature" ? "Signature preview" : "Waiting for approval"}</p>
-                    <p className="mt-1 text-sm font-semibold">{action.summary}</p>
-                    {!action.kind.endsWith("-preview") && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" className="ua-btn" disabled={busy} onClick={() => void approveAction(action.id)}>{action.kind === "campaign" ? "Run the campaign" : action.kind === "signature" ? "Approve and send" : action.kind === "card" || action.kind === "eletter" || action.kind === "newsletter" ? "Approve and send" : "Approve"}</button>
-                      <button type="button" className="ua-btn-line" disabled={busy} onClick={() => void discardAction(action.id)}>Discard</button>
-                    </div>
-                    )}
-                    {action.previewImage && (
-                      <img src={action.previewImage} alt="" className="mt-3 w-full rounded-lg border bg-white" style={{ borderColor: "#e1e8ef" }} />
-                    )}
-                    {action.previewHtml ? (
-                      <iframe
-                        title="Mail preview"
-                        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-                        srcDoc={action.previewHtml}
-                        className="mt-3 w-full rounded-lg border bg-white"
-                        style={{ height: 320, borderColor: "#e1e8ef" }}
-                        onLoad={(event) => {
-                          const frame = event.currentTarget;
-                          const height = frame.contentDocument?.documentElement?.scrollHeight || 0;
-                          if (height > 0) frame.style.height = `${height}px`;
-                        }}
-                      />
-                    ) : (
-                      action.preview && <p className="mt-3 whitespace-pre-wrap rounded-lg bg-white p-4 text-sm">{action.preview}</p>
-                    )}
-                  </article>
+            {trayActions.length > 0 && (
+              <div className="grid gap-3 border-t p-3" style={{ borderColor: "#e1e8ef" }}>
+                {trayActions.map((action) => (
+                  <MailPreview key={action.id} action={action} busy={busy} onApprove={(id) => void approveAction(id)} onDiscard={(id) => void discardAction(id)} />
                 ))}
               </div>
             )}

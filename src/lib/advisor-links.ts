@@ -101,6 +101,8 @@ async function ensureLinkTables() {
     status text not null default 'pending',
     created_at timestamptz not null default now()
   )`);
+  await sql.query("alter table assistant_actions add column if not exists chat_id integer");
+  await sql.query("alter table assistant_actions add column if not exists message_id integer");
   await sql.query("alter table oauth_states add column if not exists provider text not null default 'microsoft'");
   await sql.query("alter table advisor_links add column if not exists login_user text not null default ''");
   await sql.query("alter table advisor_links add column if not exists login_pass text not null default ''");
