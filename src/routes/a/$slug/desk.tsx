@@ -264,7 +264,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 	const [voicing, setVoicing] = useState(false);
 	const [spoken, setSpoken] = useState(null);
 	const [assistFrom, setAssistFrom] = useState(null);
-	const titles = {
+	const titles: Record<string, string> = {
 		dashboard: "Dashboard",
 		calendar: "Calendar",
 		contacts: "Contacts",

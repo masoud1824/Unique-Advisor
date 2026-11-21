@@ -98,7 +98,7 @@ export async function performLibraryTurn(sql: QuerySql, advisorId: number, text:
   return formatLibraryCopy({ newsletterId: Number(inserted[0]?.id), count: snapshots.length, mode: "new" });
 }
 
-export function applyCopyEdits(snapshots: NewsletterArticle[], edits: Array<{ id: number; title?: string; bodyHtml?: string }>) {
+export function applyCopyEdits<T extends NewsletterArticle>(snapshots: T[], edits: Array<{ id: number; title?: string; bodyHtml?: string }>): T[] {
   return snapshots.map((snapshot) => {
     const edit = edits.find((item) => item.id === snapshot.libraryArticleId);
     if (!edit) return snapshot;

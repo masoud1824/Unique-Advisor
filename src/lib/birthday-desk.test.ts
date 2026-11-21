@@ -51,8 +51,8 @@ describe("birthday settings stay off and advisor-scoped", () => {
     const refused = await saveBirthdaySettings(sql, 1, { enabled: true, cardTitle: "Happy birthday, {{name}}." });
     assert.equal(refused.ok, false);
     if (!refused.ok) assert.equal(refused.error, BIRTHDAY_AUTOMATION_OFF);
-    const other = await pg.query("select card_title from birthday_settings where advisor_id = 2");
-    assert.equal(other.rows[0].card_title, "Other card");
+    const other = await pg.query<{ card_title: string }>("select card_title from birthday_settings where advisor_id = 2");
+    assert.equal(other.rows[0]?.card_title, "Other card");
   });
 
   it("saves a desk card, requires confirmation again, and pauses without sending", async () => {
@@ -83,8 +83,8 @@ describe("birthday settings stay off and advisor-scoped", () => {
     assert.equal(paused.storedEnabled, false);
     const cross = await saveBirthdaySettings(sql, 1, { advisorId: 2, cardTitle: "Stolen" });
     assert.equal(cross.ok, false);
-    const other = await pg.query("select card_title from birthday_settings where advisor_id = 2");
-    assert.equal(other.rows[0].card_title, "Other card");
+    const other = await pg.query<{ card_title: string }>("select card_title from birthday_settings where advisor_id = 2");
+    assert.equal(other.rows[0]?.card_title, "Other card");
   });
 
   it("previews with a fake clock and does not call a provider", async () => {

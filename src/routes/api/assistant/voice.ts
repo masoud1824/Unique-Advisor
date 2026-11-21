@@ -48,7 +48,8 @@ export const Route = createFileRoute("/api/assistant/voice")({
                 },
               );
               if (!result.ok) {
-                send({ type: "error", error: result.error });
+                const message = "error" in result && typeof result.error === "string" ? result.error : "The assistant could not answer.";
+                send({ type: "error", error: message });
               } else {
                 const brief = spokenBrief(String(result.reply || ""), String(body?.content || ""));
                 send({ type: "speak", text: brief });

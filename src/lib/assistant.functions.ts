@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, heardCommand, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment } from "@/lib/calendar-span";
@@ -29,7 +29,7 @@ import { bookingHref, createAppointmentLink } from "@/lib/appointments";
 import { accessTokenForAdvisor, graphInbox } from "@/lib/microsoft-mail";
 import { taskOn, taskPaused } from "@/lib/secretary-rules";
 import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
-import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter } from "@/lib/newsletter";
+import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket } from "@/lib/desk-workflows";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
@@ -66,7 +66,7 @@ import {
 import { contentHoldKind, holdNote } from "@/lib/workspace-policy";
 import { holdCampaign as persistCampaignControl, runQueuedCampaign as deliverCampaign, sendProposedNewsletter as deliverNewsletter, sendQueuedCard as deliverCard, sendQueuedEletter as deliverLetter, cancelPendingDesk } from "@/lib/desk-handlers";
 import { ensureAcceptanceRecords } from "@/lib/acceptance-records";
-import { cancelExplanation, claimVoiceTurn, prepareDeskCommand, releaseVoiceTurn, transcriptHold, verifiedFarsiMoveNote, voiceTurnKey } from "@/lib/voice-desk";
+import { cancelExplanation, claimVoiceTurn, deskTurnKey, prepareDeskCommand, releaseVoiceTurn, transcriptHold, verifiedFarsiMoveNote } from "@/lib/voice-desk";
 import { asksLibraryConversation } from "@/lib/library-conversation";
 import { performLibraryTurn } from "@/lib/library-store";
 
@@ -302,9 +302,9 @@ async function advisorThread(advisorId, chatId) {
   `;
   return rows.reverse().map((row) => ({
     id: Number(row.id),
-    role: row.role === "assistant" ? "assistant" : "user",
-    content: row.content,
-    at: new Date(row.created_at).toISOString()
+    role: row.role === "assistant" ? "assistant" as const : "user" as const,
+    content: String(row.content ?? ""),
+    at: new Date(String(row.created_at || Date.now())).toISOString()
   }));
 }
 async function saveCalendarSnapshot(advisorId, chatId, text) {
@@ -514,7 +514,7 @@ function cardPreviewHtml(image, message, name, website = "", recipient = "") {
   const who = recipient ? `To: ${escapePreview(recipient)}` : `For ${escapePreview(name)}`;
   return `<!DOCTYPE html><html><body style="margin:0;background:#f3efe6"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:12px"><table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:#ffffff">${picture}<tr><td style="padding:22px 24px 8px;font-family:Georgia,serif;font-size:18px;line-height:1.5;color:#1c1915">${note}</td></tr><tr><td style="padding:0 24px 22px;font-family:Georgia,serif;font-size:14px;color:#1a1916">${button}<div style="margin-top:12px;color:#6b655c">${who}</div></td></tr></table></td></tr></table></body></html>`;
 }
-async function deliveryBlockFor(advisorId, person, dropped = "") {
+async function deliveryBlockFor(advisorId: number, person: { id: number; full_name: string }, dropped = "") {
   const row = (await (await getSql())`
     select full_name, email, tags from contacts where advisor_id = ${advisorId} and id = ${Number(person.id)}
   `)[0];
@@ -523,7 +523,7 @@ async function deliveryBlockFor(advisorId, person, dropped = "") {
   const tags = String(row?.tags || "");
   return blockedRecipientReply(name, tags, email, dropped);
 }
-function withDroppedRecipient(dropped, reply) {
+function withDroppedRecipient(dropped: string, reply: string) {
   if (!dropped || String(reply || "").includes(dropped)) return reply;
   return `I cancelled the request for ${dropped}. ${reply}`;
 }
@@ -535,7 +535,7 @@ async function withdrawSendableCards(advisorId) {
     console.error("[assistant] card-withdraw", error instanceof Error ? error.message : "failed");
   }
 }
-async function cardSendAction(advisorId, card, people) {
+async function cardSendAction(advisorId: number, card: { id: string; title: string; message?: string; image?: string }, people: Array<{ id: number; full_name: string }>) {
   await withdrawSendableCards(advisorId);
   await stagePreparedCard(advisorId, card, people);
   const name = whoLine2(people);
@@ -629,7 +629,7 @@ async function lastTemplate(advisorId, kind) {
     select payload from assistant_actions where advisor_id = ${advisorId} and kind = ${kind} order by id desc limit 1
   `)[0];
   try {
-    return String(JSON.parse(row?.payload || "{}").design || "");
+    return String(JSON.parse(typeof row?.payload === "string" && row.payload ? row.payload : "{}").design || "");
   } catch {
     return "";
   }
@@ -924,6 +924,10 @@ async function newsletterPreviewHtml(slug, code, issue) {
   const contact = brand.ok ? brand.contact : { name: "", title: "", phone: "", email: "", place: "", website: "" };
   const social = brand.ok ? brand.social : issue.social;
   return renderNewsletter({ issue: { ...issue, social }, contact, logoSrc: "", mode: "preview", articleHref: () => "#" });
+}
+function asNewsletterDesign(value: unknown): NewsletterDesign {
+  const id = typeof value === "string" ? value : "";
+  return NEWSLETTER_DESIGNS.some((item) => item.id === id) ? id as NewsletterDesign : "navy";
 }
 function issueFromAction(payload) {
   try {
@@ -1342,7 +1346,7 @@ export const loadAssistantDiagnostics = createServerFn({ method: "POST" }).valid
   const requests = rows.map((row) => {
     let calls = [];
     try {
-      const parsed = JSON.parse(row.calls_json || "[]");
+      const parsed = JSON.parse(typeof row.calls_json === "string" && row.calls_json ? row.calls_json : "[]");
       if (Array.isArray(parsed)) {
         calls = parsed.flatMap((item) => {
           if (!item || typeof item !== "object") return [];
@@ -1539,7 +1543,7 @@ export const listAssistantMessages = createServerFn({ method: "POST" }).validato
   return {
     ok: true,
     messages: attachPreviews(messages, await linkedChatPreviews(gate.row.id, chatId, data.slug || "", data.code || "", gate.site)),
-    chats: chats.map((row) => ({ id: Number(row.id), title: row.title, at: new Date(row.at).toISOString() })),
+    chats: chats.map((row) => ({ id: Number(row.id), title: String(row.title ?? ""), at: new Date(String(row.at || Date.now())).toISOString() })),
     chatId,
     rules: await readRules(gate.row.id)
   };
@@ -1711,7 +1715,7 @@ async function cancelWaitingCard(advisorId) {
     console.error("[assistant] card-cancel", error);
   }
 }
-async function replyWith(advisorId, chatId, reply, onDelta, actions = []) {
+async function replyWith(advisorId: number, chatId: number, reply: string, onDelta?: (chunk: string) => void, actions: DeskAction[] = []) {
   await saveCalendarSnapshot(advisorId, chatId, reply);
   const messageId = await remember(advisorId, chatId, "assistant", reply);
   await bindPreviewMessages(await getSql(), advisorId, Number(chatId), messageId, (actions || []).map((item) => Number(item?.id || 0)));
@@ -1947,27 +1951,34 @@ async function revisePendingNewsletter(advisorId, slug, code, text, choosing) {
     order by id desc limit 1
   `)[0];
   if (!action) return { reply: "I don't have a newsletter open. Nothing was changed or sent.", actions: [] };
-  let parsed = {};
+  let parsed: Record<string, unknown> = {};
   try {
-    parsed = JSON.parse(action.payload);
+    const value = JSON.parse(String(action.payload || "{}"));
+    if (value && typeof value === "object" && !Array.isArray(value)) parsed = value as Record<string, unknown>;
   } catch {
     parsed = {};
   }
-  const articles = (parsed.articles || []).map((item) => ({ title: String(item.title || "").trim(), body: String(item.body || "").trim() })).filter((item) => item.title || item.body);
+  const articleRows = Array.isArray(parsed.articles) ? parsed.articles : [];
+  const articles = articleRows.map((item) => {
+    const row = item && typeof item === "object" ? item as { title?: unknown; body?: unknown } : {};
+    return { title: String(row.title || "").trim(), body: String(row.body || "").trim() };
+  }).filter((item) => item.title || item.body);
   const titles = articles.map((item) => item.title || "Untitled");
-  const ids = (parsed.contactIds || []).map(Number).filter((id) => id > 0);
+  const idRows = Array.isArray(parsed.contactIds) ? parsed.contactIds : [];
+  const ids = idRows.map(Number).filter((id) => id > 0);
   const rows = ids.length ? await sql`select id, full_name from contacts where advisor_id = ${advisorId} order by full_name limit 5000` : [];
-  const names = ids.map((id) => rows.find((row) => Number(row.id) === id)?.full_name || "").filter(Boolean);
+  const names = ids.map((id) => String(rows.find((row) => Number(row.id) === id)?.full_name || "")).filter(Boolean);
   const title = String(parsed.title || "Newsletter");
-  const design = NEWSLETTER_DESIGNS.some((item) => item.id === parsed.design) ? parsed.design : "navy";
-  const show = async (next2, note) => {
-    const issue = { design, kicker: "Newsletter", title, subject: title, articles: next2, social: { linkedin: "", instagram: "", facebook: "", youtube: "" } };
+  const design = asNewsletterDesign(parsed.design);
+  const show = async (next2: Array<{ title: string; body: string }>, note: string) => {
+    const issue: NewsletterIssue = { design, kicker: "Newsletter", title, subject: title, articles: next2, social: { linkedin: "", instagram: "", facebook: "", youtube: "" } };
     const preview = plainNewsletter(issue);
     const html = next2.length ? await newsletterPreviewHtml(slug, code, issue) : "";
     const summary = `${title} \xB7 to ${names.join(", ") || "your contacts"}`.slice(0, 180);
-    const nextPayload = { ...parsed, title, articles: next2, preview: preview.slice(0, 500) };
-    if (nextPayload.approvedSnapshot && typeof nextPayload.approvedSnapshot === "object") {
-      nextPayload.approvedSnapshot = { ...nextPayload.approvedSnapshot, subject: title, body: JSON.stringify(next2) };
+    const nextPayload: Record<string, unknown> = { ...parsed, title, articles: next2, preview: preview.slice(0, 500) };
+    const snap = nextPayload.approvedSnapshot;
+    if (snap && typeof snap === "object" && !Array.isArray(snap)) {
+      nextPayload.approvedSnapshot = { ...(snap as Record<string, unknown>), subject: title, body: JSON.stringify(next2) };
     }
     await sql`update assistant_actions set status = 'withdrawn' where id = ${action.id} and advisor_id = ${advisorId} and status = 'pending'`;
     const stored = await saveAction(advisorId, "newsletter", summary, nextPayload);
@@ -2527,8 +2538,17 @@ async function deliverConfirmedCampaign(advisorId, slug, code) {
   await sql`update assistant_actions set status = 'done' where id = ${action.id} and advisor_id = ${advisorId}`;
   return { ok: true, detail: `Sent \u2014 the campaign is running. ${sent.detail}` };
 }
-function preparedWork(reply, actions = []) {
-  return { reply, actions, confirm: /^just to confirm:/i.test(reply) };
+type DeskAction = {
+  id: number;
+  kind: string;
+  summary: string;
+  status?: string;
+  preview?: string;
+  previewHtml?: string;
+  previewImage?: string;
+};
+function preparedWork(reply: string, actions: DeskAction[] = []) {
+  return { reply, actions, confirm: /^just to confirm:/i.test(String(reply || "")) };
 }
 async function keepOnlyPending(advisorId, kind, actionId) {
   if (!(actionId > 0)) return;
@@ -2550,7 +2570,7 @@ async function saveUnsentNewsletter(advisorId, text) {
   if (topics.length < 1) return { reply: "Tell me the article topics. Nothing was saved or sent.", actions: [] };
   const articles = topics.map((topic) => newsletterArticle(topic));
   const title = /\btest newsletter\b/i.test(text) ? "Test Newsletter" : newsletterTitle(topics);
-  const issue = {
+  const issue: NewsletterIssue = {
     design: "pine",
     kicker: "Newsletter",
     title,
@@ -2586,7 +2606,11 @@ async function saveUnsentNewsletter(advisorId, text) {
   ].join("\n");
   return { reply, actions: [] };
 }
-async function fulfillSecretary(advisorId, slug, code, text) {
+function audienceChoice(text: string) {
+  const pick = coordinatedAudience(text);
+  return pick.mode === "choice" ? audienceChoiceReply(pick.names) : "";
+}
+async function fulfillSecretary(advisorId: number, slug: string, code: string, text: string) {
   const tidy = tidyHeard(text);
   if (isStandaloneDraft(tidy)) return preparedWork(freshDraft(text));
   if (isOnboardingDemo(tidy)) return preparedWork(onboardingDraft(text));
@@ -2613,6 +2637,10 @@ async function fulfillSecretary(advisorId, slug, code, text) {
       const saved = await saveUnsentNewsletter(advisorId, tidy);
       return preparedWork(saved.reply, saved.actions);
     }
+    if (isNewsletterDelivery(tidy)) {
+      const choice = audienceChoice(tidy);
+      if (choice) return preparedWork(choice);
+    }
     if (recipients.length === 0 && !audience.tag) return preparedWork("Who should I send the newsletter to?");
     const title = newsletterTitle(topics);
     const prepared = await proposeNewsletter({
@@ -2638,9 +2666,11 @@ async function fulfillSecretary(advisorId, slug, code, text) {
     const paused = await taskReady(advisorId, "eletters");
     if (paused) return preparedWork(paused);
     const letter = eletterFromRequest(tidy);
-    const named = eletterRecipient(tidy);
+    const named = eletterRecipients(tidy);
+    const choice = audienceChoice(tidy);
+    if (choice) return preparedWork(choice);
     const topics = newsletterTopics(tidy);
-    const recipients = named ? [named] : newsletterRecipients(tidy);
+    const recipients = named.length ? named : newsletterRecipients(tidy);
     const audience = campaignAudience(tidy);
     if (!letter && topics.length === 0) return null;
     if (recipients.length === 0 && !audience.tag) return preparedWork("Who should I send the letter to?");
@@ -2656,7 +2686,7 @@ async function fulfillSecretary(advisorId, slug, code, text) {
     });
     if (!prepared.ok) return preparedWork(prepared.error);
     await keepOnlyPending(advisorId, "eletter", Number(prepared.actionId));
-    return preparedWork(eletterConfirmLine(title, recipients.length ? recipients : [audience.tag || "your contacts"]), [{
+    return preparedWork(`${eletterConfirmLine(title, recipients.length ? recipients : [audience.tag || "your contacts"])} This preview is waiting for approval. Nothing was sent.`, [{
       id: Number(prepared.actionId),
       kind: "eletter",
       summary: prepared.summary || title,
@@ -2680,13 +2710,41 @@ async function fulfillSecretary(advisorId, slug, code, text) {
       await cancelWaitingCard(advisorId);
       return preparedWork(correction.reply);
     }
-    const name = correction?.kind === "use" ? correction.name : contactPhrase(tidy);
-    const dropped = correction?.kind === "use" ? correction.dropped : "";
     const cards = await cardsForAdvisor(advisorId);
     const picked = matchCardByName(tidy, cards);
+    if (correction?.kind === "all") {
+      if (!picked) return preparedWork(cardDoubtLine(cards.slice(0, 4).map((item) => String(item.title ?? ""))));
+      if ("cards" in picked) return preparedWork(cardDoubtLine(picked.cards.map((item) => String(item.title ?? ""))));
+      const ready: Array<{ id: number; full_name: string }> = [];
+      const notes: string[] = [];
+      for (const asked of correction.names) {
+        const found = await findNamedContacts(advisorId, asked);
+        const exact = found.filter((row) => String(row.full_name || "").toLowerCase() === asked.toLowerCase());
+        const person = exact[0] || (found.length === 1 ? found[0] : null);
+        if (!person) {
+          notes.push(`I could not find ${asked} in your contacts.`);
+          continue;
+        }
+        const blocked = await deliveryBlockFor(advisorId, person, "");
+        if (blocked) {
+          notes.push(blocked);
+          continue;
+        }
+        ready.push({ id: Number(person.id), full_name: String(person.full_name || asked) });
+      }
+      if (!ready.length) return preparedWork(`${notes.join(" ")} Nothing was sent.`.trim());
+      const action = await cardSendAction(advisorId, picked.card, ready);
+      const who = ready.map((person) => person.full_name);
+      const line = who.length === 1
+        ? cardConfirmLine(picked.card.title, who[0])
+        : `Just to confirm: send the ${picked.card.title} e-card to ${who.join(" and ")}?`;
+      return preparedWork([line, notes.join(" "), "This preview is waiting for approval. Nothing was sent."].filter(Boolean).join(" "), [action]);
+    }
+    const name = correction?.kind === "use" ? correction.name : contactPhrase(tidy);
+    const dropped = correction?.kind === "use" ? correction.dropped : "";
     if (name.length < 2) {
       if (picked && "card" in picked) return preparedWork(`The ${picked.card.title} card. Which contact should I send it to?`);
-      if (picked && "cards" in picked) return preparedWork(cardDoubtLine(picked.cards.map((item) => item.title)));
+      if (picked && "cards" in picked) return preparedWork(cardDoubtLine(picked.cards.map((item) => String(item.title ?? ""))));
       return preparedWork("Which contact should I send the e-card to?");
     }
     const people = await findNamedContacts(advisorId, name);
@@ -2698,8 +2756,8 @@ async function fulfillSecretary(advisorId, slug, code, text) {
       await cancelWaitingCard(advisorId);
       return preparedWork(blocked);
     }
-    if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => item.title), person.full_name)));
-    if ("cards" in picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(picked.cards.map((item) => item.title), person.full_name)));
+    if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
+    if ("cards" in picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(picked.cards.map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
     const action = await cardSendAction(advisorId, picked.card, [{ id: Number(person.id), full_name: person.full_name }]);
     return preparedWork(withDroppedRecipient(dropped, cardConfirmLine(picked.card.title, person.full_name)), [action]);
   }
@@ -2722,6 +2780,8 @@ async function fulfillSecretary(advisorId, slug, code, text) {
   if (isCampaignAsk(tidy)) {
     const paused = await taskReady(advisorId, "campaigns");
     if (paused) return preparedWork(paused);
+    const choice = audienceChoice(tidy);
+    if (choice) return preparedWork(choice);
     const listed = await listDrips({ data: { slug, code } });
     if (!listed?.ok) return preparedWork(String(listed?.error || "Campaigns could not be loaded."));
     const catalog = [
@@ -2737,7 +2797,7 @@ async function fulfillSecretary(advisorId, slug, code, text) {
     if (!prepared.ok) return preparedWork(prepared.error);
     await keepOnlyPending(advisorId, "campaign", Number(prepared.actionId));
     const names = audience.names.length ? audience.names : String(prepared.summary || "").split("\xB7").pop()?.trim().split(",").map((item) => item.trim()).filter(Boolean) || [];
-    return preparedWork(campaignConfirmLine(match, names, dripLabel(every).toLowerCase()), [{
+    return preparedWork(`${campaignConfirmLine(match, names, dripLabel(every).toLowerCase())} Nothing was started.`, [{
       id: Number(prepared.actionId),
       kind: "campaign",
       summary: prepared.summary || match,
@@ -2904,7 +2964,11 @@ async function storeCardMessage(advisorId, title, message) {
   const again = await rememberedCardMessage(advisorId, title, "");
   return again.message === message ? again : null;
 }
-async function holdCard(advisorId, slug, code, text, lastAssistant = "") {
+async function holdCard(advisorId: number, slug: string, code: string, text: string, lastAssistant = "") {
+  const correction = resolveCardCorrection(text);
+  if (correction?.kind === "ambiguous" || correction?.kind === "cancelled") {
+    return { reply: correction.reply, actions: [] as DeskAction[] };
+  }
   const chosen = chooseCardDesign(`${text}\n${lastAssistant}`, CARDS);
   if (!chosen.ok) return { reply: chosen.error, actions: [] };
   const saved = await rememberedCardMessage(advisorId, chosen.design.title, chosen.design.message);
@@ -2918,7 +2982,12 @@ async function holdCard(advisorId, slug, code, text, lastAssistant = "") {
     message = stored.message;
     changed = true;
   }
-  const askedNames = namedPreviewRecipients(text);
+  let askedNames = namedPreviewRecipients(text);
+  if (correction?.kind === "all") askedNames = correction.names;
+  else if (correction?.kind === "use") askedNames = [correction.name];
+  else if (coordinatedAudience(text).mode === "choice") {
+    return { reply: audienceChoiceReply(coordinatedAudience(text).names), actions: [] as DeskAction[] };
+  }
   const blocks = [];
   let shown = message;
   let recipient = "";
@@ -2941,14 +3010,17 @@ async function holdCard(advisorId, slug, code, text, lastAssistant = "") {
         return { reply: `The ${chosen.design.title} preview still has a placeholder, so I did not show it for ${askedName}. Nothing was sent.`, actions: [] };
       }
       const emailLine = email ? `${person.full_name} <${email}>` : missingEmailNote(person.full_name);
-      blocks.push({ name: person.full_name, email, personalized, emailLine });
+      const blocked = await deliveryBlockFor(advisorId, { id: Number(person.id), full_name: String(person.full_name || askedName) }, "");
+      blocks.push({ name: person.full_name, email, personalized, emailLine, blocked: blocked.includes("Unsubscribed") ? blocked : "" });
     }
     shown = blocks.map((block) => `${block.emailLine}\n\n${block.personalized}`).join("\n\n");
     recipient = blocks.map((block) => block.email ? `${block.name} <${block.email}>` : block.name).join("; ");
     const missing = blocks.filter((block) => !block.email).map((block) => missingEmailNote(block.name));
+    const unsubscribed = blocks.map((block) => block.blocked).filter(Boolean);
     recipientNote = [
       `Preview of the ${chosen.design.title} card for ${blocks.map((block) => block.name).join(" and ")}.`,
       missing.join(" "),
+      unsubscribed.join(" "),
       "I read the saved card. Only these recipients are shown. The saved card wording was not changed.",
     ].filter(Boolean).join(" ");
   }
@@ -3401,13 +3473,13 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     }
     const choices = picked && "cards" in picked ? picked.cards : cards.slice(0, 4);
     const shortAnswer = tidy.length <= 80 && !/\b(?:newsletter|e-?letter|campaign|meeting|zoom|book)\b/i.test(tidy);
-    if (picked || shortAnswer) return replyWith(advisorId, chatId, cardDoubtLine(choices.map((item) => item.title), personHint), onDelta);
+    if (picked || shortAnswer) return replyWith(advisorId, chatId, cardDoubtLine(choices.map((item) => String(item.title ?? "")), personHint), onDelta);
   }
   const parts3 = splitSecretaryTasks(tidy);
   if (parts3.length > 1) {
     const done = [];
     const confirms = [];
-    const actions = [];
+    const actions: DeskAction[] = [];
     const seen = /* @__PURE__ */ new Set();
     for (const part of parts3) {
       const kind = taskKind(part);
@@ -3550,7 +3622,7 @@ async function stagedRecords(advisorId) {
   const sql = await getSql();
   await ensureAssistantTables();
   const drafts = await sql`select id, status, approval_state from assistant_drafts where advisor_id = ${advisorId} and status in ('pending', 'unsent', 'parked', 'cancelled') order by id desc limit 8`;
-  let actions = [];
+  let actions: Array<Record<string, unknown>> = [];
   try {
     await ensureLinkTables();
     actions = await sql`select id, kind, status from assistant_actions where advisor_id = ${advisorId} and status in ('pending', 'stale', 'cancelled') order by id desc limit 8`;
@@ -3570,7 +3642,7 @@ async function stagedRecords(advisorId) {
 async function orchestrationNote(advisorId, control) {
   const sql = await getSql();
   const drafts = await sql`select id, subject, body, status, approval_state from assistant_drafts where advisor_id = ${advisorId} and status <> 'sent' order by id desc limit 4`;
-  let actions = [];
+  let actions: Array<Record<string, unknown>> = [];
   try {
     actions = await sql`select id, kind, status from assistant_actions where advisor_id = ${advisorId} order by id desc limit 6`;
   } catch {
@@ -3604,8 +3676,17 @@ export async function answerAdvisor(data, onDelta) {
   const priorAssistant = [...priorThread].reverse().find((turn) => turn.role === "assistant")?.content || "";
   const command = prepareDeskCommand(latest.content, priorAssistant);
   const preferredNewsletter = Number(data.activeNewsletterId) || 0;
-  const turnKey = voiceTurnKey(gate.row.id, chatId, latest.content);
-  if (!claimVoiceTurn(turnKey)) return { ok: true, reply: "I already heard that. I did not do it again.", drafts: [], actions: [] };
+  const turnKey = deskTurnKey(gate.row.id, chatId, priorAssistant, latest.content);
+  if (!claimVoiceTurn(turnKey)) {
+    const reply = "I already heard that. I did not do it again.";
+    try {
+      await remember(gate.row.id, chatId, "user", latest.content);
+      await remember(gate.row.id, chatId, "assistant", reply);
+    } catch (error) {
+      console.error("[assistant] duplicate", error instanceof Error ? error.message : "failed");
+    }
+    return { ok: true, reply, drafts: [], actions: [] };
+  }
   try {
   if (shouldReplacePreview(command) || shouldReplacePreview(latest.content)) {
     await discardPreviewActions(gate.row.id, true);
@@ -3793,20 +3874,21 @@ export const discardAssistantDraft = createServerFn({ method: "POST" }).validato
   await (await getSql())`update assistant_drafts set status = 'discarded' where id = ${Number(data.draftId)} and advisor_id = ${gate.row.id} and status = 'pending'`;
   return { ok: true };
 });
-async function renderActionPreview(row, slug, code, site) {
+async function renderActionPreview(row: { kind?: unknown; payload?: unknown; summary?: unknown }, slug: string, code: string, site: Parameters<typeof shownWebsite>[0]) {
   let preview = "";
   let previewHtml = "";
   let previewImage = "";
+  const payload = typeof row.payload === "string" ? row.payload : "";
   if (row.kind === "signature") {
-    try { preview = String(JSON.parse(row.payload).preview || ""); } catch { preview = ""; }
+    try { preview = String(JSON.parse(payload).preview || ""); } catch { preview = ""; }
   }
   if (row.kind === "newsletter" || row.kind === "newsletter-preview") {
-    const issue = issueFromAction(row.payload);
+    const issue = issueFromAction(payload);
     if (issue) previewHtml = await newsletterPreviewHtml(slug, code, issue);
   }
   if (row.kind === "card" || row.kind === "card-preview") {
     try {
-      const parsed = JSON.parse(row.payload);
+      const parsed = JSON.parse(payload);
       previewImage = String(parsed.image || "");
       preview = String(parsed.message || "");
       previewHtml = cardPreviewHtml(previewImage, preview, String(parsed.title || row.summary), shownWebsite(site));
@@ -3816,7 +3898,7 @@ async function renderActionPreview(row, slug, code, site) {
   }
   if (row.kind === "campaign" || row.kind === "campaign-preview") {
     try {
-      const parsed = JSON.parse(row.payload);
+      const parsed = JSON.parse(payload);
       if (row.kind === "campaign-preview") {
         const steps = Array.isArray(parsed.steps) ? parsed.steps : [];
         const everyDays = Number(parsed.everyDays) || 7;
@@ -3839,7 +3921,7 @@ async function renderActionPreview(row, slug, code, site) {
   }
   if (row.kind === "eletter" || row.kind === "eletter-preview") {
     try {
-      const parsed = JSON.parse(row.payload);
+      const parsed = JSON.parse(payload);
       preview = String(parsed.body || "");
       const brand = await advisorBrand(slug, code);
       const design = ELETTER_DESIGNS.some((item) => item.id === parsed.design) ? parsed.design : ELETTER_DESIGNS[0].id;
@@ -3855,7 +3937,7 @@ async function renderActionPreview(row, slug, code, site) {
   }
   return { preview, previewHtml, previewImage };
 }
-async function linkedChatPreviews(advisorId, chatId, slug, code, site) {
+async function linkedChatPreviews(advisorId: number, chatId: number, slug: string, code: string, site: Parameters<typeof shownWebsite>[0]) {
   try {
     await ensureLinkTables();
     const rows = await readChatPreviewRows(await getSql(), advisorId, chatId);
@@ -3887,10 +3969,10 @@ export const listAssistantActions = createServerFn({ method: "POST" }).validator
     select id, kind, summary, payload from assistant_actions
     where advisor_id = ${gate.row.id} and status = 'pending' and coalesce(message_id, 0) = 0 and kind not like '%-preview' order by created_at desc limit 10
   `;
-  const actions = [];
+  const actions: Array<{ id: number; kind: string; summary: string; status: string; preview: string; previewHtml: string; previewImage: string }> = [];
   for (const row of rows) {
     const fields = await renderActionPreview(row, data.slug || "", data.code || "", gate.site);
-    actions.push({ id: Number(row.id), kind: row.kind, summary: row.summary, status: "pending", ...fields });
+    actions.push({ id: Number(row.id), kind: String(row.kind ?? ""), summary: String(row.summary ?? ""), status: "pending", ...fields });
   }
   return { ok: true, actions };
 });

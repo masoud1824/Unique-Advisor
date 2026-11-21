@@ -6,7 +6,11 @@ import { fileURLToPath } from "node:url";
 import { assertReleaseProcess } from "../../src/lib/release-env.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
-const releaseName = process.env.UA_RELEASE_ENV === "staging" ? "staging" : "development";
+const releaseName = process.env.UA_RELEASE_ENV || (root.endsWith("/repos/staging") ? "staging" : "development");
+if (root.endsWith("/repos/staging") && releaseName !== "staging") {
+  console.error("The staging candidate must be validated with UA_RELEASE_ENV=staging. The dev checkout is not this release.");
+  process.exit(2);
+}
 const port = Number(process.env.UA_RELEASE_PORT || (releaseName === "staging" ? 8093 : 8092));
 assertReleaseProcess({ cwd: root, port });
 if (process.env.DATABASE_URL?.trim()) {
@@ -53,6 +57,10 @@ run(
   ["--experimental-strip-types", "--test", ...tests],
   { UA_RELEASE_ENV: "" },
 );
+run("schema-upgrade", "node", ["scripts/release/schema-upgrade.mjs"], {
+  UA_RELEASE_ENV: releaseName,
+  UA_RELEASE_DATA_ROOT: process.env.UA_RELEASE_DATA_ROOT || "/opt/ua-release/data",
+});
 run("disposable-database", "node", ["--experimental-strip-types", "scripts/release/disposable-db.mjs"], {
   UA_RELEASE_ENV: releaseName,
   UA_RELEASE_DATA_ROOT: process.env.UA_RELEASE_DATA_ROOT || "/opt/ua-release/data",
@@ -70,5 +78,11 @@ run(
     DATABASE_URL: "",
     UA_RELEASE_CACHE: process.env.UA_RELEASE_CACHE || (releaseName === "staging" ? "/opt/ua-release/cache/staging" : "/opt/ua-release/cache/dev"),
   },
+);
+run(
+  "publication-migration",
+  "node",
+  ["scripts/migrate.mjs"],
+  { DATABASE_URL: "" },
 );
 console.log("# validate exit 0");

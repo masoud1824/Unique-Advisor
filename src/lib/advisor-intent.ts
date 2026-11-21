@@ -147,18 +147,70 @@ function isStopClause(clause: string) {
   return /^(?:لطفا\s*)?(?:لغو کن|لغو|کنسل|ارسال نکن|نفرستید|استاپ)$/u.test(tidy);
 }
 
+function looksLikePerson(name: string) {
+  const words = String(name || "").split(/\s+/).filter(Boolean);
+  if (words.length < 1 || words.length > 4) return false;
+  if (words.some((word) => /^(?:email|recipient|preview|card|send|sending|missing|explain|only|newsletter|letter|drip|show|the|or|and|if|it|is)$/i.test(word))) return false;
+  return words.every((word) => /^[\p{L}'’-]+$/u.test(word));
+}
+
 function namesInClause(clause: string) {
   if (isStopClause(clause)) return [];
   const proper = namedPeople(clause);
   if (proper.length) return uniquePeople(proper);
+  if (isAlternativeClause(clause) && !/\b(?:to|for)\b/i.test(clause)) return [];
   const one = cleanPerson(contactPhrase(clause));
-  if (one.length >= 2 && !/^(?:yes|yeah|yep|yup|ok|okay|stop|cancel|please)$/i.test(one)) return [one];
+  if (one.length >= 2 && looksLikePerson(one) && !/^(?:yes|yeah|yep|yup|ok|okay|stop|cancel|please)$/i.test(one)) return [one];
   return [];
 }
 
-function clauseIntent(clause: string) {
+function isBareDoNotSend(clause: string) {
+  const tidy = clause.replace(/[.!?؟]+$/g, "").trim();
+  if (/^(?:please\s+)?(?:do not|don't|never)\s+send(?:\s+(?:it|anything|this|that))?$/i.test(tidy)) return true;
+  return /^(?:لطفا\s*)?(?:نفرست|ارسال نکن|نفرستید)$/u.test(tidy);
+}
+
+function isPreviewRequest(text: string) {
+  return /\b(?:preview|show|display|rehearse)\b/i.test(tidyHeard(text));
+}
+
+function isAlternativeClause(clause: string) {
+  return /\b(?:or|either|versus|vs\.?|which)\b/i.test(clause) || /یا/.test(clause);
+}
+
+function coordinatedNames(clause: string, names: string[]) {
+  if (names.length < 2 || isAlternativeClause(clause)) return false;
+  return /\band\b|,|،/i.test(clause) || /\sو\s/u.test(clause);
+}
+
+/** "A and B" is one audience. "A or B", or several names with no join, is a choice. */
+export function coordinatedAudience(text: string): { mode: "all" | "choice" | "one" | "none"; names: string[] } {
+  const people = namedPeople(String(text || ""));
+  if (people.length === 0) return { mode: "none", names: [] };
+  if (people.length === 1) return { mode: "one", names: people };
+  if (isAlternativeClause(text)) return { mode: "choice", names: people };
+  if (/\band\b|,|،/i.test(text) || /\sو\s/u.test(text)) return { mode: "all", names: people };
+  return { mode: "choice", names: people };
+}
+
+export function audienceChoiceReply(names: string[]) {
+  const who = names.map((name) => String(name || "").trim()).filter(Boolean);
+  const first = who[0] || "one of them";
+  return `Did you mean ${who.join(" or ")}? I did not choose ${first}. Nothing was sent.`;
+}
+
+function deliveryConstraint(clause: string) {
+  if (isBareDoNotSend(clause)) return true;
+  return /\b(?:preview|show|display|rehearse)\b/i.test(clause) && /\b(?:do not|don't|never)\s+send\b/i.test(clause);
+}
+
+function clauseIntent(clause: string, preview = false) {
+  if (preview && deliveryConstraint(clause)) {
+    return { stop: false, names: isBareDoNotSend(clause) ? [] as string[] : namesInClause(clause) };
+  }
   if (isStopClause(clause)) return { stop: true, names: [] as string[] };
   const names = namesInClause(clause);
+  if (isBareDoNotSend(clause)) return { stop: true, names };
   const refusal = /\b(?:do not|don't|never)\s+send\b/i.test(clause);
   if (refusal) return { stop: true, names };
   return { stop: false, names };
@@ -175,20 +227,29 @@ function cardClauses(text: string) {
 
 export type CardCorrection =
   | { kind: "use"; name: string; dropped: string }
+  | { kind: "all"; names: string[] }
   | { kind: "cancelled"; dropped: string; reply: string }
   | { kind: "ambiguous"; names: string[]; reply: string };
 
 /**
  * A later recipient replaces an earlier one after stop/cancel.
+ * "A and B" prepares both. "A or B", or two send clauses with no stop, stays a choice.
  * One recipient and no stop returns null so contactPhrase stays in charge.
+ * A trailing "Do not send" on a preview is a delivery constraint, not a cancellation.
  * The first-name helper is unchanged: it still stops at the first "to".
  */
 export function resolveCardCorrection(text: string): CardCorrection | null {
   const clauses = cardClauses(text);
-  if (!isCardAsk(text) && !clauses.some((clause) => isCardAsk(clause))) return null;
-  const pieces = clauses.map(clauseIntent);
+  const preview = isPreviewRequest(text);
+  const cardish = isCardAsk(text) || clauses.some((clause) => isCardAsk(clause)) || (preview && /\b(?:e-?cards?|thank(?:\s+you)?|birthday|holiday|welcome|anniversary)\s+cards?\b/i.test(text));
+  if (!cardish) return null;
+  const pieces = clauses.map((clause) => clauseIntent(clause, preview));
   const stopped = pieces.some((piece) => piece.stop);
   const everyone = uniquePeople(pieces.flatMap((piece) => piece.names));
+  const together = !stopped && everyone.length > 1 && clauses.some((clause) => coordinatedNames(clause, namesInClause(clause)));
+  if (together && !clauses.some((clause) => isAlternativeClause(clause) && namesInClause(clause).length > 1)) {
+    return { kind: "all", names: everyone };
+  }
   if (!stopped && everyone.length <= 1) return null;
   if (!stopped) {
     return {
@@ -209,6 +270,9 @@ export function resolveCardCorrection(text: string): CardCorrection | null {
       dropped = dropped.concat(current);
       current = piece.names;
     }
+  }
+  if (current.length > 1 && clauses.some((clause) => coordinatedNames(clause, namesInClause(clause)))) {
+    return { kind: "all", names: uniquePeople(current) };
   }
   if (current.length > 1) {
     return {
@@ -233,7 +297,7 @@ export function resolveCardCorrection(text: string): CardCorrection | null {
 
 export function keepCardCorrection(text: string) {
   const fix = resolveCardCorrection(text);
-  return fix?.kind === "use" || fix?.kind === "ambiguous";
+  return fix?.kind === "use" || fix?.kind === "all" || fix?.kind === "ambiguous";
 }
 
 /** Recipient named with to/for. A bare yes has none. */
@@ -1167,6 +1231,9 @@ export function newsletterTopics(text: string) {
 
 export function newsletterRecipients(text: string) {
   const tidy = tidyHeard(text).replace(/\bseznd\b/gi, "send");
+  const audience = coordinatedAudience(tidy);
+  if (audience.mode === "choice") return [];
+  if (audience.names.length > 1) return audience.names;
   const found = tidy.match(/\b(?:send|email|mail)\s+(?:it\s+)?to\s+(.+)$/i)
     || tidy.match(/\b(?:e-?letter|letter|note)\s+to\s+(.+?)(?=\s+\b(?:about|regarding)\b|$)/i)
     || tidy.match(/\b(?:send|email|mail)\b[\s\S]{0,80}?\bto\s+(.+)$/i)
@@ -1250,11 +1317,21 @@ export function isEletterAsk(text: string) {
 const LETTER_STOP = /\s+\b(?:and|to|that|about|regarding|tell|telling|saying|say|ask|asking|request|requesting|invite|inviting)\b/i;
 
 export function eletterRecipient(text: string) {
+  const people = eletterRecipients(text);
+  return people[0] || "";
+}
+
+/** Every person joined by and. "or" stays unresolved so the caller can ask. */
+export function eletterRecipients(text: string) {
   const tidy = tidyHeard(text);
+  const audience = coordinatedAudience(tidy);
+  if (audience.mode === "choice") return [];
+  if (audience.names.length > 1) return audience.names;
   const found = tidy.match(/\b(?:e-?letter|letter|note|email)\s+to\s+(.+)/i);
-  if (!found) return "";
+  if (!found) return [];
   const chunk = found[1].split(LETTER_STOP)[0] || "";
-  return chunk.replace(/[.?!]+$/g, "").replace(/^(?:please\s+)/i, "").trim();
+  const one = chunk.replace(/[.?!]+$/g, "").replace(/^(?:please\s+)/i, "").trim();
+  return one ? [one] : [];
 }
 
 export function eletterFromRequest(text: string) {

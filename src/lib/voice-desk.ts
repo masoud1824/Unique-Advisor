@@ -9,6 +9,12 @@ export function voiceTurnKey(advisorId: number, chatId: number, text: string) {
   return `${advisorId}:${chatId}:${String(text || "").replace(/\s+/g, " ").trim().toLowerCase()}`;
 }
 
+/** A yes after a new assistant line is a new turn, not a repeat of the previous yes. */
+export function deskTurnKey(advisorId: number, chatId: number, priorAssistant: string, text: string) {
+  const prior = String(priorAssistant || "").replace(/\s+/g, " ").trim().slice(0, 180);
+  return voiceTurnKey(advisorId, chatId, prior ? `${prior}\n${text}` : text);
+}
+
 /** Blocks the same utterance from running twice while it is in flight or within four seconds. */
 export function claimVoiceTurn(key: string, now = Date.now()) {
   const prior = recentTurns.get(key) || 0;
@@ -83,7 +89,11 @@ function farsiArticleMove(raw: string) {
 }
 
 function farsiPeople(raw: string) {
-  const found = namedPeople(raw).filter((name) => !/^(?:unique advisor|dropbox)$/i.test(name));
+  const source = String(raw || "");
+  const ranked: Array<{ name: string; at: number }> = [];
+  for (const name of namedPeople(source).filter((item) => !/^(?:unique advisor|dropbox)$/i.test(item))) {
+    ranked.push({ name, at: source.toLowerCase().indexOf(name.toLowerCase()) });
+  }
   const aliases: Array<[RegExp, string]> = [
     [/کیسی/, "Casey Sample"],
     [/رایلی/, "Riley Sample"],
@@ -93,9 +103,11 @@ function farsiPeople(raw: string) {
     [/مورگان/, "Morgan Sample"],
   ];
   for (const [pattern, name] of aliases) {
-    if (pattern.test(raw) && !found.some((item) => item.toLowerCase() === name.toLowerCase())) found.push(name);
+    const at = source.search(pattern);
+    if (at >= 0 && !ranked.some((item) => item.name.toLowerCase() === name.toLowerCase())) ranked.push({ name, at });
   }
-  return found;
+  ranked.sort((left, right) => left.at - right.at || left.name.localeCompare(right.name));
+  return ranked.map((item) => item.name);
 }
 
 function farsiSavedContact(raw: string) {
@@ -141,7 +153,7 @@ function mapFarsiCommand(text: string) {
   if (/جلسه|ملاقات/.test(raw) && /نوامبر|November/i.test(raw)) {
     return "Show the November 24, 2026 2:00 p.m. 30-minute meeting at Test Office. Do not book it and do not contact Outlook.";
   }
-  if (/رایلی|Riley/i.test(raw) && /نامه|یادداشت|بازنشستگی/.test(raw)) {
+  if (/رایلی|Riley/i.test(raw) && !/خبرنامه/.test(raw) && /نامه|یادداشت|بازنشستگی/.test(raw)) {
     return "Preview the Acceptance — Retirement Note for Riley Sample. Show the recipient email. Do not send.";
   }
   if (/کمپین|درپ|drip/i.test(raw) && /متوقف|مکث|توقف/.test(raw) && !/پیام|تاخیر|تأخیر|مرحله|صبر/.test(raw)) {
@@ -186,24 +198,26 @@ export function farsiCardCorrection(text: string) {
   if (!/[\u0600-\u06FF]/.test(raw) || raw.length > 160) return "";
   const folded = foldFa(raw);
   if (!/کارت|تولد/.test(folded)) return "";
+  const showing = /نشان|پیش‌نمایش|پیش نمایش|نمایش/.test(folded);
   const marked = folded.replace(/[.!?؟]+/g, ".").replace(/ارسال نکن|لغو کن|نفرستید|کنسل|لغو|استاپ|(?<!ب)نفرست/g, ".$&.");
   const clauses = marked.split(".").map((part) => part.trim()).filter(Boolean);
   const parts: string[] = [];
   for (const clause of clauses) {
     if (farsiStopClause(clause)) {
-      parts.push("Stop.");
+      parts.push(showing && /نفرست|ارسال نکن/.test(foldFa(clause)) ? "Do not send." : "Stop.");
       continue;
     }
     const people = farsiPeople(clause);
     if (!people.length) continue;
-    const card = /تولد/.test(clause) || /تولد/.test(folded) ? "birthday card" : "e-card";
+    const card = /تولد/.test(clause) || /تولد/.test(folded) ? "birthday card" : /تشکر|سپاس/.test(clause) || /تشکر|سپاس/.test(folded) ? "Thank You card" : "e-card";
     if (people.length > 1) {
-      for (const person of people) parts.push(`Send a ${card} to ${person}.`);
+      const joiner = /یا/.test(clause) ? " or " : " and ";
+      parts.push(`${showing ? "Preview" : "Send"} a ${card} to ${people.join(joiner)}.`);
       continue;
     }
-    parts.push(`Send a ${card} to ${people[0]}.`);
+    parts.push(`${showing ? "Preview" : "Send"} a ${card} to ${people[0]}.`);
   }
-  if (!parts.some((part) => part.startsWith("Send"))) return "";
+  if (!parts.some((part) => /^(?:Send|Preview)\b/.test(part))) return "";
   return parts.join(" ");
 }
 
@@ -224,11 +238,36 @@ function farsiIdentityCommand(text: string, lastAssistant: string) {
   return "";
 }
 
+function farsiJoinedDelivery(text: string) {
+  const raw = foldFa(String(text || ""));
+  if (raw.length > 180) return "";
+  const people = farsiPeople(raw);
+  if (people.length < 2) return "";
+  if (!/بفرست|ارسال|نشان|پیش|شروع/.test(raw)) return "";
+  const who = people.join(/یا/.test(raw) ? " or " : " and ");
+  const hold = /نشان|پیش‌نمایش|پیش نمایش|نمایش|نفرست|ارسال نکن/.test(raw);
+  if (/خبرنامه/.test(raw)) {
+    return hold ? `Preview the newsletter for ${who}. Do not send.` : `Send a newsletter about a short note to ${who}.`;
+  }
+  if (/نامه|ایمیل/.test(raw) && !/کارت/.test(raw)) {
+    return hold ? `Preview the letter for ${who}. Do not send.` : `Write a letter to ${who} and tell them this is a short fictional note.`;
+  }
+  if (/کمپین|درپ/.test(raw)) {
+    return hold
+      ? `Preview the Acceptance — Welcome Drip for ${who}. Do not start it or send anything.`
+      : `Start the Acceptance — Welcome Drip for ${who}.`;
+  }
+  return "";
+}
+
 export function prepareDeskCommand(text: string, lastAssistant = "") {
   const identity = farsiIdentityCommand(text, lastAssistant);
   const mapped = mapFarsiCommand(text).replace(/\s+/g, " ").trim();
-  const card = !identity && /[\u0600-\u06FF]/.test(mapped) ? farsiCardCorrection(text) : "";
-  const base = (identity || card || mapped).replace(/\s+/g, " ").trim();
+  const original = String(text || "").replace(/\s+/g, " ").trim();
+  const persian = /[\u0600-\u06FF]/.test(original);
+  const card = !identity && persian ? farsiCardCorrection(text) : "";
+  const joined = !identity && !card && persian && mapped === original ? farsiJoinedDelivery(text) : "";
+  const base = (identity || card || joined || mapped).replace(/\s+/g, " ").trim();
   if (!/^(?:please\s+)?(?:move|bring|shift)\s+(?:it|that|this)\s+(up|down)\b/i.test(base)) return base;
   const title = articleInFocus(lastAssistant);
   const direction = /\bdown\b/i.test(mapped) ? "down" : "up";

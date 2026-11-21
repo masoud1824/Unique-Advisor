@@ -4,6 +4,7 @@ import { isBareRefusal, isNewsletterReorder, newsletterMoveTarget } from "./advi
 import {
   cancelExplanation,
   claimVoiceTurn,
+  deskTurnKey,
   isEcho,
   prepareDeskCommand,
   releaseVoiceTurn,
@@ -81,6 +82,17 @@ describe("voice and typing share one command", () => {
     releaseVoiceTurn(key);
     assert.equal(claimVoiceTurn(key, 2_000), false);
     assert.equal(claimVoiceTurn(key, 6_000), true);
+    resetVoiceTurns();
+  });
+
+  it("treats yes after a new assistant line as a different turn", () => {
+    resetVoiceTurns();
+    const identity = deskTurnKey(1, 2, "Did you mean the Birthday Wishes card for Jordan Example?", "Yes");
+    const preview = deskTurnKey(1, 2, "Just to confirm: send the Birthday Wishes e-card to Jordan Example?", "Yes");
+    assert.notEqual(identity, preview);
+    assert.equal(claimVoiceTurn(identity, 1_000), true);
+    assert.equal(claimVoiceTurn(preview, 1_200), true);
+    assert.equal(claimVoiceTurn(preview, 1_400), false);
     resetVoiceTurns();
   });
 

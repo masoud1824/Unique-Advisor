@@ -15,9 +15,9 @@ let sql: QuerySql;
 
 function wrap(database: PGlite): QuerySql {
   return {
-    async query(text, params = []) {
-      const result = await database.query(text, params);
-      return result.rows;
+    async query<T = Record<string, unknown>>(text: string, params: unknown[] = []) {
+      const result = await database.query<T>(text, params);
+      return result.rows as T[];
     },
   };
 }

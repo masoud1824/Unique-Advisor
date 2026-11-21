@@ -37,7 +37,8 @@ export function orchestrationControl(text: string): OrchestrationControl {
   const cancelling = !editing && !switching && (isBareRefusal(tidy) || namedCancel);
   const confirm = agreeing(tidy) && !cancelling && !namedCancel;
   const followUp = !hold && refersToAppointment(tidy) && !isCalendarAsk(tidy);
-  const desk = !editing && !switching && !confirm && !cancelling && !namedCancel && !followUp && Boolean(taskKind(tidy));
+  const deskJob = Boolean(taskKind(tidy));
+  const desk = !editing && !confirm && !cancelling && !namedCancel && !followUp && deskJob;
   const prohibit = blocksLookup(tidy);
   return {
     blockLookups: prohibit || ((editing || followUp) && !isCalendarAsk(tidy)),

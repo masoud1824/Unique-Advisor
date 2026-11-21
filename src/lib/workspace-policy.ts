@@ -101,7 +101,9 @@ function isCardHold(text: string) {
 
 function isLetterHold(text: string) {
   if (/\b(?:e-?cards?|cards?|newsletters?|drips?|campaigns?)\b/i.test(text)) return false;
-  return /\b(?:e-?letters?|letters?|notes?)\b/i.test(text);
+  if (!/\b(?:e-?letters?|letters?|notes?)\b/i.test(text)) return false;
+  if (/\b(?:write|draft|compose|prepare)\b/i.test(text) && /\b(?:to|for)\b/i.test(text) && !/\b(?:preview|open|show|saved|archive)\b/i.test(text)) return false;
+  return true;
 }
 
 function isNewsletterHoldText(text: string) {

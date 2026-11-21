@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   assistantChatTitle,
+  audienceChoiceReply,
   blockedRecipientReply,
+  campaignAudience,
   cardAwaitingYes,
   cardConfirmLine,
   contactPhrase,
+  coordinatedAudience,
+  eletterRecipients,
   interpretIdentityAnswer,
   keepCardCorrection,
+  newsletterRecipients,
   resolveCardCorrection,
 } from "./advisor-intent.ts";
 import { orchestrationControl, previewApprovalDecision, resolveConfirmation } from "./orchestration.ts";
@@ -85,6 +90,45 @@ describe("card recipient correction", () => {
     if (caseyFix?.kind === "use") assert.equal(caseyFix.name, "Casey Sample");
     assert.match(farsiCardCorrection("کارت تولد را برای کیسی بفرست"), /Casey Sample/);
     assert.equal(prepareDeskCommand("مقاله دوم را کوتاه کن"), "Shorten the second article. Keep everything else unchanged. Do not send.");
+  });
+
+  it("prepares every person joined by and and keeps a preview when told not to send", () => {
+    const send = resolveCardCorrection("Send the Thank You card to Casey Sample and Riley Sample");
+    assert.equal(send?.kind, "all");
+    if (send?.kind === "all") assert.deepEqual(send.names, ["Casey Sample", "Riley Sample"]);
+    const preview = resolveCardCorrection("Preview the Thank You card for Casey Sample and Riley Sample. Do not send");
+    assert.equal(preview?.kind, "all");
+    if (preview?.kind === "all") assert.deepEqual(preview.names, ["Casey Sample", "Riley Sample"]);
+    const avery = resolveCardCorrection("Preview the Thank You card for Avery Sample only. Show the recipient email or explain if it is missing. Do not send.");
+    assert.equal(avery, null);
+    const sameSentence = resolveCardCorrection("Preview the Thank You card for Casey Sample and Riley Sample and do not send.");
+    assert.equal(sameSentence?.kind, "all");
+    const choice = resolveCardCorrection("Send the Thank You card to Casey Sample or Riley Sample");
+    assert.equal(choice?.kind, "ambiguous");
+    if (choice?.kind === "ambiguous") assert.match(choice.reply, /Casey Sample or Riley Sample/);
+    const unsure = resolveCardCorrection("Send a birthday card to Jordan Example. Send it to Quinn Sample.");
+    assert.equal(unsure?.kind, "ambiguous");
+    assert.equal(keepCardCorrection("Preview the Thank You card for Casey Sample and Riley Sample. Do not send."), true);
+    assert.deepEqual(eletterRecipients("Write a letter to Casey Sample and Riley Sample and tell them the review is ready."), ["Casey Sample", "Riley Sample"]);
+    assert.deepEqual(eletterRecipients("Write a letter to Casey Sample or Riley Sample and tell them the review is ready."), []);
+    assert.deepEqual(newsletterRecipients("Send the newsletter about life insurance to Casey Sample and Riley Sample."), ["Casey Sample", "Riley Sample"]);
+    assert.deepEqual(newsletterRecipients("Send the newsletter about life insurance to Casey Sample or Riley Sample."), []);
+    assert.deepEqual(campaignAudience("Start the Welcome Drip for Casey Sample and Riley Sample.").names, ["Casey Sample", "Riley Sample"]);
+    assert.equal(coordinatedAudience("Start the Welcome Drip for Casey Sample or Riley Sample.").mode, "choice");
+    assert.match(audienceChoiceReply(["Casey Sample", "Riley Sample"]), /did not choose Casey Sample/i);
+    const farsiBoth = prepareDeskCommand("کارت تشکر را برای کیسی و رایلی نشان بده. نفرست.");
+    const farsiFix = resolveCardCorrection(farsiBoth);
+    assert.equal(farsiFix?.kind, "all");
+    if (farsiFix?.kind === "all") assert.deepEqual(farsiFix.names, ["Casey Sample", "Riley Sample"]);
+    const farsiOr = resolveCardCorrection(prepareDeskCommand("کارت تشکر را برای کیسی یا رایلی بفرست."));
+    assert.equal(farsiOr?.kind, "ambiguous");
+    const farsiLetter = prepareDeskCommand("یک نامه برای کیسی و مورگان بفرست و بگو مرور آماده است.");
+    assert.match(farsiLetter, /Casey Sample and Morgan Sample/);
+    assert.doesNotMatch(farsiLetter, / or /);
+    const farsiNews = prepareDeskCommand("خبرنامه را برای کیسی و رایلی بفرست.");
+    assert.match(farsiNews, /Casey Sample and Riley Sample/);
+    const farsiDrip = prepareDeskCommand("درپ را برای کیسی یا رایلی شروع کن.");
+    assert.match(farsiDrip, /Casey Sample or Riley Sample/);
   });
 });
 

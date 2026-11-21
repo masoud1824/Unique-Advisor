@@ -28,6 +28,15 @@ describe("workspace holds", () => {
     });
   }
 
+  it("prepares a newly written letter instead of opening the archive", () => {
+    const line = "Write a letter to Casey Sample and Riley Sample and tell them the annual review is ready.";
+    assert.equal(deliveryRequested(line), false);
+    assert.equal(contentHoldKind(line), "");
+    assert.equal(taskKind(line), "e-letter");
+    assert.equal(orchestrationControl(line).desk, true);
+    assert.equal(orchestrationControl(line).conversational, false);
+  });
+
   it("still treats a real send as delivery", () => {
     const line = "Send the newsletter to Casey Sample";
     assert.equal(deliveryRequested(line), true);

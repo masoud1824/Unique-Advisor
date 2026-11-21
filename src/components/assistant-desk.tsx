@@ -876,7 +876,22 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     else setError(result.error);
     if (pending.ok) setActions((pending.actions as Action[]).filter((item) => previewCanSend(item)));
     if (history.ok) {
-      setTurns(history.messages);
+      setTurns(history.messages.map((message) => ({
+        id: message.id,
+        role: message.role === "assistant" ? "assistant" as const : "user" as const,
+        content: message.content,
+        at: message.at,
+        previews: (message.previews || []).map((item) => ({
+          id: item.id,
+          kind: item.kind,
+          summary: item.summary || "",
+          status: item.status,
+          canSend: item.canSend,
+          preview: item.preview,
+          previewHtml: item.previewHtml,
+          previewImage: item.previewImage,
+        })),
+      })));
       setChats(history.chats);
       setChatId(history.chatId);
       if (!rulesOpenRef.current) {
@@ -1191,12 +1206,13 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       if (spoken) setText("");
       const played = Boolean(streamed && "played" in streamed && streamed.played);
       if (!result?.ok) {
-        const names = nameChoicesFrom(result?.error || "");
+        const failure = result && "error" in result && typeof result.error === "string" ? result.error : "";
+        const names = nameChoicesFrom(failure);
         if (names.length) {
           const hit = resolveSpokenContact(content, names.map((name, index) => ({ id: index, name })));
-          showNameChoices(content, names, result?.error || "Which contact?", hit.kind === "one" || hit.kind === "many" ? hit.start : content.length, hit.kind === "one" || hit.kind === "many" ? hit.end : content.length);
+          showNameChoices(content, names, failure || "Which contact?", hit.kind === "one" || hit.kind === "many" ? hit.start : content.length, hit.kind === "one" || hit.kind === "many" ? hit.end : content.length);
           setError("");
-        } else failed(result?.error || "Sorry, something went wrong — please try again.");
+        } else failed(failure || "Sorry, something went wrong — please try again.");
         resumeAdvisorListening();
       } else if (!result.reply?.trim()) {
         failed("Sorry, something went wrong — please try again.");
@@ -1235,6 +1251,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         }
         await refresh(id);
         if (mine !== generation.current) return;
+        setTurns((current) => current.some((turn) => turn.role === "assistant" && turn.content === reply) ? current : [...current, { role: "user" as const, content, at: new Date().toISOString() }, { role: "assistant" as const, content: reply, at: new Date().toISOString() }]);
         const userCancels = /^(?:please\s+)?(?:cancel|stop)\b/i.test(content)
           || (/لغو|کنسل/.test(content) && /ارسال نکن|نفرست/.test(content));
         const routed = prepareDeskCommand(content);

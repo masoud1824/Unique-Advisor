@@ -112,7 +112,9 @@ export async function saveBirthdaySettings(
      where advisor_id = $1`,
     [advisorId, source, sourceRef, timezone, feb29, cardTitle, version],
   );
-  return { ok: true as const, ...(await readBirthdayDesk(sql, advisorId)), reconfirm: changed };
+  const saved = await readBirthdayDesk(sql, advisorId);
+  const { ok: _savedOk, ...desk } = saved;
+  return { ok: true as const, ...desk, reconfirm: changed };
 }
 
 export async function confirmBirthdayCard(sql: BirthdaySql, advisorId: number, input: { advisorId?: number } = {}) {
@@ -128,13 +130,17 @@ export async function confirmBirthdayCard(sql: BirthdaySql, advisorId: number, i
     "update birthday_settings set confirmed_version = template_version, enabled = false, updated_at = now() where advisor_id = $1",
     [advisorId],
   );
-  return { ok: true as const, ...(await readBirthdayDesk(sql, advisorId)), sent: false as const };
+  const saved = await readBirthdayDesk(sql, advisorId);
+  const { ok: _savedOk, ...desk } = saved;
+  return { ok: true as const, ...desk, sent: false as const };
 }
 
 export async function pauseBirthdayCheck(sql: BirthdaySql, advisorId: number) {
   await ensureRow(sql, advisorId);
   await sql.query("update birthday_settings set enabled = false, updated_at = now() where advisor_id = $1", [advisorId]);
-  return { ok: true as const, ...(await readBirthdayDesk(sql, advisorId)), sent: false as const };
+  const saved = await readBirthdayDesk(sql, advisorId);
+  const { ok: _savedOk, ...desk } = saved;
+  return { ok: true as const, ...desk, sent: false as const };
 }
 
 export function previewBirthdayDesk(input: {
