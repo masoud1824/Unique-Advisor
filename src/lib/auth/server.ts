@@ -46,6 +46,7 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { neonPoolConfig, hostedDataPlane } from "../hosted-runtime";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -74,12 +75,13 @@ const env = (key: string): string | undefined => {
 // provisions auth; set it to "false" to force auth off everywhere (dev user).
 const authDisabled = env("VITE_AUTH_ENABLED") === "false";
 
-// Broker federation creds: the deployer injects a per-app client when deployed;
-// otherwise fall back to the shared live-preview client, which the broker accepts
-// for any `*.grok-sandbox.com` callback (see `./preview`).
-const grokIssuer = env("GROK_AUTH_ISSUER") ?? GROK_ISSUER_DEFAULT;
-const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? PREVIEW_CLIENT_ID;
-const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? PREVIEW_CLIENT_SECRET;
+// A hosted database must not silently use the shared Grok preview OAuth client.
+// Desk access codes do not depend on this broker. Set GROK_AUTH_CLIENT_ID only
+// when that environment has its own broker registration and callback URL.
+const independentHost = hostedDataPlane();
+const grokIssuer = env("GROK_AUTH_ISSUER") ?? (independentHost ? "" : GROK_ISSUER_DEFAULT);
+const grokClientId = env("GROK_AUTH_CLIENT_ID") ?? (independentHost ? undefined : PREVIEW_CLIENT_ID);
+const grokClientSecret = env("GROK_AUTH_CLIENT_SECRET") ?? (independentHost ? undefined : PREVIEW_CLIENT_SECRET);
 
 /** True when federated sign-in is active (real auth is enforced). */
 export const authConfigured =
@@ -91,7 +93,7 @@ export const authConfigured =
 // it derives the origin per-request from the (proxied) host, validated against the
 // preview allowlist, which makes the OAuth `redirect_uri` the concrete preview URL
 // the broker's preview client accepts.
-const explicitBaseURL = env("BETTER_AUTH_URL");
+const explicitBaseURL = env("BETTER_AUTH_URL") ?? env("PUBLIC_APP_URL");
 // Explicit `string[]` (not a readonly tuple) — Better Auth's DynamicBaseURLConfig
 // requires a mutable `allowedHosts: string[]`.
 const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
@@ -141,8 +143,11 @@ const grokUserInfoUrl = `${issuerBase}/api/auth/oauth2/userinfo`;
 // SAME DB as app data, including email/password users. Both use the Better Auth
 // schema from `migrations/auth/0001_auth.sql`, copied into `migrations/` when
 // the app turns sign-in on.
+if (independentHost && !databaseUrl) {
+  throw new Error("UA_DATA_PLANE=postgres requires DATABASE_URL. Local PGLite is not used for hosted auth data.");
+}
 const database = databaseUrl
-  ? new Pool({ connectionString: databaseUrl })
+  ? new Pool(neonPoolConfig(databaseUrl))
   : { dialect: pgliteDialect(() => getPglite()), type: "postgres" as const };
 
 /** Session token cookie name — also read by the live-preview popup completion page. */

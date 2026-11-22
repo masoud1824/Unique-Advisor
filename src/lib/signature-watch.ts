@@ -47,6 +47,7 @@ export async function ensureSignatureRequests() {
 }
 
 export function startSignatureWatch() {
+  if (process.env.UA_DATA_PLANE === "postgres") return;
   if (previewWritesBlocked() || externalSideEffectsBlocked()) return;
   if (globalWatch.__uaSignWatch) return;
   globalWatch.__uaSignWatch = true;

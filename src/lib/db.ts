@@ -1,6 +1,7 @@
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
 import { isolatedTestRequested, refusePreviewDataDir } from "@/lib/isolated-test-desk";
 import { assertReleaseDatabase, releaseEnv } from "@/lib/release-env";
+import { assertHostedDatabaseConfigured, hostedDataPlane, neonPoolConfig } from "@/lib/hosted-runtime";
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";
@@ -166,7 +167,7 @@ function createNeonSql(): Promise<Sql> {
     types.setTypeParser(OID_INT8, Number);
     types.setTypeParser(OID_DATE, identity);
     types.setTypeParser(OID_INTERVAL, identity);
-    const pool = new Pool({ connectionString: databaseUrl });
+    const pool = new Pool(neonPoolConfig(databaseUrl as string));
     return toSql(async <T>(text: string, params: unknown[]) => {
       const res = await pool.query(text, params);
       return res.rows as T[];
@@ -286,6 +287,7 @@ async function createSql(): Promise<Sql> {
         "or a server route loader, never from client code.",
     );
   }
+  assertHostedDatabaseConfigured();
   return dbSource === "neon" ? createNeonSql() : createPgliteSql();
 }
 
@@ -358,7 +360,7 @@ if (typeof window === "undefined" && !globalShutdown.__pgliteShutdownHook__) {
 const globalBoot = globalThis as typeof globalThis & {
   __pgBootstrapPromise__?: Promise<void>;
 };
-if (typeof window === "undefined" && dbSource === "pglite") {
+if (typeof window === "undefined" && dbSource === "pglite" && !hostedDataPlane()) {
   globalBoot.__pgBootstrapPromise__ ??= ensureDbReady().catch((err) => {
     globalBoot.__pgBootstrapPromise__ = undefined;
     console.error("[db] PGLite bootstrap failed:", err);

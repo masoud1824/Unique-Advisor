@@ -1,4 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "npm install --omit=dev --no-audit --no-fund",
-  "framework": null
+  "framework": null,
+  "regions": ["yul1"],
+  "crons": [
+    {
+      "path": "/api/jobs/tick",
+      "schedule": "0 * * * *"
+    }
+  ]
 }
+

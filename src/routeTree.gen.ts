@@ -19,6 +19,7 @@ import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as ApiAcceptanceCheckRouteImport } from './routes/api/acceptance-check'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiPreviewOperatorRouteImport } from './routes/api/preview-operator'
 import { Route as NTokenRouteImport } from './routes/n/$token'
 import { Route as ASlugIndexRouteImport } from './routes/a/$slug/index'
@@ -32,6 +33,7 @@ import { Route as ApiBoxCallbackRouteImport } from './routes/api/box/callback'
 import { Route as ApiCardsIdRouteImport } from './routes/api/cards/$id'
 import { Route as ApiDropboxSignEventRouteImport } from './routes/api/dropbox-sign/event'
 import { Route as ApiGoogleCallbackRouteImport } from './routes/api/google/callback'
+import { Route as ApiJobsTickRouteImport } from './routes/api/jobs/tick'
 import { Route as ApiLinkCallbackRouteImport } from './routes/api/link/callback'
 import { Route as ApiLinkStartRouteImport } from './routes/api/link/start'
 import { Route as ApiMeetingsIcsRouteImport } from './routes/api/meetings/ics'
@@ -91,6 +93,11 @@ const StudioRoute = StudioRouteImport.update({
 const ApiAcceptanceCheckRoute = ApiAcceptanceCheckRouteImport.update({
   id: '/api/acceptance-check',
   path: '/api/acceptance-check',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPreviewOperatorRoute = ApiPreviewOperatorRouteImport.update({
@@ -158,6 +165,11 @@ const ApiGoogleCallbackRoute = ApiGoogleCallbackRouteImport.update({
   path: '/api/google/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiJobsTickRoute = ApiJobsTickRouteImport.update({
+  id: '/api/jobs/tick',
+  path: '/api/jobs/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiLinkCallbackRoute = ApiLinkCallbackRouteImport.update({
   id: '/api/link/callback',
   path: '/api/link/callback',
@@ -220,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
@@ -232,6 +245,7 @@ export interface FileRoutesByFullPath {
   '/api/cards/$id': typeof ApiCardsIdRoute
   '/api/dropbox-sign/event': typeof ApiDropboxSignEventRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/jobs/tick': typeof ApiJobsTickRoute
   '/api/link/callback': typeof ApiLinkCallbackRoute
   '/api/link/start': typeof ApiLinkStartRoute
   '/api/meetings/ics': typeof ApiMeetingsIcsRoute
@@ -255,6 +269,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
@@ -267,6 +282,7 @@ export interface FileRoutesByTo {
   '/api/cards/$id': typeof ApiCardsIdRoute
   '/api/dropbox-sign/event': typeof ApiDropboxSignEventRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/jobs/tick': typeof ApiJobsTickRoute
   '/api/link/callback': typeof ApiLinkCallbackRoute
   '/api/link/start': typeof ApiLinkStartRoute
   '/api/meetings/ics': typeof ApiMeetingsIcsRoute
@@ -291,6 +307,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
+  '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
@@ -303,6 +320,7 @@ export interface FileRoutesById {
   '/api/cards/$id': typeof ApiCardsIdRoute
   '/api/dropbox-sign/event': typeof ApiDropboxSignEventRoute
   '/api/google/callback': typeof ApiGoogleCallbackRoute
+  '/api/jobs/tick': typeof ApiJobsTickRoute
   '/api/link/callback': typeof ApiLinkCallbackRoute
   '/api/link/start': typeof ApiLinkStartRoute
   '/api/meetings/ics': typeof ApiMeetingsIcsRoute
@@ -328,6 +346,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/studio'
     | '/api/acceptance-check'
+    | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/desk'
@@ -340,6 +359,7 @@ export interface FileRouteTypes {
     | '/api/cards/$id'
     | '/api/dropbox-sign/event'
     | '/api/google/callback'
+    | '/api/jobs/tick'
     | '/api/link/callback'
     | '/api/link/start'
     | '/api/meetings/ics'
@@ -363,6 +383,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/studio'
     | '/api/acceptance-check'
+    | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/desk'
@@ -375,6 +396,7 @@ export interface FileRouteTypes {
     | '/api/cards/$id'
     | '/api/dropbox-sign/event'
     | '/api/google/callback'
+    | '/api/jobs/tick'
     | '/api/link/callback'
     | '/api/link/start'
     | '/api/meetings/ics'
@@ -398,6 +420,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/studio'
     | '/api/acceptance-check'
+    | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/desk'
@@ -410,6 +433,7 @@ export interface FileRouteTypes {
     | '/api/cards/$id'
     | '/api/dropbox-sign/event'
     | '/api/google/callback'
+    | '/api/jobs/tick'
     | '/api/link/callback'
     | '/api/link/start'
     | '/api/meetings/ics'
@@ -434,6 +458,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   StudioRoute: typeof StudioRoute
   ApiAcceptanceCheckRoute: typeof ApiAcceptanceCheckRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   ApiPreviewOperatorRoute: typeof ApiPreviewOperatorRoute
   NTokenRoute: typeof NTokenRoute
   ASlugDeskRoute: typeof ASlugDeskRoute
@@ -446,6 +471,7 @@ export interface RootRouteChildren {
   ApiCardsIdRoute: typeof ApiCardsIdRoute
   ApiDropboxSignEventRoute: typeof ApiDropboxSignEventRoute
   ApiGoogleCallbackRoute: typeof ApiGoogleCallbackRoute
+  ApiJobsTickRoute: typeof ApiJobsTickRoute
   ApiLinkCallbackRoute: typeof ApiLinkCallbackRoute
   ApiLinkStartRoute: typeof ApiLinkStartRoute
   ApiMeetingsIcsRoute: typeof ApiMeetingsIcsRoute
@@ -529,6 +555,13 @@ declare module '@tanstack/react-router' {
       path: '/api/acceptance-check'
       fullPath: '/api/acceptance-check'
       preLoaderRoute: typeof ApiAcceptanceCheckRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/preview-operator': {
@@ -622,6 +655,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiGoogleCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/jobs/tick': {
+      id: '/api/jobs/tick'
+      path: '/api/jobs/tick'
+      fullPath: '/api/jobs/tick'
+      preLoaderRoute: typeof ApiJobsTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/link/callback': {
       id: '/api/link/callback'
       path: '/api/link/callback'
@@ -706,6 +746,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   StudioRoute: StudioRoute,
   ApiAcceptanceCheckRoute: ApiAcceptanceCheckRoute,
+  ApiHealthRoute: ApiHealthRoute,
   ApiPreviewOperatorRoute: ApiPreviewOperatorRoute,
   NTokenRoute: NTokenRoute,
   ASlugDeskRoute: ASlugDeskRoute,
@@ -718,6 +759,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiCardsIdRoute: ApiCardsIdRoute,
   ApiDropboxSignEventRoute: ApiDropboxSignEventRoute,
   ApiGoogleCallbackRoute: ApiGoogleCallbackRoute,
+  ApiJobsTickRoute: ApiJobsTickRoute,
   ApiLinkCallbackRoute: ApiLinkCallbackRoute,
   ApiLinkStartRoute: ApiLinkStartRoute,
   ApiMeetingsIcsRoute: ApiMeetingsIcsRoute,

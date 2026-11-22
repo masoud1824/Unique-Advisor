@@ -17,13 +17,18 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
+import { migrationApproved, migrationDatabaseUrl } from "./hosted-guard.mjs";
 
-const databaseUrl = process.env.DATABASE_URL;
+const databaseUrl = migrationDatabaseUrl();
 if (!databaseUrl) {
   console.log(
     "[migrate] DATABASE_URL not set — skipping (the PGLite fallback migrates itself).",
   );
   process.exit(0);
+}
+if (!migrationApproved()) {
+  console.error("[migrate] production migration requires UA_MIGRATE_APPROVED=1. Nothing was applied.");
+  process.exit(2);
 }
 
 const migrationsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");

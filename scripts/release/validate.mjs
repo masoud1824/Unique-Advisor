@@ -36,6 +36,8 @@ const tests = [
   "src/lib/chat-previews.test.ts",
   "src/lib/chat-preview-ui.test.ts",
   "src/lib/card-correction.test.ts",
+  "src/lib/hosted-jobs.test.ts",
+  "scripts/hosted-guard.test.mjs",
 ];
 
 function run(label, command, args, env = {}) {

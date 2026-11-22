@@ -1509,7 +1509,13 @@ async function runAllDueDrips() {
 }
 
 const dripClock = globalThis as { uaDripClock?: ReturnType<typeof setInterval> };
-if (typeof window === "undefined" && !dripClock.uaDripClock && !previewWritesBlocked() && !externalSideEffectsBlocked()) {
+if (
+  typeof window === "undefined"
+  && !dripClock.uaDripClock
+  && !previewWritesBlocked()
+  && !externalSideEffectsBlocked()
+  && process.env.UA_DATA_PLANE !== "postgres"
+) {
 	dripClock.uaDripClock = setInterval(() => {
 		void runAllDueDrips();
 	}, 5 * 60 * 1000);
