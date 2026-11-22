@@ -5,7 +5,7 @@
  * This does not recover or read the published database.
  */
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -66,7 +66,8 @@ try {
 const dumpDir = mkdtempSync(join(tmpdir(), "ua-disposable-dump-"));
 const dumpFile = join(dumpDir, "dump.sql");
 run("pg_dump", ["--no-owner", "--no-privileges", "--format=plain", "--file", dumpFile, databaseUrl]);
-const dump = readFileSync(dumpFile, "utf8");
+const dump = readFileSync(dumpFile, "utf8").replace(/^SET transaction_timeout = .*;\r?\n/gm, "");
+writeFileSync(dumpFile, dump);
 if (/sk-|BEGIN OPENAI|masoudz@outlook|info@zangenehlaw/i.test(dump)) {
   throw new Error("Disposable dump contained a forbidden secret or mailbox.");
 }
