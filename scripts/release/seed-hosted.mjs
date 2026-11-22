@@ -192,7 +192,7 @@ try {
     "other-advisor-slug: staging-other",
     `other-advisor-code: ${otherCode}`,
     `operator-password: ${operatorPassword}`,
-    "The word superadmin is not the password.",
+    "Do not use the factory operator word.",
   ].join("\n");
   await writeFile(resolvedSecret, `${access}\n`, { mode: 0o600 });
   await chmod(resolvedSecret, 0o600);

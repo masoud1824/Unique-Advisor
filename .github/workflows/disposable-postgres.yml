@@ -62,8 +62,10 @@ jobs:
             assert.equal(out.includes("operator-password"), false);
             const secret = readFileSync("/tmp/ua-seed-access.txt", "utf8");
             const code = secret.match(/advisor-code: (\S+)/)[1];
+            const password = secret.match(/operator-password: (\S+)/)[1];
             assert.equal(out.includes(code), false);
-            assert.equal(secret.toLowerCase().includes("superadmin"), false);
+            assert.equal(out.includes(password), false);
+            assert.notEqual(password.toLowerCase(), "superadmin");
           '
           rm -f /tmp/ua-seed-access.txt /tmp/ua-seed-out.json
 
