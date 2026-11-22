@@ -401,7 +401,7 @@ export async function runAdvisorMorning(input: {
   if (reviewed?.last_review_note !== today) {
     try {
       const report = await sourceClientReport(input.advisorId);
-      const names = (rows: Array<{ name: string }>) => {
+      const names = (rows: Array<{ name?: string }>) => {
         const shown = rows.slice(0, 8).map((row) => row.name);
         return rows.length > shown.length ? `${shown.join(", ")}, and ${rows.length - shown.length} more` : shown.join(", ");
       };
@@ -410,7 +410,7 @@ export async function runAdvisorMorning(input: {
       if (report.needsContact.length) bits.push(`${report.needsContact.length} not contacted in 90 days: ${names(report.needsContact)}.`);
       if (report.kycDue.length) bits.push(`Yearly KYC is due for ${report.kycDue.length}: ${names(report.kycDue)}.`);
       if (report.opportunities.length) {
-        const leads = report.opportunities.slice(0, 5).map((row) => `${row.name} (${row.ideas[0]})`).join("; ");
+        const leads = report.opportunities.slice(0, 5).map((row) => `${row.name} (${Array.isArray(row.ideas) ? String(row.ideas[0] || "") : ""})`).join("; ");
         bits.push(`Upsell or cross-sell to review: ${leads}.`);
       }
       if (bits.length) notes.push(bits.join(" "));

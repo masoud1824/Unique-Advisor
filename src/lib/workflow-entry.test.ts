@@ -51,12 +51,12 @@ describe("workflow entry points used by the desk handlers", () => {
   });
 
   it("deliverApproved sends one recipient at a time and does not resend an unknown result", async () => {
-    const outcomes = {};
+    const outcomes: Record<string, "sent" | "failed" | "unknown"> = {};
     let calls = 0;
-    const saveOutcome = async (email, outcome) => { outcomes[email.toLowerCase()] = outcome; };
+    const saveOutcome = async (email: string, outcome: "sent" | "failed" | "unknown") => { outcomes[email.toLowerCase()] = outcome; };
     const changed = await deliverApproved({
       approved: packet, current: { ...packet, attachments: ["hash-b"] }, isolated: false, outcomes, saveOutcome,
-      sendOne: async () => { calls += 1; return { ok: true }; },
+      sendOne: async () => { calls += 1; return { ok: true as const }; },
     });
     assert.equal(changed.calls, 0);
     assert.match(changed.reason, /content, attachment, or recipients/i);
@@ -64,8 +64,8 @@ describe("workflow entry points used by the desk handlers", () => {
       approved: packet, current: packet, isolated: false, outcomes, saveOutcome,
       sendOne: async (person) => {
         calls += 1;
-        if (person.email.startsWith("riley")) return { ok: false, unknown: true };
-        return { ok: true };
+        if (person.email.startsWith("riley")) return { ok: false as const, unknown: true };
+        return { ok: true as const };
       },
     });
     assert.deepEqual(first.sent, ["casey.sample@example.invalid"]);
@@ -106,7 +106,7 @@ describe("workflow entry points used by the desk handlers", () => {
       send: async (contact) => {
         calls += 1;
         assert.equal(contact.full_name, "Casey Sample");
-        return { ok: false, error: "mailbox refused" };
+        return { ok: false as const, error: "mailbox refused" };
       },
     });
     assert.equal(first.blocked.map((item) => item.name).join(","), "Quinn Sample,Avery Sample");
@@ -120,7 +120,7 @@ describe("workflow entry points used by the desk handlers", () => {
       send: async (contact) => {
         calls += 1;
         assert.equal(contact.email, "casey.sample@example.invalid");
-        return { ok: true };
+        return { ok: true as const };
       },
     });
     assert.deepEqual(second.sent, ["casey.sample@example.invalid"]);
@@ -203,7 +203,7 @@ describe("workflow entry points used by the desk handlers", () => {
 
   it("reviewAndBook, called by placePending, blocks hours, buffer, time zone, and a second conflict before commit", async () => {
     let commits = 0;
-    const commit = async () => { commits += 1; return { ok: true }; };
+    const commit = async () => { commits += 1; return { ok: true as const }; };
     const early = await reviewAndBook({
       start: "2026-12-02T08:00:00",
       minutes: 45,

@@ -23,6 +23,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { fileSettings, listDeskNotices, listUpcomingMeetings, clearDeskNotices, saveFileSettings, advisorZone, saveAdvisorZone, cancelBookedMeeting } from "@/lib/zoom-bookings";
 import { previewWritesBlocked } from "@/lib/preview-readonly";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { getSql } from "@/lib/db";
 
 export const loadLinkApps = createServerFn({ method: "POST" })
   .validator((input: { code: string }) => input)

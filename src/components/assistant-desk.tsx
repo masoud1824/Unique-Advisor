@@ -19,6 +19,36 @@ type Action = { id: number; kind: string; summary: string; status?: string; canS
 type Chat = { id: number; title: string; at?: string };
 type SavedRule = { id?: string; category?: string; text: string; on: boolean };
 
+function readAssistantAnswer(value: unknown): { ok: boolean; error?: string; reply?: string; actions?: Action[]; played?: boolean; detail?: string } {
+  if (!value || typeof value !== "object") return { ok: false, error: "Sorry, something went wrong — please try again." };
+  const row = value as Record<string, unknown>;
+  const actions = Array.isArray(row.actions) ? row.actions.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const action = item as Record<string, unknown>;
+    if (typeof action.kind !== "string") return [];
+    const id = typeof action.id === "number" ? action.id : Number(action.id);
+    if (!Number.isFinite(id)) return [];
+    return [{
+      id,
+      kind: action.kind,
+      summary: typeof action.summary === "string" ? action.summary : "",
+      status: typeof action.status === "string" ? action.status : undefined,
+      canSend: typeof action.canSend === "boolean" ? action.canSend : undefined,
+      preview: typeof action.preview === "string" ? action.preview : undefined,
+      previewHtml: typeof action.previewHtml === "string" ? action.previewHtml : undefined,
+      previewImage: typeof action.previewImage === "string" ? action.previewImage : undefined,
+    }];
+  }) : undefined;
+  return {
+    ok: row.ok === true,
+    error: typeof row.error === "string" ? row.error : undefined,
+    reply: typeof row.reply === "string" ? row.reply : undefined,
+    actions,
+    played: row.played === true,
+    detail: typeof row.detail === "string" ? row.detail : undefined,
+  };
+}
+
 function previewAllowsSend(action: Action) {
   return previewCanSend(action);
 }
@@ -623,7 +653,7 @@ export function startAdvisorSpeech(
       } catch { /* this browser has no name hints */ }
     }
     heard.onresult = (event) => {
-      const pieces = [];
+      const pieces: { transcript: string; isFinal: boolean }[] = [];
       for (let index = 0; index < event.results.length; index += 1) {
         const piece = event.results[index];
         pieces.push({ transcript: piece?.[0]?.transcript || "", isFinal: Boolean(piece?.isFinal) });
@@ -1201,7 +1231,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     try {
       setChats((current) => current.map((chat) => chat.id === id && (chat.title === "New chat" || !chat.title.trim()) ? { ...chat, title: content.replace(/\s+/g, " ").slice(0, 42), at: new Date().toISOString() } : chat));
       const streamed = spoken ? await askByVoice(content, id, mine, Boolean(options?.confirmed)) : null;
-      const result = streamed || await askAssistant({ data: { slug: desk.slug, code, chatId: id, page: pageCue, transcriptConfirmed: Boolean(options?.confirmed), activeNewsletterId: activeNewsletterId.current, messages: [{ role: "user", content }] } });
+      const result = readAssistantAnswer(streamed || await askAssistant({ data: { slug: desk.slug, code, chatId: id, page: pageCue, transcriptConfirmed: Boolean(options?.confirmed), activeNewsletterId: activeNewsletterId.current, messages: [{ role: "user", content }] } }));
       if (mine !== generation.current) return;
       if (spoken) setText("");
       const played = Boolean(streamed && "played" in streamed && streamed.played);
@@ -1446,7 +1476,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setBusy(false);
     if (!result.ok) setError(result.error);
     await refresh(chatIdRef.current);
-    const line = result.ok ? result.detail : result.error;
+    const line = result.ok && "detail" in result && typeof result.detail === "string" ? result.detail : "error" in result && typeof result.error === "string" ? result.error : "";
     if (line) {
       setTurns((current) => current.some((turn) => turn.role === "assistant" && turn.content === line) ? current : [...current, { role: "assistant", content: line }]);
     }

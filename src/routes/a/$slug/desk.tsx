@@ -33,7 +33,39 @@ import {
   signOutDesk,
 } from "@/lib/advisor.functions";
 import { getPublicSite, saveAdvisorIdentity, saveAdvisorWebsite } from "@/lib/site.functions";
-import { allowsCustom, PLAN_LABELS } from "@/lib/site-types";
+import { allowsCustom, PLAN_LABELS, type Contact, type DeskData } from "@/lib/site-types";
+import type { EletterDesign } from "@/lib/eletter";
+
+type DeskPing = (text: string) => void;
+type DeskMeeting = {
+	id: string;
+	when: string;
+	time: string;
+	schedule: string;
+	minutes: number;
+	client: string;
+	title: string;
+	join: string;
+	start: string;
+	location?: string;
+};
+type ContactLog = { id?: string | number; createdAt: string; kind: string; summary: string };
+type ImportSheet = { csv: string; titles: string[]; count: number };
+type DeskStep = { title: string; body: string; waitDays?: number };
+type DeskCampaign = {
+	id: string | number;
+	name: string;
+	steps: DeskStep[];
+	design?: string;
+	active?: boolean;
+	everyDays: number;
+	nextIndex: number;
+	nextAt?: string;
+};
+type SharedCampaign = { id: string | number; name: string; body: string };
+type DeskTabProps = { code: string; desk: DeskData; reload: () => Promise<void> | void; ping: DeskPing };
+type FieldEvent = React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>;
+
 import { contactDeliveryBlock } from "@/lib/desk-workflows";
 import { PRODUCT_OPTIONS } from "@/lib/contact-records";
 import { contactMatchesQuery } from "@/lib/contact-match";
@@ -81,8 +113,8 @@ var WASH = {
 	welcome: "linear-gradient(135deg,#0d7a4f,#9ddec0)",
 	anniversary: "linear-gradient(135deg,#b8860b,#f3e2a7)"
 };
-function shrinkCardPhoto(file) {
-	return new Promise((resolve, reject) => {
+function shrinkCardPhoto(file: File) {
+	return new Promise<string>((resolve, reject) => {
 		const url = URL.createObjectURL(file);
 		const img = new Image();
 		img.onload = () => {
@@ -138,12 +170,12 @@ function DeskPage() {
 		practiceName: site.practiceName
 	})] });
 }
-function DeskGate({ slug, practiceName }) {
+function DeskGate({ slug, practiceName }: { slug: string; practiceName: string }) {
 	const [code, setCode] = useState("");
-	const [desk, setDesk] = useState(null);
+	const [desk, setDesk] = useState<DeskData | null>(null);
 	const [error, setError] = useState("");
 	const [checking, setChecking] = useState(true);
-	async function unlock(next) {
+	async function unlock(next: string) {
 		setError("");
 		const token = readDeskToken(slug);
 		const result = await loadDesk({ data: {
@@ -210,7 +242,7 @@ function DeskGate({ slug, practiceName }) {
 		className: "ua-auth",
 		children: /* @__PURE__ */ jsxs("form", {
 			className: "ua-auth-card",
-			onSubmit: (event) => {
+			onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 				event.preventDefault();
 				const typed = String(new FormData(event.currentTarget).get("access") || "").trim();
 				unlock(typed);
@@ -252,7 +284,7 @@ function DeskGate({ slug, practiceName }) {
 		}
 	});
 }
-function DeskApp({ code, desk, reload, signOut }) {
+function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData; reload: () => Promise<void> | void; signOut: () => void }) {
 	const [tab, setTab] = useState(() => {
 		if (typeof window === "undefined") return "dashboard";
 		const params = new URLSearchParams(window.location.search);
@@ -262,8 +294,8 @@ function DeskApp({ code, desk, reload, signOut }) {
 	const [toast, setToast] = useState("");
 	const [talking, setTalking] = useState(false);
 	const [voicing, setVoicing] = useState(false);
-	const [spoken, setSpoken] = useState(null);
-	const [assistFrom, setAssistFrom] = useState(null);
+	const [spoken, setSpoken] = useState<{ id: number; text: string; page?: string } | null>(null);
+	const [assistFrom, setAssistFrom] = useState<{ page: string; id: number } | null>(null);
 	const titles: Record<string, string> = {
 		dashboard: "Dashboard",
 		calendar: "Calendar",
@@ -303,7 +335,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 	];
 	const [freshChat, setFreshChat] = useState(0);
 	const [voiceCue, setVoiceCue] = useState(0);
-	const [meetings, setMeetings] = useState([]);
+	const [meetings, setMeetings] = useState<DeskMeeting[]>([]);
 	const [meetingZone, setMeetingZone] = useState("America/Toronto");
 	const [dayTick, setDayTick] = useState(0);
 	useEffect(() => {
@@ -341,7 +373,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		};
 	}, [code, desk.slug]);
 	const shownMeetings = meetings.filter((meeting) => dayTick >= 0 && Boolean(meeting.start) && onDeskDays(new Date(meeting.start), new Date(), meetingZone));
-	function ping(text) {
+	function ping(text: string) {
 		setToast(text);
 		window.setTimeout(() => setToast(""), 2800);
 	}
@@ -525,7 +557,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 						freshChat,
 						voiceCue,
 						hearing: talking,
-						onVoice: (status) => {
+						onVoice: (status: { listening: boolean; speaking: boolean }) => {
 							setTalking(status.listening);
 							setVoicing(status.speaking);
 						},
@@ -569,7 +601,7 @@ function DeskApp({ code, desk, reload, signOut }) {
 		]
 	});
 }
-function Dashboard({ code, desk, go, meetings, zone }) {
+function Dashboard({ code, desk, go, meetings, zone }: { code: string; desk: DeskData; go: (tab: string) => void; meetings: DeskMeeting[]; zone: string }) {
 	const [cancelId, setCancelId] = useState("");
 	const [notifyClient, setNotifyClient] = useState(true);
 	const [cancelBusy, setCancelBusy] = useState(false);
@@ -776,24 +808,24 @@ function Dashboard({ code, desk, go, meetings, zone }) {
 		})
 	] });
 }
-function ContactsTab({ code, desk, reload, ping }) {
+function ContactsTab({ code, desk, reload, ping }: DeskTabProps) {
 	const [query, setQuery] = useState("");
 	const [tag, setTag] = useState("");
 	const [open, setOpen] = useState(false);
-	const [editing, setEditing] = useState(null);
+	const [editing, setEditing] = useState<number | null>(null);
 	const [name, setName] = useState("");
 	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
 	const [birthday, setBirthday] = useState("");
-	const [products, setProducts] = useState([]);
+	const [products, setProducts] = useState<string[]>([]);
 	const [productNote, setProductNote] = useState("");
 	const [kycOn, setKycOn] = useState("");
-	const [logs, setLogs] = useState([]);
+	const [logs, setLogs] = useState<ContactLog[]>([]);
 	const [logNote, setLogNote] = useState("");
-	const [picked, setPicked] = useState([]);
+	const [picked, setPicked] = useState<string[]>([]);
 	const [extra, setExtra] = useState("");
 	const [error, setError] = useState("");
-	const [sheet, setSheet] = useState(null);
+	const [sheet, setSheet] = useState<ImportSheet | null>(null);
 	const [sheetFile, setSheetFile] = useState("");
 	const [columns, setColumns] = useState({
 		name: -1,
@@ -802,9 +834,9 @@ function ContactsTab({ code, desk, reload, ping }) {
 		phone: -1,
 		tags: -1
 	});
-	const [chosenIds, setChosenIds] = useState([]);
-	const [pendingDelete, setPendingDelete] = useState(null);
-	const [found, setFound] = useState<any[] | null>(null);
+	const [chosenIds, setChosenIds] = useState<number[]>([]);
+	const [pendingDelete, setPendingDelete] = useState<"selected" | "all" | null>(null);
+	const [found, setFound] = useState<Array<Contact & { full_name?: string; kyc_on?: string }> | null>(null);
 	const [searching, setSearching] = useState(false);
 	const [searchError, setSearchError] = useState("");
 	useEffect(() => {
@@ -831,15 +863,18 @@ function ContactsTab({ code, desk, reload, ping }) {
 					setSearchError(result?.error || "Search failed.");
 					return;
 				}
-				const contacts = (result.contacts || []).map((contact) => ({
-					...contact,
-					fullName: contact.fullName || contact.full_name || "",
-					email: contact.email || "",
-					phone: contact.phone || "",
-					birthday: contact.birthday || "",
-					kycOn: contact.kycOn || contact.kyc_on || "",
-					tags: Array.isArray(contact.tags) ? contact.tags : String(contact.tags || "").split(",").map((item) => item.trim()).filter(Boolean)
-				}));
+				const contacts = (result.contacts || []).map((contact) => {
+					const row = contact as Contact & { full_name?: string; kyc_on?: string; tags?: string | string[] };
+					return {
+					...row,
+					fullName: row.fullName || row.full_name || "",
+					email: row.email || "",
+					phone: row.phone || "",
+					birthday: row.birthday || "",
+					kycOn: row.kycOn || row.kyc_on || "",
+					tags: Array.isArray(row.tags) ? row.tags : String(row.tags || "").split(",").map((item: string) => item.trim()).filter(Boolean)
+				};
+				});
 				setFound(contacts);
 			}).catch(() => {
 				if (stop) return;
@@ -870,7 +905,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 		setError("");
 		setOpen(true);
 	}
-	function startEdit(contact) {
+	function startEdit(contact: Contact) {
 		setEditing(contact.id);
 		setName(contact.fullName);
 		setEmail(contact.email);
@@ -893,7 +928,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 			if (result.ok && result.logs) setLogs(result.logs);
 		});
 	}
-	async function onSubmit(event) {
+	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		const tags = extra.trim() ? [...picked, extra.trim()] : picked;
 		const result = await saveContact({ data: {
@@ -929,7 +964,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 		}, query);
 	});
 	const allChecked = rows.length > 0 && rows.every((contact) => chosenIds.includes(contact.id));
-	function toggleOne(id) {
+	function toggleOne(id: number) {
 		setChosenIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
 	}
 	function toggleAll() {
@@ -945,12 +980,12 @@ function ContactsTab({ code, desk, reload, ping }) {
 				className: "flex flex-wrap gap-2",
 				children: [/* @__PURE__ */ jsx("input", {
 					value: query,
-					onChange: (event) => setQuery(event.target.value),
+					onChange: (event: FieldEvent) => setQuery(event.target.value),
 					placeholder: "Search contacts...",
 					className: "ua-field ua-grow"
 				}), /* @__PURE__ */ jsxs("select", {
 					value: tag,
-					onChange: (event) => setTag(event.target.value),
+					onChange: (event: FieldEvent) => setTag(event.target.value),
 					className: "ua-field w-auto",
 					children: [/* @__PURE__ */ jsx("option", {
 						value: "",
@@ -976,11 +1011,11 @@ function ContactsTab({ code, desk, reload, ping }) {
 							setSheetFile("");
 							setSheet(null);
 						},
-						onFiles: (picked) => {
+						onFiles: (picked: File[]) => {
 							const file = picked[0];
 							if (!file) return;
 							setSheetFile(file.name);
-							file.text().then(async (csv) => {
+							file.text().then(async (csv: string) => {
 								const result = await previewContactSheet({ data: {
 									slug: desk.slug,
 									code,
@@ -990,7 +1025,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 									setSheetFile("");
 									return ping(result.error);
 								}
-								const guess = (pattern) => result.titles.findIndex((title) => pattern.test(title.trim().toLowerCase()));
+								const guess = (pattern: RegExp) => result.titles.findIndex((title: string) => pattern.test(title.trim().toLowerCase()));
 								setColumns({
 									name: guess(/^name$|^full name$|^contact name$/) >= 0 ? guess(/^name$|^full name$|^contact name$/) : guess(/first name|^name/),
 									last: guess(/last name/),
@@ -1157,7 +1192,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 			className: "ua-modal",
 			children: /* @__PURE__ */ jsxs("form", {
 				className: "ua-panel max-h-[90vh] w-[520px] max-w-full overflow-auto p-7",
-				onSubmit: (event) => {
+				onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 					event.preventDefault();
 					if (columns.name < 0) return ping("Match the Name column before uploading.");
 					importContacts({ data: {
@@ -1183,7 +1218,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						style: { color: "#5a6a7a" },
 						children: [sheetFile ? `${sheetFile}. ` : "", sheet.count, " contacts found. Match each spreadsheet title to a desk column. A tag is added only if you or Superadmin already created it. File numbers are not tags."]
 					}),
-					[
+					([
 						[
 							"name",
 							"Name",
@@ -1209,7 +1244,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 							"Tags",
 							false
 						]
-					].map(([key, label, required]) => /* @__PURE__ */ jsxs("label", {
+					] as const).map(([key, label, required]) => /* @__PURE__ */ jsxs("label", {
 						className: "mb-3 grid gap-1 text-sm font-semibold",
 						children: [
 							label,
@@ -1217,7 +1252,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 							/* @__PURE__ */ jsxs("select", {
 								className: "ua-field font-normal",
 								value: columns[key],
-								onChange: (event) => setColumns({
+								onChange: (event: FieldEvent) => setColumns({
 									...columns,
 									[key]: Number(event.target.value)
 								}),
@@ -1265,7 +1300,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						children: ["Name", /* @__PURE__ */ jsx("input", {
 							required: true,
 							value: name,
-							onChange: (event) => setName(event.target.value),
+							onChange: (event: FieldEvent) => setName(event.target.value),
 							className: "ua-field font-normal"
 						})]
 					}),
@@ -1274,7 +1309,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						children: ["Email", /* @__PURE__ */ jsx("input", {
 							type: "email",
 							value: email,
-							onChange: (event) => setEmail(event.target.value),
+							onChange: (event: FieldEvent) => setEmail(event.target.value),
 							className: "ua-field font-normal"
 						})]
 					}),
@@ -1282,7 +1317,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						className: "mb-3 grid gap-1 text-sm font-semibold",
 						children: ["Phone", /* @__PURE__ */ jsx("input", {
 							value: phone,
-							onChange: (event) => setPhone(event.target.value),
+							onChange: (event: FieldEvent) => setPhone(event.target.value),
 							className: "ua-field font-normal"
 						})]
 					}),
@@ -1291,7 +1326,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						children: ["DOB", /* @__PURE__ */ jsx("input", {
 							type: "date",
 							value: birthday,
-							onChange: (event) => setBirthday(event.target.value),
+							onChange: (event: FieldEvent) => setBirthday(event.target.value),
 							className: "ua-field font-normal"
 						})]
 					}),
@@ -1302,7 +1337,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 							/* @__PURE__ */ jsx("input", {
 								type: "date",
 								value: kycOn,
-								onChange: (event) => setKycOn(event.target.value),
+								onChange: (event: FieldEvent) => setKycOn(event.target.value),
 								className: "ua-field font-normal"
 							}),
 							/* @__PURE__ */ jsx("span", {
@@ -1336,7 +1371,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						className: "mb-3 grid gap-1 text-sm font-semibold",
 						children: ["Product details", /* @__PURE__ */ jsx("textarea", {
 							value: productNote,
-							onChange: (event) => setProductNote(event.target.value),
+							onChange: (event: FieldEvent) => setProductNote(event.target.value),
 							maxLength: 2e3,
 							rows: 3,
 							placeholder: "Policy numbers, amounts, or notes",
@@ -1371,7 +1406,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 							}),
 							/* @__PURE__ */ jsx("textarea", {
 								value: logNote,
-								onChange: (event) => setLogNote(event.target.value),
+								onChange: (event: FieldEvent) => setLogNote(event.target.value),
 								rows: 2,
 								maxLength: 500,
 								placeholder: "Call, meeting, or note",
@@ -1421,7 +1456,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 						className: "mb-4 flex flex-wrap gap-2",
 						children: [/* @__PURE__ */ jsx("input", {
 							value: extra,
-							onChange: (event) => setExtra(event.target.value),
+							onChange: (event: FieldEvent) => setExtra(event.target.value),
 							placeholder: "Tag name",
 							className: "ua-field"
 						}), /* @__PURE__ */ jsx("button", {
@@ -1469,7 +1504,7 @@ function ContactsTab({ code, desk, reload, ping }) {
 		})
 	] });
 }
-function contactLines(desk, includeName) {
+function contactLines(desk: DeskData, includeName: boolean) {
 	const profile = readProfile(desk);
 	const name = (profile.name || desk.advisorName).trim();
 	const raw = [
@@ -1499,7 +1534,7 @@ function contactLines(desk, includeName) {
 		photoPosition: profile.photoPosition
 	};
 }
-function AdvisorFooter({ desk }) {
+function AdvisorFooter({ desk }: { desk: DeskData }) {
 	const contact = contactLines(desk, true);
 	const showPhoto = Boolean(contact.photo && contact.photoOnCard);
 	return /* @__PURE__ */ jsxs("div", {
@@ -1540,12 +1575,12 @@ function AdvisorFooter({ desk }) {
 		})]
 	});
 }
-function CardsTab({ code, desk, reload, ping }) {
+function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 	const [title, setTitle] = useState(CARDS[0]?.title ?? "");
 	const [message, setMessage] = useState(CARDS[0]?.message ?? "Dear [Contact Name],\n\n");
 	const [image, setImage] = useState(CARDS[0]?.image ?? "");
 	const [wash, setWash] = useState(WASH.birthday);
-	const [selected, setSelected] = useState([]);
+	const [selected, setSelected] = useState<number[]>([]);
 	const [tag, setTag] = useState("");
 	const [upload, setUpload] = useState(false);
 	const [sharedCards, setSharedCards] = useState(desk.sharedCards ?? []);
@@ -1560,7 +1595,7 @@ function CardsTab({ code, desk, reload, ping }) {
 	const chosen = desk.contacts.filter((contact) => selected.includes(contact.id));
 	const previewContact = chosen[0];
 	const previewText = personalize(message, previewContact?.fullName || "[Contact Name]");
-	function savedNote(cardTitle, fallback) {
+	function savedNote(cardTitle: string, fallback: string) {
 		const saved = (desk.cards || []).find((item) => item.title === cardTitle && String(item.body || "").trim());
 		return saved ? String(saved.body) : fallback;
 	}
@@ -1577,14 +1612,14 @@ function CardsTab({ code, desk, reload, ping }) {
 	}, [desk.sharedCards]);
 	useEffect(() => {
 		listCatalogCards().then(setStockCards);
-		listTemplates().then((rows) => setSharedCards(rows.filter((row) => row.kind === "card").map((row) => ({
+		listTemplates().then((rows: Array<{ kind?: string; id: number; name: string; body?: string; detail?: string; hasImage?: boolean }>) => setSharedCards(rows.filter((row) => row.kind === "card").map((row) => ({
 			id: row.id,
 			name: row.name,
-			body: row.body || row.detail,
+			body: String(row.body || row.detail || ""),
 			image: row.hasImage ? `/api/platform-cards/${row.id}?v=2` : ""
 		}))));
 	}, []);
-	function drop(kind, id, cardTitle) {
+	function drop(kind: string, id: string | number, cardTitle: string) {
 		if (!window.confirm("Remove this card from your gallery?")) return;
 		setBusy(true);
 		removeCard({ data: {
@@ -1664,7 +1699,7 @@ function CardsTab({ code, desk, reload, ping }) {
 								setTitle(card.title);
 								setMessage(savedNote(card.title, card.message));
 								setImage(card.image);
-								setWash(WASH[card.id] ?? WASH.birthday);
+								setWash((card.id in WASH ? WASH[card.id as keyof typeof WASH] : undefined) ?? WASH.birthday);
 							},
 							children: [
 								/* @__PURE__ */ jsx("div", {
@@ -1862,7 +1897,7 @@ function CardsTab({ code, desk, reload, ping }) {
 					style: { color: "#5a6a7a" },
 					children: ["Card message", /* @__PURE__ */ jsx("textarea", {
 						value: message,
-						onChange: (event) => setMessage(event.target.value),
+						onChange: (event: FieldEvent) => setMessage(event.target.value),
 						rows: 5,
 						className: "ua-field font-normal"
 					})]
@@ -1915,7 +1950,7 @@ function CardsTab({ code, desk, reload, ping }) {
 					style: { color: "#5a6a7a" },
 					children: ["Filter recipients by tag", /* @__PURE__ */ jsxs("select", {
 						value: tag,
-						onChange: (event) => setTag(event.target.value),
+						onChange: (event: FieldEvent) => setTag(event.target.value),
 						className: "ua-field font-normal",
 						children: [/* @__PURE__ */ jsx("option", {
 							value: "",
@@ -1951,7 +1986,7 @@ function CardsTab({ code, desk, reload, ping }) {
 							type: "checkbox",
 							className: "mt-1 size-4",
 							checked: selected.includes(contact.id),
-							onChange: (event) => setSelected(event.target.checked ? [...selected, contact.id] : selected.filter((id) => id !== contact.id))
+							onChange: (event: React.ChangeEvent<HTMLInputElement>) => setSelected(event.target.checked ? [...selected, contact.id] : selected.filter((id) => id !== contact.id))
 						}), /* @__PURE__ */ jsxs("span", { children: [
 							/* @__PURE__ */ jsx("strong", { children: contact.fullName }),
 							" ",
@@ -1977,7 +2012,7 @@ function CardsTab({ code, desk, reload, ping }) {
 		upload && /* @__PURE__ */ jsx("div", {
 			className: "ua-modal",
 			children: /* @__PURE__ */ jsxs("form", {
-				onSubmit: (event) => {
+				onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 					event.preventDefault();
 					setBusy(true);
 					saveCard({ data: {
@@ -2006,14 +2041,14 @@ function CardsTab({ code, desk, reload, ping }) {
 					/* @__PURE__ */ jsx("input", {
 						required: true,
 						value: customTitle,
-						onChange: (event) => setCustomTitle(event.target.value),
+						onChange: (event: FieldEvent) => setCustomTitle(event.target.value),
 						placeholder: "Card name",
 						className: "ua-field mb-3"
 					}),
 					/* @__PURE__ */ jsx("textarea", {
 						required: true,
 						value: customMessage,
-						onChange: (event) => setCustomMessage(event.target.value),
+						onChange: (event: FieldEvent) => setCustomMessage(event.target.value),
 						rows: 5,
 						className: "ua-field"
 					}),
@@ -2030,7 +2065,7 @@ function CardsTab({ code, desk, reload, ping }) {
 						previewName: "Card picture",
 						shape: "wide",
 						onClearPreview: () => setCustomImage(""),
-						onFiles: (picked) => {
+						onFiles: (picked: File[]) => {
 							const file = picked[0];
 							if (!file) return;
 							shrinkCardPhoto(file).then(setCustomImage).catch((error) => {
@@ -2069,30 +2104,30 @@ function CardsTab({ code, desk, reload, ping }) {
 		})
 	] });
 }
-function DripsTab({ code, desk, ping }) {
+function DripsTab({ code, desk, ping }: { code: string; desk: DeskData; ping: DeskPing }) {
 	const blank = () => ({
 		title: "",
 		body: ""
 	});
-	const [campaigns, setCampaigns] = useState([]);
-	const [shared, setShared] = useState([]);
-	const [editing, setEditing] = useState(null);
+	const [campaigns, setCampaigns] = useState<DeskCampaign[]>([]);
+	const [shared, setShared] = useState<SharedCampaign[]>([]);
+	const [editing, setEditing] = useState<string | number | null>(null);
 	const [name, setName] = useState("");
 	const [boxes, setBoxes] = useState(1);
-	const [steps, setSteps] = useState([blank()]);
+	const [steps, setSteps] = useState<DeskStep[]>([blank()]);
 	const [design, setDesign] = useState("");
-	const [sendId, setSendId] = useState("");
-	const [defaultId, setDefaultId] = useState("");
+	const [sendId, setSendId] = useState<string | number>("");
+	const [defaultId, setDefaultId] = useState<string | number>("");
 	const [tag, setTag] = useState("");
 	const [everyDays, setEveryDays] = useState(7);
-	const [picked, setPicked] = useState([]);
+	const [picked, setPicked] = useState<number[]>([]);
 	const [busy, setBusy] = useState(false);
-	function loadList(rows) {
+	function loadList(rows: DeskCampaign[]) {
 		setCampaigns(rows);
 	}
 	useEffect(() => {
 		let alive = true;
-		const pull = (readOnly) => {
+		const pull = (readOnly: boolean) => {
 			listDrips({ data: {
 				slug: desk.slug,
 				code,
@@ -2114,12 +2149,12 @@ function DripsTab({ code, desk, ping }) {
 			window.removeEventListener("ua-newsletter", onSave);
 		};
 	}, [desk.slug, code]);
-	function openCount(count) {
+	function openCount(count: number) {
 		const next = Math.min(12, Math.max(1, count));
 		setBoxes(next);
 		setSteps((current) => Array.from({ length: next }, (_, index) => current[index] ?? blank()));
 	}
-	function fill(source) {
+	function fill(source: DeskCampaign) {
 		setEditing(source.id ?? null);
 		setName(source.name);
 		setBoxes(source.steps.length || 1);
@@ -2151,13 +2186,13 @@ function DripsTab({ code, desk, ping }) {
 		setDesign("");
 		ping("Campaign saved. Choose it in Choose a campaign, then send it.");
 	}
-	function pickOwn(id) {
+	function pickOwn(id: string | number) {
 		setSendId(id);
 		setDefaultId("");
 		setPicked([]);
 		setDesign("");
 	}
-	function pickDefault(id) {
+	function pickDefault(id: string | number) {
 		setDefaultId(id);
 		setSendId("");
 		setPicked([]);
@@ -2215,7 +2250,7 @@ function DripsTab({ code, desk, ping }) {
 		else ping(`The first article was emailed to ${picked.length} contact${picked.length === 1 ? "" : "s"}. The next articles go ${dripLabel(everyDays).toLowerCase()}.`);
 	}
 	const shown = desk.contacts.filter((contact) => !tag || (contact.tags || []).includes(tag));
-	const blockedReason = (contact) => contactDeliveryBlock((contact.tags || []).join(", "), contact.email || "");
+	const blockedReason = (contact: Contact) => contactDeliveryBlock((contact.tags || []).join(", "), contact.email || "");
 	const eligible = shown.filter((contact) => !blockedReason(contact));
 	const excluded = shown.filter((contact) => blockedReason(contact));
 	const chosenName = sendId ? campaigns.find((item) => item.id === sendId)?.name || "" : shared.find((item) => item.id === defaultId)?.name || "";
@@ -2237,7 +2272,7 @@ function DripsTab({ code, desk, ping }) {
 					className: "mb-3 grid gap-1 text-sm font-semibold",
 					children: ["Campaign name", /* @__PURE__ */ jsx("input", {
 						value: name,
-						onChange: (event) => setName(event.target.value),
+						onChange: (event: FieldEvent) => setName(event.target.value),
 						className: "ua-field font-normal"
 					})]
 				}),
@@ -2245,7 +2280,7 @@ function DripsTab({ code, desk, ping }) {
 					className: "mb-4 grid gap-1 text-sm font-semibold",
 					children: ["How many articles", /* @__PURE__ */ jsx("select", {
 						value: boxes,
-						onChange: (event) => openCount(Number(event.target.value)),
+						onChange: (event: FieldEvent) => openCount(Number(event.target.value)),
 						className: "ua-field font-normal",
 						children: Array.from({ length: 12 }, (_, index) => /* @__PURE__ */ jsx("option", {
 							value: index + 1,
@@ -2264,7 +2299,7 @@ function DripsTab({ code, desk, ping }) {
 							" title",
 							/* @__PURE__ */ jsx("input", {
 								value: step.title,
-								onChange: (event) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? {
+								onChange: (event: FieldEvent) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? {
 									...item,
 									title: event.target.value
 								} : item)),
@@ -2281,7 +2316,7 @@ function DripsTab({ code, desk, ping }) {
 							/* @__PURE__ */ jsx("textarea", {
 								value: step.body,
 								rows: 4,
-								onChange: (event) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? {
+								onChange: (event: FieldEvent) => setSteps(steps.map((item, itemIndex) => itemIndex === index ? {
 									...item,
 									body: event.target.value
 								} : item)),
@@ -2534,7 +2569,7 @@ function DripsTab({ code, desk, ping }) {
 						className: "mb-3 grid gap-1 text-sm font-semibold",
 						children: ["Filter by tag", /* @__PURE__ */ jsxs("select", {
 							value: tag,
-							onChange: (event) => setTag(event.target.value),
+							onChange: (event: FieldEvent) => setTag(event.target.value),
 							className: "ua-field font-normal",
 							children: [/* @__PURE__ */ jsx("option", {
 								value: "",
@@ -2597,7 +2632,7 @@ function DripsTab({ code, desk, ping }) {
 						className: "mb-4 grid gap-1 text-sm font-semibold",
 						children: ["How often", /* @__PURE__ */ jsx("select", {
 							value: everyDays,
-							onChange: (event) => setEveryDays(Number(event.target.value)),
+							onChange: (event: FieldEvent) => setEveryDays(Number(event.target.value)),
 							className: "ua-field font-normal",
 							children: DRIP_INTERVALS.map(([days, label]) => /* @__PURE__ */ jsx("option", {
 								value: days,
@@ -2620,7 +2655,7 @@ function DripsTab({ code, desk, ping }) {
 function PricingTab() {
 	return /* @__PURE__ */ jsx("div", {
 		className: "grid gap-5 lg:grid-cols-3",
-		children: [
+		children: ([
 			[
 				"Starter",
 				"$49",
@@ -2653,7 +2688,7 @@ function PricingTab() {
 					"Shown as Team to the operator"
 				]
 			]
-		].map(([name, price, setup, items]) => /* @__PURE__ */ jsxs("article", {
+		] as const).map(([name, price, setup, items]) => /* @__PURE__ */ jsxs("article", {
 			className: "ua-panel p-6",
 			children: [
 				/* @__PURE__ */ jsx("h2", {
@@ -2680,12 +2715,13 @@ function PricingTab() {
 		}, name))
 	});
 }
-function dripMailPreview(desk, design) {
+function dripMailPreview(desk: DeskData, design: string) {
 	const profile = readProfile(desk);
+	const chosenDesign: EletterDesign = ELETTER_DESIGNS.find((item) => item.id === design)?.id ?? "plum";
 	return renderEletter({
 		letter: {
 			kind: "eletter",
-			design,
+			design: chosenDesign,
 			kicker: "A note",
 			title: "Campaign preview",
 			subject: "Campaign preview",
@@ -2709,7 +2745,7 @@ function dripMailPreview(desk, design) {
 		mode: "preview"
 	});
 }
-function rememberWebsite(desk, own, url) {
+function rememberWebsite(desk: DeskData, own: boolean, url: string) {
 	const profile = readProfile(desk);
 	const website = own ? url : browserPublicUrl(`/a/${desk.slug}/site`);
 	localStorage.setItem(profileKey(desk.slug), JSON.stringify({
@@ -2718,7 +2754,7 @@ function rememberWebsite(desk, own, url) {
 		websiteShow: true
 	}));
 }
-function SettingsTab({ code, desk, ping, reload }) {
+function SettingsTab({ code, desk, ping, reload }: DeskTabProps) {
 	const [own, setOwn] = useState(false);
 	const [siteUrl, setSiteUrl] = useState("");
 	const [siteNote, setSiteNote] = useState("");
@@ -2793,7 +2829,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 					children: "The built-in page shows your name, title, and photo from Profile. Change the words, tabs, pictures, and links under Website."
 				}),
 				/* @__PURE__ */ jsxs("form", {
-					onSubmit: (event) => {
+					onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 						event.preventDefault();
 						saveAdvisorWebsite({ data: {
 							slug: desk.slug,
@@ -2817,7 +2853,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							children: [/* @__PURE__ */ jsx("input", {
 								type: "checkbox",
 								checked: own,
-								onChange: (event) => setOwn(event.target.checked)
+								onChange: (event: React.ChangeEvent<HTMLInputElement>) => setOwn(event.target.checked)
 							}), "Use my own website instead"]
 						}),
 						own ? /* @__PURE__ */ jsxs("label", {
@@ -2825,7 +2861,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							style: { color: "#5a6a7a" },
 							children: ["Your website link", /* @__PURE__ */ jsx("input", {
 								value: siteUrl,
-								onChange: (event) => setSiteUrl(event.target.value),
+								onChange: (event: FieldEvent) => setSiteUrl(event.target.value),
 								placeholder: "https://yourfirm.com",
 								className: "ua-field font-normal"
 							})]
@@ -2896,7 +2932,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 						style: { color: "#5a6a7a" },
 						children: ["Your name on the email", /* @__PURE__ */ jsx("input", {
 							value: fromName,
-							onChange: (event) => setFromName(event.target.value),
+							onChange: (event: FieldEvent) => setFromName(event.target.value),
 							className: "ua-field font-normal"
 						})]
 					}),
@@ -2960,7 +2996,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							style: { color: "#5a6a7a" },
 							children: ["Send a test to", /* @__PURE__ */ jsx("input", {
 								value: testTo,
-								onChange: (event) => setTestTo(event.target.value),
+								onChange: (event: FieldEvent) => setTestTo(event.target.value),
 								placeholder: savedFrom || "you@yourfirm.ca",
 								className: "ua-field font-normal"
 							})]
@@ -3032,7 +3068,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							}),
 							/* @__PURE__ */ jsxs("form", {
 								className: "mt-4",
-								onSubmit: (event) => {
+								onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 									event.preventDefault();
 									setBusy("app");
 									setMailNote("");
@@ -3058,7 +3094,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 										style: { color: "#5a6a7a" },
 										children: ["Application (client) ID", /* @__PURE__ */ jsx("input", {
 											value: clientId,
-											onChange: (event) => setClientId(event.target.value),
+											onChange: (event: FieldEvent) => setClientId(event.target.value),
 											className: "ua-field font-normal",
 											autoComplete: "off"
 										})]
@@ -3071,7 +3107,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 											children: [/* @__PURE__ */ jsx("input", {
 												type: showSecret ? "text" : "password",
 												value: clientSecret,
-												onChange: (event) => setClientSecret(event.target.value),
+												onChange: (event: FieldEvent) => setClientSecret(event.target.value),
 												className: "ua-field font-normal",
 												autoComplete: "off"
 											}), /* @__PURE__ */ jsx("button", {
@@ -3088,7 +3124,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 										children: ["Super admin password", /* @__PURE__ */ jsx("input", {
 											type: "password",
 											value: operatorCode,
-											onChange: (event) => setOperatorCode(event.target.value),
+											onChange: (event: FieldEvent) => setOperatorCode(event.target.value),
 											className: "ua-field font-normal",
 											autoComplete: "off"
 										})]
@@ -3106,7 +3142,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 						]
 					})
 				] }) : /* @__PURE__ */ jsxs("form", {
-					onSubmit: (event) => {
+					onSubmit: (event: React.FormEvent<HTMLFormElement>) => {
 						event.preventDefault();
 						setBusy("save");
 						const server = provider === "gmail" ? "smtp.gmail.com" : host;
@@ -3146,7 +3182,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							style: { color: "#5a6a7a" },
 							children: ["Your name on the email", /* @__PURE__ */ jsx("input", {
 								value: fromName,
-								onChange: (event) => setFromName(event.target.value),
+								onChange: (event: FieldEvent) => setFromName(event.target.value),
 								className: "ua-field font-normal"
 							})]
 						}),
@@ -3157,7 +3193,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 								type: "email",
 								required: true,
 								value: fromEmail,
-								onChange: (event) => setFromEmail(event.target.value),
+								onChange: (event: FieldEvent) => setFromEmail(event.target.value),
 								placeholder: "you@gmail.com",
 								className: "ua-field font-normal"
 							})]
@@ -3167,7 +3203,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 							style: { color: "#5a6a7a" },
 							children: ["Mail server", /* @__PURE__ */ jsx("input", {
 								value: host,
-								onChange: (event) => setHost(event.target.value),
+								onChange: (event: FieldEvent) => setHost(event.target.value),
 								placeholder: "smtp.yourfirm.com",
 								className: "ua-field font-normal"
 							})]
@@ -3180,7 +3216,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 								children: [/* @__PURE__ */ jsx("input", {
 									type: showPassword ? "text" : "password",
 									value: password,
-									onChange: (event) => setPassword(event.target.value),
+									onChange: (event: FieldEvent) => setPassword(event.target.value),
 									className: "ua-field font-normal",
 									autoComplete: "off"
 								}), /* @__PURE__ */ jsx("button", {
@@ -3206,7 +3242,7 @@ function SettingsTab({ code, desk, ping, reload }) {
 								style: { color: "#5a6a7a" },
 								children: ["Send a test to", /* @__PURE__ */ jsx("input", {
 									value: testTo,
-									onChange: (event) => setTestTo(event.target.value),
+									onChange: (event: FieldEvent) => setTestTo(event.target.value),
 									className: "ua-field font-normal"
 								})]
 							}), /* @__PURE__ */ jsx("button", {
@@ -3245,19 +3281,19 @@ function SettingsTab({ code, desk, ping, reload }) {
 		})
 	] });
 }
-function ProfileTab({ code, desk, ping }) {
+function ProfileTab({ code, desk, ping }: { code: string; desk: DeskData; ping: DeskPing }) {
 	const [profile, setProfile] = useState(() => readProfile(desk));
-	function set(key, value) {
+	function set<K extends keyof typeof profile>(key: K, value: (typeof profile)[K]) {
 		setProfile((current) => ({
 			...current,
 			[key]: value
 		}));
 	}
-	function save(event) {
+	function save(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		storeProfile(profile, true);
 	}
-	async function storeProfile(next, tell) {
+	async function storeProfile(next: typeof profile, tell: boolean) {
 		localStorage.setItem(profileKey(desk.slug), JSON.stringify(next));
 		const photo = next.photoOnWebsite && next.photo ? next.flipWebsite ? await turnPhoto(next.photo) : next.photo : "";
 		const result = await saveAdvisorIdentity({ data: {
@@ -3306,7 +3342,7 @@ function ProfileTab({ code, desk, ping }) {
 				className: "mb-4 grid gap-1 text-sm font-semibold",
 				children: ["Full name", /* @__PURE__ */ jsx("input", {
 					value: profile.name,
-					onChange: (event) => set("name", event.target.value),
+					onChange: (event: FieldEvent) => set("name", event.target.value),
 					className: "ua-field font-normal"
 				})]
 			}),
@@ -3314,7 +3350,7 @@ function ProfileTab({ code, desk, ping }) {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Title", /* @__PURE__ */ jsx("input", {
 					value: profile.title,
-					onChange: (event) => set("title", event.target.value),
+					onChange: (event: FieldEvent) => set("title", event.target.value),
 					placeholder: "Financial Advisor",
 					className: "ua-field font-normal"
 				})]
@@ -3324,14 +3360,14 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.titleShow,
-					onChange: (event) => set("titleShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("titleShow", event.target.checked)
 				}), " Show title on the website and e-cards"]
 			}),
 			/* @__PURE__ */ jsxs("label", {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Phone", /* @__PURE__ */ jsx("input", {
 					value: profile.phone,
-					onChange: (event) => set("phone", event.target.value),
+					onChange: (event: FieldEvent) => set("phone", event.target.value),
 					className: "ua-field font-normal"
 				})]
 			}),
@@ -3340,14 +3376,14 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.phoneShow,
-					onChange: (event) => set("phoneShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("phoneShow", event.target.checked)
 				}), " Show phone on the website"]
 			}),
 			/* @__PURE__ */ jsxs("label", {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Email", /* @__PURE__ */ jsx("input", {
 					value: profile.email,
-					onChange: (event) => set("email", event.target.value),
+					onChange: (event: FieldEvent) => set("email", event.target.value),
 					className: "ua-field font-normal"
 				})]
 			}),
@@ -3356,14 +3392,14 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.emailShow,
-					onChange: (event) => set("emailShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("emailShow", event.target.checked)
 				}), " Show email on the website"]
 			}),
 			/* @__PURE__ */ jsxs("label", {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Company name", /* @__PURE__ */ jsx("input", {
 					value: profile.company,
-					onChange: (event) => set("company", event.target.value),
+					onChange: (event: FieldEvent) => set("company", event.target.value),
 					className: "ua-field font-normal"
 				})]
 			}),
@@ -3372,7 +3408,7 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.companyShow,
-					onChange: (event) => set("companyShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("companyShow", event.target.checked)
 				}), " Show company name on the website"]
 			}),
 			/* @__PURE__ */ jsx("h3", {
@@ -3388,7 +3424,7 @@ function ProfileTab({ code, desk, ping }) {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["LinkedIn", /* @__PURE__ */ jsx("input", {
 					value: profile.linkedin,
-					onChange: (event) => set("linkedin", event.target.value),
+					onChange: (event: FieldEvent) => set("linkedin", event.target.value),
 					placeholder: "https://",
 					className: "ua-field font-normal"
 				})]
@@ -3398,14 +3434,14 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.linkedinShow,
-					onChange: (event) => set("linkedinShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("linkedinShow", event.target.checked)
 				}), " Show LinkedIn on newsletters"]
 			}),
 			/* @__PURE__ */ jsxs("label", {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Instagram", /* @__PURE__ */ jsx("input", {
 					value: profile.instagram,
-					onChange: (event) => set("instagram", event.target.value),
+					onChange: (event: FieldEvent) => set("instagram", event.target.value),
 					placeholder: "https://",
 					className: "ua-field font-normal"
 				})]
@@ -3415,14 +3451,14 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.instagramShow,
-					onChange: (event) => set("instagramShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("instagramShow", event.target.checked)
 				}), " Show Instagram on newsletters"]
 			}),
 			/* @__PURE__ */ jsxs("label", {
 				className: "mb-2 grid gap-1 text-sm font-semibold",
 				children: ["Facebook", /* @__PURE__ */ jsx("input", {
 					value: profile.facebook,
-					onChange: (event) => set("facebook", event.target.value),
+					onChange: (event: FieldEvent) => set("facebook", event.target.value),
 					placeholder: "https://",
 					className: "ua-field font-normal"
 				})]
@@ -3432,7 +3468,7 @@ function ProfileTab({ code, desk, ping }) {
 				children: [/* @__PURE__ */ jsx("input", {
 					type: "checkbox",
 					checked: profile.facebookShow,
-					onChange: (event) => set("facebookShow", event.target.checked)
+					onChange: (event: React.ChangeEvent<HTMLInputElement>) => set("facebookShow", event.target.checked)
 				}), " Show Facebook on newsletters"]
 			}),
 			/* @__PURE__ */ jsx(FileDrop, {
@@ -3443,7 +3479,7 @@ function ProfileTab({ code, desk, ping }) {
 				previewName: "Profile picture",
 				shape: "photo",
 				onClearPreview: () => set("photo", ""),
-				onFiles: (picked) => {
+				onFiles: (picked: File[]) => {
 					const file = picked[0];
 					if (!file) return;
 					readPhotoFile(file).then((photo) => set("photo", photo)).catch((reason) => {
@@ -3453,7 +3489,7 @@ function ProfileTab({ code, desk, ping }) {
 			}),
 			/* @__PURE__ */ jsx("div", {
 				className: "mb-4 grid gap-3",
-				children: [
+				children: ([
 					[
 						"flipWebsite",
 						"photoOnWebsite",
@@ -3478,7 +3514,7 @@ function ProfileTab({ code, desk, ping }) {
 						"E-letters",
 						"Show profile picture on e-letters"
 					]
-				].map(([flipKey, showKey, label, showLabel]) => /* @__PURE__ */ jsxs("div", {
+				] as const).map(([flipKey, showKey, label, showLabel]) => /* @__PURE__ */ jsxs("div", {
 					className: "flex flex-wrap items-center gap-3",
 					children: [
 						profile.photo && /* @__PURE__ */ jsx("img", {
@@ -3506,7 +3542,7 @@ function ProfileTab({ code, desk, ping }) {
 							children: [/* @__PURE__ */ jsx("input", {
 								type: "checkbox",
 								checked: profile[showKey],
-								onChange: (event) => {
+								onChange: (event: React.ChangeEvent<HTMLInputElement>) => {
 									const next = {
 										...profile,
 										[showKey]: event.target.checked
@@ -3527,11 +3563,11 @@ function ProfileTab({ code, desk, ping }) {
 		]
 	});
 }
-function profileKey(slug) {
+function profileKey(slug: string) {
 	return `ua-profile:${slug}`;
 }
-function readPhotoFile(file) {
-	return new Promise((resolve, reject) => {
+function readPhotoFile(file: File) {
+	return new Promise<string>((resolve, reject) => {
 		const url = URL.createObjectURL(file);
 		const img = new Image();
 		img.onload = () => {
@@ -3555,7 +3591,7 @@ function readPhotoFile(file) {
 		img.src = url;
 	});
 }
-function readProfile(desk) {
+function readProfile(desk: DeskData) {
 	const base = {
 		name: desk.advisorName,
 		title: desk.contactTitle || "",
@@ -3588,7 +3624,7 @@ function readProfile(desk) {
 	};
 	if (typeof window === "undefined") return base;
 	try {
-		const saved = JSON.parse(localStorage.getItem(profileKey(desk.slug)) || "null");
+		const saved: (Partial<typeof base> & { photoEnabled?: boolean }) | null = JSON.parse(localStorage.getItem(profileKey(desk.slug)) || "null");
 		if (!saved) return base;
 		const next = {
 			...base,

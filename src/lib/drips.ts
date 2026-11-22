@@ -37,9 +37,9 @@ export function packDrip(steps: DripStep[], everyDays: number, design = "plum") 
   return JSON.stringify({ steps: cleanSteps(steps), everyDays, design });
 }
 
-export function readDripPack(raw: string): { steps: DripStep[]; everyDays: number } | null {
+export function readDripPack(raw: string): { steps: DripStep[]; everyDays: number; design: string } | null {
   try {
-    const parsed = JSON.parse(raw) as { steps?: unknown; everyDays?: unknown };
+    const parsed = JSON.parse(raw) as { steps?: unknown; everyDays?: unknown; design?: unknown };
     const steps = cleanSteps(parsed.steps);
     const everyDays = DRIP_INTERVALS.some((item) => item[0] === Number(parsed.everyDays)) ? Number(parsed.everyDays) : 7;
     const design = typeof parsed.design === "string" ? parsed.design : "plum";

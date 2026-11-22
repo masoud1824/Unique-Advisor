@@ -2,8 +2,14 @@ import { chooseDropboxDocument, WORKFLOW_DOCUMENT, workflowPreviewText, workflow
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 
 type Listed = { name?: string; path_display?: string; ".tag"?: string; content_hash?: string; size?: number };
+type PdfOpenOptions = { data: Uint8Array; disableWorker?: boolean; isEvalSupported?: boolean };
 
 async function dropbox(token: string, url: string, arg: unknown, body?: Uint8Array) {
+  const payload: BodyInit | undefined = body
+    ? new Blob([body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer])
+    : url.includes("content.dropboxapi.com")
+      ? undefined
+      : JSON.stringify(arg);
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -12,7 +18,7 @@ async function dropbox(token: string, url: string, arg: unknown, body?: Uint8Arr
         ? { "Dropbox-API-Arg": JSON.stringify(arg), "Content-Type": "application/octet-stream" }
         : { "Content-Type": "application/json" }),
     },
-    body: body || (url.includes("content.dropboxapi.com") ? undefined : JSON.stringify(arg)),
+    body: payload,
   });
   const bytes = new Uint8Array(await response.arrayBuffer());
   let json: { entries?: Listed[]; path_display?: string; name?: string; content_hash?: string; size?: number } | null = null;
@@ -42,7 +48,8 @@ export async function readSelectedWorkflow(token: string, title = WORKFLOW_DOCUM
   const downloaded = await dropbox(token, "https://content.dropboxapi.com/2/files/download", { path: choice.file.path });
   if (downloaded.status !== 200) return { ok: false as const, error: `Dropbox did not return ${choice.file.name}. Nothing was sent.`, sent: false as const };
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc = await getDocument({ data: downloaded.bytes.slice(0), disableWorker: true, isEvalSupported: false }).promise;
+  const pdfOptions: PdfOpenOptions = { data: downloaded.bytes.slice(0), disableWorker: true, isEvalSupported: false };
+  const doc = await getDocument(pdfOptions).promise;
   const page = await doc.getPage(1);
   const content = await page.getTextContent();
   const text = content.items.map((item) => ("str" in item ? item.str : "")).join(" ");

@@ -35,9 +35,9 @@ export const Route = createFileRoute("/api/acceptance-check")({
         const sql = await getSql();
         const beforeSent = Number((await sql`select count(*)::int as n from messages where advisor_id = 34`)[0]?.n || 0);
         const beforeLetters = Number((await sql`select count(*)::int as n from saved_letters where advisor_id = 34`)[0]?.n || 0);
-        const chat = (await sql`select chat_id from assistant_messages where advisor_id = 34 order by id desc limit 1`)[0];
+        const chat = (await sql<{ chat_id: string }>`select chat_id from assistant_messages where advisor_id = 34 order by id desc limit 1`)[0];
         const chatId = Number(chat?.chat_id || 0);
-        const turns = [];
+        const turns: Array<{ phrase: string; asks: unknown; sent: unknown; reply: unknown } | { phrase: string; error: unknown }> = [];
         for (const phrase of PHRASES) {
           try {
             const result = await runDeskTurn(34, "masoud-zangeneh-2", "", chatId, phrase);
@@ -52,11 +52,11 @@ export const Route = createFileRoute("/api/acceptance-check")({
             turns.push({ phrase, error: error instanceof Error ? error.message : String(error) });
           }
         }
-        const newsletter = unpackNewsletter(String((await sql`select body from saved_letters where advisor_id = 34 and title = ${"Test Newsletter"} order by id desc limit 1`)[0]?.body || ""));
-        const letterRow = (await sql`select id, body from saved_letters where advisor_id = 34 and title = ${"Acceptance — Retirement Note"} limit 1`)[0];
+        const newsletter = unpackNewsletter(String((await sql<{ body: string }>`select body from saved_letters where advisor_id = 34 and title = ${"Test Newsletter"} order by id desc limit 1`)[0]?.body || ""));
+        const letterRow = (await sql<{ id: number; body: string }>`select id, body from saved_letters where advisor_id = 34 and title = ${"Acceptance — Retirement Note"} limit 1`)[0];
         const letter = unpackEletter(String(letterRow?.body || ""));
-        const campaign = (await sql`select name, active from drip_campaigns where advisor_id = 34 and name = ${"Acceptance — Welcome Drip"} limit 1`)[0];
-        const contacts = await sql`select full_name from contacts where advisor_id = 34 and tags like ${"%Acceptance%"} order by full_name`;
+        const campaign = (await sql<{ name: string; active: string | boolean }>`select name, active from drip_campaigns where advisor_id = 34 and name = ${"Acceptance — Welcome Drip"} limit 1`)[0];
+        const contacts = await sql<{ full_name: string }>`select full_name from contacts where advisor_id = 34 and tags like ${"%Acceptance%"} order by full_name`;
         const sent = Number((await sql`select count(*)::int as n from messages where advisor_id = 34`)[0]?.n || 0);
         const letters = Number((await sql`select count(*)::int as n from saved_letters where advisor_id = 34`)[0]?.n || 0);
         const snapshot = {

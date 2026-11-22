@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { accessToken } from "@/lib/advisor-links";
-import { accessTokenForAdvisor, graphMe } from "@/lib/microsoft-mail";
+import { accessTokenForAdvisor, graphConversationMessagesUrl, graphMe } from "@/lib/microsoft-mail";
 import { chooseDropboxDocument, WORKFLOW_DOCUMENT } from "@/lib/signature-workflow-document";
 import { reviewedTestDecision, DOCUMENT_MAIL, REVIEWED_ATTACHMENT, noticesToCreate } from "@/lib/document-mail";
 import { listWorkflowFolder, readSelectedWorkflow } from "@/lib/signature-workflow-live";
@@ -231,8 +231,7 @@ export async function checkDocumentReplies(advisorId: number, io?: Parameters<ty
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "This advisor's mailbox is not connected." };
   }
-  const filter = `conversationId eq '${thread.conversation_id.replace(/'/g, "''")}'`;
-  const response = await fetch(`https://graph.microsoft.com/v1.0/me/messages?$filter=${encodeURIComponent(filter)}&$select=id,conversationId,from`, {
+  const response = await fetch(graphConversationMessagesUrl(thread.conversation_id), {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) return { ok: false as const, error: "The sent thread could not be read. No other mail was opened." };

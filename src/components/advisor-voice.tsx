@@ -2,6 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { loadAdvisorVoice, previewAdvisorVoice, saveAdvisorVoice } from "@/lib/assistant.functions";
 import { isPlayableMp3, OPENAI_VOICES } from "@/lib/openai-voices";
 
+type VoicePreview = { ok: true; audio: string; mime: string } | { ok: false; error: string };
+
+function readVoicePreview(value: unknown): VoicePreview {
+  if (!value || typeof value !== "object") return { ok: false, error: "Preview did not return audio." };
+  const record = value as Record<string, unknown>;
+  if (record.ok === true && typeof record.audio === "string" && record.audio.length > 0) {
+    return { ok: true, audio: record.audio, mime: typeof record.mime === "string" ? record.mime : "audio/mpeg" };
+  }
+  return { ok: false, error: typeof record.error === "string" && record.error ? record.error : "Preview did not return audio." };
+}
+
+function readSavedVoice(value: unknown) {
+  if (!value || typeof value !== "object") return "";
+  const record = value as Record<string, unknown>;
+  return record.ok === true && typeof record.voice === "string" ? record.voice : "";
+}
+
 function clipUrl(audio: string) {
   const binary = atob(audio);
   const bytes = new Uint8Array(binary.length);
@@ -20,7 +37,8 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
 
   useEffect(() => {
     void loadAdvisorVoice({ data: { slug, code } }).then((result) => {
-      if (result?.ok) setCurrent(result.voice);
+      const voice = readSavedVoice(result);
+      if (voice) setCurrent(voice);
     }).catch(() => setNote("The saved voice could not be loaded."));
   }, [slug, code]);
 
@@ -29,12 +47,12 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
     setBusy(voice);
     const audio = players.current[voice];
     try {
-      const result = await previewAdvisorVoice({ data: { slug, code, voice } });
-      if (!result?.ok || !("audio" in result) || !result.audio) {
-        setNote(result && "error" in result && result.error ? result.error : "Preview did not return audio.");
+      const result = readVoicePreview(await previewAdvisorVoice({ data: { slug, code, voice } }));
+      if (!result.ok) {
+        setNote(result.error);
         return;
       }
-      if (result.mime && !result.mime.includes("audio") && !result.mime.includes("mpeg")) {
+      if (!result.mime.includes("audio") && !result.mime.includes("mpeg")) {
         setNote(`Preview returned ${result.mime} instead of audio.`);
         return;
       }

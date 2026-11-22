@@ -67,7 +67,8 @@ export async function readAssistantClient(token: string, clientId: string) {
 
 export async function visibleEdition(bytes: Uint8Array) {
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc = await getDocument({ data: bytes.slice(0), disableWorker: true, isEvalSupported: false }).promise;
+  const pdfOptions: { data: Uint8Array; disableWorker?: boolean; isEvalSupported?: boolean } = { data: bytes.slice(0), disableWorker: true, isEvalSupported: false };
+  const doc = await getDocument(pdfOptions).promise;
   const pages = [1, Math.min(3, doc.numPages), doc.numPages];
   const seen = [];
   for (const pageNo of [...new Set(pages)]) {
@@ -84,7 +85,8 @@ export async function visibleEdition(bytes: Uint8Array) {
 
 export async function pageBox(bytes: Uint8Array, pageNo: number) {
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const doc = await getDocument({ data: bytes.slice(0), disableWorker: true, isEvalSupported: false }).promise;
+  const pdfOptions: { data: Uint8Array; disableWorker?: boolean; isEvalSupported?: boolean } = { data: bytes.slice(0), disableWorker: true, isEvalSupported: false };
+  const doc = await getDocument(pdfOptions).promise;
   const page = await doc.getPage(Math.min(doc.numPages, Math.max(1, pageNo)));
   const view = page.getViewport({ scale: 1 });
   return { width: view.width, height: view.height, pages: doc.numPages };

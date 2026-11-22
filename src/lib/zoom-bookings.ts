@@ -401,7 +401,7 @@ async function placePending(advisorId: number, pending: PendingBooking) {
     createMeeting: async () => {
       await bookLog(advisorId, "confirm", `${pending.contact_name} ${pending.label}`);
       const zoomToken = await linkAccessToken(advisorId, "zoom");
-      if (!zoomToken) return { ok: false, error: "Zoom is not signed in. Press Sign in with Zoom, then ask again. Not booked." };
+      if (!zoomToken) return { ok: false as const, error: "Zoom is not signed in. Press Sign in with Zoom, then ask again. Not booked." };
       let outlookToken: string | null = null;
       try { outlookToken = await accessToken(advisorId, "outlook_calendar"); } catch { outlookToken = null; }
       if (!outlookToken) {
@@ -443,9 +443,9 @@ async function placePending(advisorId: number, pending: PendingBooking) {
           passcode: detail.passcode, icsToken: detail.icsToken,
         }),
       });
-      if ("invitation" in result && result.invitation === "failed") return { ok: false, error: result.error };
-      if (!result.ok) return { ok: false, unknown: true, error: result.error };
-      return { ok: true };
+      if ("invitation" in result && result.invitation === "failed") return { ok: false as const, error: result.error };
+      if (!result.ok) return { ok: false as const, unknown: true, error: result.error };
+      return { ok: true as const };
     },
     saveBooking: async (booking) => { invites.set(booking.id, booking.invitation); },
   });

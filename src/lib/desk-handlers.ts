@@ -136,7 +136,7 @@ export async function sendDripStep(row: { name?: string; steps?: string; tag?: s
   contacts: DisposableContact[];
   outcomes: Record<string, RecipientOutcome>;
   saveOutcome: (email: string, outcome: RecipientOutcome) => Promise<void>;
-  send: (contact: DisposableContact) => Promise<{ ok: boolean; unknown?: boolean; error?: string }>;
+  send: (contact: DisposableContact, step?: { title: string; body: string }) => Promise<{ ok: boolean; unknown?: boolean; error?: string }>;
 }) {
   let steps: Array<{ title?: string; body?: string }> = [];
   try { steps = JSON.parse(String(row.steps || "[]")); } catch { steps = []; }
@@ -174,7 +174,7 @@ export async function sendDripStep(row: { name?: string; steps?: string; tag?: s
     io.outcomes[contact.email.toLowerCase()] = "unknown";
     calls += 1;
     try {
-      const result = await io.send(contact);
+      const result = await io.send(contact, { title: String(step.title || ""), body: String(step.body || "") });
       if (result.unknown) {
         unknown.push(contact.email);
         continue;

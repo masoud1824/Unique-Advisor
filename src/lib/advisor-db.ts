@@ -267,7 +267,7 @@ export async function gateOperator(code: string): Promise<{ ok: true } | { ok: f
     return { ok: false, error: "That access code is not right." };
   }
   const sql = await getSql();
-  const rows = await sql<{ code_hash: string | null; code_is_default: boolean }>`
+  const rows = await sql<{ code_hash: string | null; code_is_default: boolean | string | number }>`
     select code_hash, code_is_default from operators where id = 1
   `;
   const row = rows[0];
@@ -293,7 +293,7 @@ async function previewCookieOpens() {
 export async function operatorIsDefault() {
   await ready();
   const sql = await getSql();
-  const rows = await sql<{ code_is_default: boolean }>`
+  const rows = await sql<{ code_is_default: boolean | string | number }>`
     select code_is_default from operators where id = 1
   `;
   const value = rows[0]?.code_is_default;
@@ -310,7 +310,7 @@ export async function enforcePreviewOperator() {
     `;
     return;
   }
-  const rows = await sql<{ code_hash: string | null; code_is_default: boolean }>`
+  const rows = await sql<{ code_hash: string | null; code_is_default: boolean | string | number }>`
     select code_hash, code_is_default from operators where id = 1
   `;
   const row = rows[0];

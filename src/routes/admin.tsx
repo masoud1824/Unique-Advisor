@@ -145,6 +145,7 @@ function Admin() {
   const [dropboxClientId, setDropboxClientId] = useState("");
   const [dropboxSecret, setDropboxSecret] = useState("");
   const [dropboxReady, setDropboxReady] = useState(false);
+  const [savedApp, setSavedApp] = useState("");
   const [signClientId, setSignClientId] = useState("");
   const [signSecret, setSignSecret] = useState("");
   const [signApiKey, setSignApiKey] = useState("");

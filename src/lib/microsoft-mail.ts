@@ -312,6 +312,10 @@ export function microsoftCalendarReadOnly(scope: string) {
   return /calendars\.read(?!write)/i.test(scope) && !/mail\./i.test(scope);
 }
 
+import { graphConversationMessagesUrl, graphSendMailBody } from "./graph-mail.ts";
+
+export { graphConversationMessagesUrl, graphSendMailBody };
+
 export async function graphSendMail(input: {
   accessToken: string;
   to: string;

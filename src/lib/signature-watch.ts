@@ -273,7 +273,7 @@ export async function checkAdvisorSignatures(advisorId: number) {
   if (!token) return { ok: false as const, error: "Dropbox Sign is not connected for this advisor. I did not check a request." };
   const rows = await pendingRows(advisorId);
   if (!rows.length) return { ok: true as const, detail: "No signature request is waiting. Dropbox Sign was not asked for a status.", results: [] as const };
-  const results = [];
+  const results: Array<Awaited<ReturnType<typeof checkRow>>> = [];
   for (const row of rows) {
     const result = await checkRow(row);
     results.push(result);

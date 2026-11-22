@@ -192,15 +192,30 @@ export async function uploadToDropbox(token: string, folder: string, name: strin
   if (!token) return { ok: false as const, error: "Dropbox is not connected. The signed file was not saved.", filed: false };
   if (!folder.startsWith("/")) return { ok: false as const, error: "The client folder path is missing. The signed file was not saved.", filed: false };
   const path = `${folder.replace(/\/$/, "")}/${name}`;
-  const response = await fetchImpl("https://content.dropboxapi.com/2/files/upload", {
+  let response: Response;
+  try {
+    response = await fetchImpl("https://content.dropboxapi.com/2/files/upload", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/octet-stream",
       "Dropbox-API-Arg": JSON.stringify({ path, mode: "add", autorename: true }),
     },
-    body: bytes,
+    body: new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]),
   });
-  if (!response.ok) return { ok: false as const, error: "Dropbox did not save the signed file. The signature request was not sent again.", filed: false };
+  } catch {
+    return { ok: false as const, error: "Dropbox did not answer. The file was not uploaded again.", filed: false as const, unknown: true as const };
+  }
+  if (!response.ok) {
+    const unknown = response.status === 408 || response.status === 429 || response.status >= 500;
+    return {
+      ok: false as const,
+      error: unknown
+        ? "Dropbox did not confirm the upload. The file was not uploaded again."
+        : "Dropbox did not save the signed file. The signature request was not sent again.",
+      filed: false as const,
+      unknown,
+    };
+  }
   return { ok: true as const, path, filed: true };
 }

@@ -19,7 +19,7 @@ describe("model transcript", () => {
     const body = JSON.parse(JSON.stringify(messages));
     assert.equal(body[6].role, "assistant");
     assert.equal("providerFacts" in body[6], false);
-    assert.equal(body.every((item) => typeof item.role === "string" && item.role.length > 0), true);
+    assert.equal(body.every((item: { role?: string }) => typeof item.role === "string" && item.role.length > 0), true);
   });
 
   it("shows a reference to the advisor and keeps the provider detail free of keys", () => {

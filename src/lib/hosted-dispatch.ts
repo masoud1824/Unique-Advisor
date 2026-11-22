@@ -14,17 +14,46 @@ const LEASE_MS = 2 * 60 * 1000;
 
 export type ProviderResult = "accepted" | "failed" | "unknown";
 
+export type ReplyRead = ThreadMessage[] | { blocked: string } | { unknown: true };
+
 export type DispatchProviders = {
-  birthdayDeliver?: (person: BirthdayPerson, card: { text: string }) => Promise<{ status: ProviderResult; providerId: string }>;
-  dripSend?: (contact: { id: number; email: string; full_name: string }) => Promise<{ ok: boolean; unknown?: boolean; error?: string }>;
-  listReplies?: (thread: { advisorId: number; conversationId: string; sentMessageId: string; sender: string }) => Promise<ThreadMessage[]>;
-  signatureStatus?: (row: { advisorId: number; requestId: string }) => Promise<{ outcome: "waiting" | "completed" | "declined" | ProviderResult; providerId: string }>;
-  fileSigned?: (row: { advisorId: number; requestId: string; folder: string }) => Promise<{ outcome: ProviderResult; path?: string }>;
+  birthdayDeliver?: (
+    person: BirthdayPerson,
+    card: { text: string },
+    context: { advisorId: number },
+  ) => Promise<{ status: ProviderResult; providerId: string; detail?: string }>;
+  dripSend?: (input: {
+    advisorId: number;
+    id: number;
+    email: string;
+    full_name: string;
+    subject: string;
+    body: string;
+  }) => Promise<{ ok: boolean; unknown?: boolean; error?: string }>;
+  listReplies?: (thread: { advisorId: number; conversationId: string; sentMessageId: string; sender: string }) => Promise<ReplyRead>;
+  signatureStatus?: (row: { advisorId: number; requestId: string }) => Promise<{
+    outcome: "waiting" | "completed" | "declined" | "blocked" | ProviderResult;
+    providerId: string;
+    detail?: string;
+  }>;
+  fileSigned?: (row: { advisorId: number; requestId: string; folder: string }) => Promise<{
+    outcome: ProviderResult | "blocked";
+    path?: string;
+    detail?: string;
+  }>;
 };
 
 type JobRow = { job_key: string; attempt: number; status: string; provider_id: string };
 
 export async function ensureDispatchTables(sql: QuerySql) {
+  await sql.query(`create table if not exists hosted_job_runs (
+    run_key text primary key,
+    kind text not null,
+    slot text not null,
+    status text not null,
+    detail text not null default '',
+    created_at timestamptz not null default now()
+  )`);
   await sql.query(`create table if not exists hosted_jobs (
     job_key text primary key,
     kind text not null,
@@ -191,9 +220,16 @@ async function dispatchDrips(sql: QuerySql, now: Date, stop: string, providers: 
               [id, email.toLowerCase(), status],
             );
           },
-          send: async (contact) => {
+          send: async (contact, step) => {
             calls += 1;
-            return send({ id: Number(contact.id), email: contact.email, full_name: contact.full_name });
+            return send({
+              advisorId,
+              id: Number(contact.id),
+              email: contact.email,
+              full_name: contact.full_name,
+              subject: String(step?.title || row.name || "Note"),
+              body: String(step?.body || ""),
+            });
           },
         },
       );
@@ -240,9 +276,9 @@ async function dispatchReplies(sql: QuerySql, now: Date, stop: string, providers
       await finishJob(sql, scanKey, "failed", stop || "No mailbox reader is configured. Nothing was read.");
       continue;
     }
-    let messages: ThreadMessage[] = [];
+    let read: Awaited<ReturnType<NonNullable<DispatchProviders["listReplies"]>>>;
     try {
-      messages = await providers.listReplies({
+      read = await providers.listReplies({
         advisorId,
         conversationId: thread.conversation_id,
         sentMessageId: thread.sent_message_id,
@@ -252,6 +288,15 @@ async function dispatchReplies(sql: QuerySql, now: Date, stop: string, providers
       await finishJob(sql, scanKey, "unknown", "mailbox read ended before a result was stored");
       continue;
     }
+    if (!Array.isArray(read)) {
+      if ("unknown" in read && read.unknown) {
+        await finishJob(sql, scanKey, "unknown", "mailbox read ended before a result was stored");
+      } else {
+        await finishJob(sql, scanKey, "failed", "blocked" in read ? read.blocked : "No mailbox reader is configured. Nothing was read.");
+      }
+      continue;
+    }
+    const messages = read;
     const seen = await sql.query<{ message_id: string }>(
       "select message_id from document_mail_replies where advisor_id = $1",
       [advisorId],
@@ -321,7 +366,7 @@ async function dispatchSignatures(sql: QuerySql, now: Date, stop: string, provid
         await finishJob(sql, key, "failed", stop || "No Dropbox filing provider is configured. Nothing was uploaded.");
         continue;
       }
-      let saved: { outcome: ProviderResult; path?: string };
+      let saved: { outcome: ProviderResult | "blocked"; path?: string; detail?: string };
       try {
         saved = await providers.fileSigned({ advisorId, requestId, folder });
       } catch {
@@ -335,9 +380,11 @@ async function dispatchSignatures(sql: QuerySql, now: Date, stop: string, provid
         await finishJob(sql, key, "accepted", "signed file stored in Dropbox", saved.path);
         filed += 1;
       } else if (saved.outcome === "unknown") {
-        await finishJob(sql, key, "unknown", "Dropbox outcome unknown; the file was not uploaded again");
+        await finishJob(sql, key, "unknown", saved.detail || "Dropbox outcome unknown; the file was not uploaded again");
+      } else if (saved.outcome === "blocked") {
+        await finishJob(sql, key, "failed", saved.detail || "Dropbox filing is not authorized for this advisor. Nothing was uploaded.");
       } else {
-        await finishJob(sql, key, "failed", "Dropbox did not accept the signed file");
+        await finishJob(sql, key, "failed", saved.detail || "Dropbox did not accept the signed file");
       }
       continue;
     }
@@ -361,6 +408,10 @@ async function dispatchSignatures(sql: QuerySql, now: Date, stop: string, provid
     const fresh = await recordSignatureEvent(sql, advisorId, requestId, eventHash, status.outcome);
     if (!fresh && status.outcome !== "completed") {
       await reopenJob(sql, key, new Date(now.getTime() + 15 * 60 * 1000), "duplicate callback ignored");
+      continue;
+    }
+    if (status.outcome === "blocked") {
+      await finishJob(sql, key, "failed", status.detail || "Dropbox Sign is not connected for this advisor. Nothing was sent.", status.providerId);
       continue;
     }
     if (status.outcome === "unknown") {

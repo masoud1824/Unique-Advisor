@@ -285,7 +285,7 @@ export function setupPrice(plan: PlanId, kind?: string, amount?: number, applies
 
 export function discountLabel(kind?: string, amount?: number, applies?: string, monthlyPercent?: number, setupPercent?: number) {
   if ((monthlyPercent != null && monthlyPercent >= 0) || (setupPercent != null && setupPercent >= 0)) {
-    const parts = [];
+    const parts: Array<unknown> = [];
     if ((monthlyPercent || 0) > 0) parts.push(`${monthlyPercent}% off the monthly fee`);
     if ((setupPercent || 0) > 0) parts.push(`${setupPercent}% off the setup fee`);
     return parts.join(" and ");

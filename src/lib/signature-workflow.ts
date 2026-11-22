@@ -73,16 +73,20 @@ export function chooseSignatureWorkflow(input: {
   if (requestedStore && serviceLevel(STORAGE_NAMES[requestedStore as StorageService] || requestedStore) === "unsupported") {
     return { ok: false as const, error: `${STORAGE_NAMES[requestedStore as StorageService] || requestedStore} is not a filing destination. I did not use another storage provider.` };
   }
-  const signatures = input.connectedSignatures.filter((item) => item === "dropbox_sign" || item === "docusign" || item === "adobe_sign");
-  const stores = input.connectedStores.filter((item) => item === "dropbox" || item === "box" || item === "google_drive" || item === "onedrive");
-  if (requestedSignature && !signatures.includes(requestedSignature)) {
+  const signatures = input.connectedSignatures.filter((item): item is SignatureService => item === "dropbox_sign" || item === "docusign" || item === "adobe_sign");
+  const stores = input.connectedStores.filter((item): item is StorageService => item === "dropbox" || item === "box" || item === "google_drive" || item === "onedrive");
+  const signatureRequest = (signatures as readonly string[]).includes(requestedSignature) ? requestedSignature as SignatureService : "";
+  const storageRequest = (stores as readonly string[]).includes(requestedStore) ? requestedStore as StorageService : "";
+  if (requestedSignature && !signatureRequest) {
     return { ok: false as const, error: `${SIGNATURE_NAMES[requestedSignature as SignatureService] || requestedSignature} is not connected for this advisor. I did not use another signature provider.` };
   }
-  if (requestedStore && !stores.includes(requestedStore)) {
+  if (requestedStore && !storageRequest) {
     return { ok: false as const, error: `${STORAGE_NAMES[requestedStore as StorageService] || requestedStore} is not connected for this advisor. I did not use another storage provider.` };
   }
-  const signature = requestedSignature || (signatures.includes(input.preferredSignature || "") ? input.preferredSignature : signatures.length === 1 ? signatures[0] : "");
-  const storage = requestedStore || (stores.includes(input.preferredStore || "") ? input.preferredStore : stores.length === 1 ? stores[0] : "");
+  const preferredSignature = input.preferredSignature && signatures.some((item) => item === input.preferredSignature) ? input.preferredSignature as SignatureService : "";
+  const preferredStore = input.preferredStore && stores.some((item) => item === input.preferredStore) ? input.preferredStore as StorageService : "";
+  const signature = signatureRequest || preferredSignature || (signatures.length === 1 ? signatures[0] : "");
+  const storage = storageRequest || preferredStore || (stores.length === 1 ? stores[0] : "");
   if (!signature) return { ok: false as const, ask: true as const, error: `Which signature provider should I use? ${signatures.map((item) => SIGNATURE_NAMES[item as SignatureService] || item).join(", ") || "None is connected."}` };
   if (!storage) return { ok: false as const, ask: true as const, error: `Which storage destination should I use? ${stores.map((item) => STORAGE_NAMES[item as StorageService] || item).join(", ") || "None is connected."}` };
   const folder = String(input.folder || "");

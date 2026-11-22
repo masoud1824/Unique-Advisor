@@ -98,13 +98,24 @@ export type SourcePerson = {
   lastContact: string;
 };
 
+type ListedPerson = {
+  name: string;
+  email: string;
+  phone: string;
+  dob: string;
+  age: number | null;
+  products: string[];
+  productNote: string;
+  lastContact: string;
+};
+
 export function reportFromPeople(people: SourcePerson[]) {
   const now = new Date();
   const day = 86400000;
-  const needsContact = [];
-  const kycDue = [];
-  const kycDone = [];
-  const opportunities = [];
+  const needsContact: Array<ListedPerson & { reason: string }> = [];
+  const kycDue: Array<ListedPerson & { kycOn: string; reason: string }> = [];
+  const kycDone: Array<{ name: string; email: string; kycOn: string }> = [];
+  const opportunities: Array<ListedPerson & { ideas: string[] }> = [];
   for (const row of people) {
     const products = cleanProductIds(row.products);
     const age = ageOf(row.dob || "", now);
@@ -267,7 +278,7 @@ function parseCsv(text: string) {
 
 export function parseClientFile(text: string): { ok: true; people: SourcePerson[] } | { ok: false; error: string } {
   const raw = text.trim();
-  if (!raw) return { ok: false, error: "That Dropbox file is empty." };
+  if (!raw) return { ok: false as const, error: "That Dropbox file is empty." };
   let records: Record<string, unknown>[] = [];
   if (raw.startsWith("[") || raw.startsWith("{")) {
     try {
@@ -279,11 +290,11 @@ export function parseClientFile(text: string): { ok: true; people: SourcePerson[
         return record;
       });
     } catch {
-      return { ok: false, error: "That Dropbox file is not valid JSON." };
+      return { ok: false as const, error: "That Dropbox file is not valid JSON." };
     }
   } else {
     const table = parseCsv(raw);
-    if (table.length < 2) return { ok: false, error: "The CSV needs a header row and at least one client." };
+    if (table.length < 2) return { ok: false as const, error: "The CSV needs a header row and at least one client." };
     const headers = table[0].map((item) => item.trim().toLowerCase());
     records = table.slice(1).map((line) => {
       const record: Record<string, unknown> = {};
@@ -294,8 +305,8 @@ export function parseClientFile(text: string): { ok: true; people: SourcePerson[
     });
   }
   const people = records.map(personFromRecord).filter((item): item is SourcePerson => Boolean(item)).slice(0, 200);
-  if (people.length === 0) return { ok: false, error: "No clients were found. Use columns name, email, phone, dob, kyc, products, and last contact." };
-  return { ok: true, people };
+  if (people.length === 0) return { ok: false as const, error: "No clients were found. Use columns name, email, phone, dob, kyc, products, and last contact." };
+  return { ok: true as const, people };
 }
 
 export async function contactHistory(advisorId: number, contactId: number) {

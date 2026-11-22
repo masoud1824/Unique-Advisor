@@ -7,6 +7,6 @@ This is application source. It is not a backup of the published database, and it
 3. Run `npm install`.
 4. Apply SQL in `migrations/` only to a database you are allowed to change. `npm run db:migrate` skips itself when `DATABASE_URL` is unset. `npm run build` does not migrate. A production database (`UA_HOST_ENV=production`) also requires `UA_MIGRATE_APPROVED=1`.
 5. `npm test` runs the script and auth/desk unit tests. `node scripts/release/validate.mjs` is the isolated release check and refuses to run while `DATABASE_URL` is set.
-6. Independent hosting is described in [HOSTING.md](HOSTING.md). Do not point this checkout at the published site or at a production database.
+6. Independent hosting is described in [HOSTING.md](HOSTING.md). The staging startup steps are in [STAGING-RUNBOOK.md](STAGING-RUNBOOK.md), and the numbered preview checks are in [ACCEPTANCE-CHECKLIST.md](ACCEPTANCE-CHECKLIST.md). Do not point this checkout at the published site or at a production database.
 
 Outbound mail, provider calls, and uploads stay off when `UA_OUTBOUND_BLOCK=1`.

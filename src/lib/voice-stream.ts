@@ -71,7 +71,7 @@ export function assembleModelStream(raw: string) {
 export type ModelMessage = {
   content?: string | null;
   tool_calls?: Array<{ id?: string; type?: string; function?: { name?: string; arguments?: string } }>;
-  providerFacts?: ProviderCall;
+  providerFacts?: Partial<ProviderCall>;
 };
 
 export function assistantHistoryMessage(message: ModelMessage) {

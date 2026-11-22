@@ -69,10 +69,14 @@ const SETUP = {
     label: "Adobe Acrobat Sign"
   }
 };
-function linkLabel(provider) {
-  return SETUP[provider]?.label ?? provider;
+function setupFor(provider: string) {
+  if (!Object.prototype.hasOwnProperty.call(SETUP, provider)) return undefined;
+  return SETUP[provider as keyof typeof SETUP];
 }
-function isLinkProvider(value) {
+function linkLabel(provider: string) {
+  return setupFor(provider)?.label ?? provider;
+}
+function isLinkProvider(value: string) {
   return LINK_PROVIDERS.includes(value);
 }
 async function ensureLinkTables() {
@@ -117,7 +121,7 @@ async function ensureLinkTables() {
 async function linkAppStatus() {
   await ensureLinkTables();
   const microsoft = await loadMicrosoftConfig();
-  const rows = await (await getSql())`select provider, client_id, client_secret, api_key from link_apps`;
+  const rows = await (await getSql())<{ provider: string; client_id: string; client_secret: string; api_key: string }>`select provider, client_id, client_secret, api_key from link_apps`;
   const saved = /* @__PURE__ */ new Map();
   for (const row of rows) {
     let secretMask = "";
@@ -142,7 +146,7 @@ async function linkAppStatus() {
   }
   return LINK_PROVIDERS.map((provider) => ({
     provider,
-    label: SETUP[provider].label,
+    label: setupFor(provider)?.label ?? provider,
     configured: provider === "outlook_calendar"
       ? Boolean(microsoft)
       : provider === "dropbox_sign"
@@ -154,7 +158,7 @@ async function linkAppStatus() {
     hasApiKey: Boolean(saved.get(provider)?.hasApiKey)
   }));
 }
-async function saveLinkApp(provider, clientId, clientSecret, apiKey = "") {
+async function saveLinkApp(provider: string, clientId: string, clientSecret: string, apiKey = "") {
   if (provider === "outlook_calendar") return;
   await ensureLinkTables();
   const sealed = await sealSecret(clientSecret);
@@ -168,10 +172,10 @@ async function saveLinkApp(provider, clientId, clientSecret, apiKey = "") {
       api_key = case when excluded.api_key = '' then link_apps.api_key else excluded.api_key end
   `;
 }
-async function appConfig(provider) {
+async function appConfig(provider: string) {
   if (provider === "outlook_calendar") return loadMicrosoftConfig();
   await ensureLinkTables();
-  const rows = await (await getSql())`
+  const rows = await (await getSql())<{ client_id: string; client_secret: string }>`
     select client_id, client_secret from link_apps where provider = ${provider}
   `;
   const row = rows[0];
@@ -180,7 +184,7 @@ async function appConfig(provider) {
   if (!clientSecret) return null;
   return { clientId: row.client_id, clientSecret };
 }
-function assertLinkCallback(candidate, request) {
+function assertLinkCallback(candidate: string, request: Request) {
   let url;
   try {
     url = new URL(candidate);
@@ -209,8 +213,9 @@ function assertLinkCallback(candidate, request) {
   url.hash = "";
   return url.toString();
 }
-function linkAuthorizeUrl(input) {
-  const spec = SETUP[input.provider];
+function linkAuthorizeUrl(input: { provider: string; clientId: string; redirectUri: string; state: string; challenge?: string }) {
+  const spec = setupFor(input.provider);
+  if (!spec) throw new Error("That connection is not available.");
   const url = new URL(spec.auth);
   url.searchParams.set("client_id", input.clientId);
   url.searchParams.set("redirect_uri", input.redirectUri);
@@ -218,7 +223,7 @@ function linkAuthorizeUrl(input) {
   url.searchParams.set("state", input.state);
   if (input.provider !== "dropbox_sign") url.searchParams.set("scope", spec.scope);
   if (input.provider !== "dropbox_sign" && input.provider !== "adobe_sign") {
-    url.searchParams.set("code_challenge", input.challenge);
+    url.searchParams.set("code_challenge", input.challenge || "");
     url.searchParams.set("code_challenge_method", "S256");
   }
   if (input.provider === "google" || input.provider === "google_drive") {
@@ -240,17 +245,17 @@ function createLinkPkce() {
   const challenge = createHash("sha256").update(verifier).digest("base64url");
   return { verifier, challenge };
 }
-async function takeLinkState(state) {
+async function takeLinkState(state: string) {
   await ensureLinkTables();
   const sql = await getSql();
   await sql`delete from oauth_states where created_at < now() - interval '20 minutes'`;
-  const rows = await sql`
+  const rows = await sql<{ advisor_id: number; slug: string; verifier: string; redirect_uri: string; provider: string }>`
     delete from oauth_states where state = ${state}
     returning advisor_id, slug, verifier, redirect_uri, provider
   `;
   return rows[0] ?? null;
 }
-async function tokenPost(provider, body) {
+async function tokenPost(provider: string, body: URLSearchParams) {
   if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   const config = await appConfig(provider);
   if (!config) throw new Error(`${linkLabel(provider)} is not set up yet. Add it in Superadmin first.`);
@@ -289,14 +294,16 @@ async function tokenPost(provider, body) {
     body.set("client_id", config.clientId);
     body.set("client_secret", config.clientSecret);
   }
-  const response = await fetch(SETUP[provider].token, { method: "POST", headers, body });
+  const spec = setupFor(provider);
+  if (!spec) throw new Error("That connection is not available.");
+  const response = await fetch(spec.token, { method: "POST", headers, body });
   const text = await response.text();
   if (!response.ok) throw new Error(`${linkLabel(provider)} refused the connection. ${text.replace(/\s+/g, " ").slice(0, 220)}`);
   const json = JSON.parse(text);
   if (!json.access_token) throw new Error(`${linkLabel(provider)} did not return access.`);
   return json;
 }
-async function exchangeLinkCode(input) {
+async function exchangeLinkCode(input: { code: string; redirectUri: string; verifier: string; state: string; provider: string }) {
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code: input.code,
@@ -305,10 +312,10 @@ async function exchangeLinkCode(input) {
   });
   if (input.state) body.set("state", input.state);
   if (input.provider === "adobe_sign") body.delete("code_verifier");
-  if (input.provider === "outlook_calendar" || input.provider === "onedrive") body.set("scope", SETUP[input.provider].scope);
+  if (input.provider === "outlook_calendar" || input.provider === "onedrive") body.set("scope", setupFor(input.provider)?.scope || "");
   return tokenPost(input.provider, body);
 }
-async function accountLabel(provider, accessToken2) {
+async function accountLabel(provider: string, accessToken2: string) {
   if (provider === "google" || provider === "google_drive") {
     const response2 = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", { headers: { Authorization: `Bearer ${accessToken2}` } });
     const json2 = await response2.json();
@@ -358,13 +365,13 @@ async function accountLabel(provider, accessToken2) {
   const json = await response.json();
   return json.mail || json.userPrincipalName || "Outlook Calendar";
 }
-async function saveAdvisorLink(input) {
+async function saveAdvisorLink(input: { refreshToken?: string; provider: string; accessToken?: string; expiresIn?: number; advisorId: number }) {
   if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   if (!input.refreshToken) throw new Error(`${linkLabel(input.provider)} did not allow continued access. Connect again and accept every permission.`);
-  const label = await accountLabel(input.provider, input.accessToken);
+  const label = await accountLabel(input.provider, input.accessToken || "");
   await ensureLinkTables();
   const refresh = await sealSecret(input.refreshToken);
-  const access = await sealSecret(input.accessToken);
+  const access = await sealSecret(input.accessToken || "");
   const expires = Date.now() + (Number(input.expiresIn) || 3600) * 1e3;
   await (await getSql())`
     insert into advisor_links (advisor_id, provider, account_label, refresh_token, access_token, expires_at)
@@ -377,12 +384,12 @@ async function saveAdvisorLink(input) {
   `;
   return label;
 }
-function basicAuth(username, password) {
+function basicAuth(username: string, password: string) {
   return `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`;
 }
-async function savedPassword(advisorId, provider) {
+async function savedPassword(advisorId: number, provider: string) {
   await ensureLinkTables();
-  const row = (await (await getSql())`
+  const row = (await (await getSql())<{ login_user: string; login_pass: string }>`
     select login_user, login_pass from advisor_links
     where advisor_id = ${advisorId} and provider = ${provider}
   `)[0];
@@ -391,10 +398,10 @@ async function savedPassword(advisorId, provider) {
   if (!password) return null;
   return { username: row.login_user, password };
 }
-async function calendarFeed(provider, username, password) {
+async function calendarFeed(provider: string, username: string, password: string) {
   const start = /* @__PURE__ */ new Date();
   const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1e3);
-  const stamp2 = (date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+  const stamp2 = (date: Date) => date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   const url = provider === "google" ? `https://apidata.googleusercontent.com/caldav/v2/${encodeURIComponent(username)}/events` : "https://outlook.office365.com/owa/calendar";
   const response = await fetch(url, {
     method: "REPORT",
@@ -413,17 +420,17 @@ async function calendarFeed(provider, username, password) {
   });
   return response;
 }
-async function signInAdvisorPassword(advisorId, provider, username, password) {
+async function signInAdvisorPassword(advisorId: number, provider: string, username: string, password: string) {
   const user = username.trim();
   const pass = password.trim();
-  if (user.length < 3 || pass.length < 6) return { ok: false, error: "Enter this advisor\u2019s own username and password." };
+  if (user.length < 3 || pass.length < 6) return { ok: false as const, error: "Enter this advisor\u2019s own username and password." };
   if (provider === "google" || provider === "outlook_calendar") {
     if (provider === "outlook_calendar") {
-      return { ok: false, error: "Outlook does not accept a password for the calendar. Press Sign in with Microsoft." };
+      return { ok: false as const, error: "Outlook does not accept a password for the calendar. Press Sign in with Microsoft." };
     }
     const response = await calendarFeed(provider, user, pass);
     if (!response.ok && response.status !== 207) {
-      return { ok: false, error: `${linkLabel(provider)} rejected this advisor\u2019s username or password.` };
+      return { ok: false as const, error: `${linkLabel(provider)} rejected this advisor\u2019s username or password.` };
     }
   }
   await ensureLinkTables();
@@ -436,14 +443,14 @@ async function signInAdvisorPassword(advisorId, provider, username, password) {
         login_user = excluded.login_user,
         login_pass = excluded.login_pass
   `;
-  return { ok: true, account: user };
+  return { ok: true as const, account: user };
 }
-async function listAdvisorLinkRows(advisorId) {
+async function listAdvisorLinkRows(advisorId: number) {
   await ensureLinkTables();
-  const rows = await (await getSql())`
+  const rows = await (await getSql())<{ provider: string; account_label: string; login_user: string; refresh_token: string }>`
     select provider, account_label, login_user, refresh_token from advisor_links where advisor_id = ${advisorId}
   `;
-  const mail = (await (await getSql())`select ms_refresh, mail_from from advisors where id = ${advisorId}`)[0];
+  const mail = (await (await getSql())<{ ms_refresh: string; mail_from: string }>`select ms_refresh, mail_from from advisors where id = ${advisorId}`)[0];
   const byProvider = new Map(rows.map((row) => [row.provider, row]));
   return LINK_PROVIDERS.map((provider) => {
     const row = byProvider.get(provider);
@@ -452,20 +459,20 @@ async function listAdvisorLinkRows(advisorId) {
     const connected = provider === "zoom" ? Boolean(row?.refresh_token && row.refresh_token !== "s2s") : provider === "outlook_calendar" ? Boolean(row?.refresh_token) || Boolean(row?.account_label || row?.login_user) || mailCalendar : oauth ? Boolean(row?.refresh_token) : Boolean(row?.account_label || row?.login_user);
     return {
       provider,
-      label: SETUP[provider].label,
+      label: setupFor(provider)?.label ?? provider,
       connected,
       account: row?.account_label || row?.login_user || (mailCalendar ? mail?.mail_from || "Microsoft" : "")
     };
   });
 }
-async function connectTestCalendar(advisorId) {
+async function connectTestCalendar(advisorId: number) {
   await ensureLinkTables();
   await (await getSql())`
     insert into advisor_links (advisor_id, provider, account_label, login_user, login_pass)
     values (${advisorId}, 'test_calendar', 'Test calendar', 'test', '')
     on conflict (advisor_id, provider) do update set account_label = 'Test calendar'
   `;
-  const existing = await (await getSql())`select id from test_calendar_events where advisor_id = ${advisorId} limit 1`;
+  const existing = await (await getSql())<{ id: number }>`select id from test_calendar_events where advisor_id = ${advisorId} limit 1`;
   if (!existing[0]) {
     const start = /* @__PURE__ */ new Date();
     start.setDate(start.getDate() + 1);
@@ -475,18 +482,18 @@ async function connectTestCalendar(advisorId) {
       values (${advisorId}, 'Sample client review', ${start.toISOString()}, 30)
     `;
   }
-  return { ok: true, account: "Test calendar" };
+  return { ok: true as const, account: "Test calendar" };
 }
-async function testCalendarOn(advisorId) {
+async function testCalendarOn(advisorId: number) {
   await ensureLinkTables();
-  const row = await (await getSql())`
+  const row = await (await getSql())<{ account_label: string }>`
     select account_label from advisor_links where advisor_id = ${advisorId} and provider = 'test_calendar'
   `;
   return Boolean(row[0]);
 }
-async function readTestEvents(advisorId) {
+async function readTestEvents(advisorId: number) {
   if (!await testCalendarOn(advisorId)) return [];
-  const rows = await (await getSql())`
+  const rows = await (await getSql())<{ title: string; start_at: string; minutes: number }>`
     select title, start_at, minutes from test_calendar_events
     where advisor_id = ${advisorId} and start_at >= now() - interval '1 day'
     order by start_at limit 20
@@ -497,7 +504,7 @@ async function readTestEvents(advisorId) {
     return { source: "Test calendar", title: row.title, start: start.toISOString(), end: end.toISOString() };
   });
 }
-async function zoomAccountToken(advisorId) {
+async function zoomAccountToken(advisorId: number) {
   const login = await savedPassword(advisorId, "zoom");
   if (!login) return null;
   const [accountId, clientId, email] = login.username.split("\n");
@@ -511,14 +518,14 @@ async function zoomAccountToken(advisorId) {
   if (!json.access_token) return null;
   return { token: json.access_token, email };
 }
-async function saveAdvisorZoom(advisorId, input) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
+async function saveAdvisorZoom(advisorId: number, input: { email: string; accountId: string; clientId: string; clientSecret: string }) {
+  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
   const email = input.email.trim().toLowerCase();
   const accountId = input.accountId.replace(/\s/g, "");
   const clientId = input.clientId.replace(/\s/g, "");
   const clientSecret = input.clientSecret.replace(/\s/g, "");
   if (!email.includes("@") || accountId.length < 6 || clientId.length < 6 || clientSecret.length < 6) {
-    return { ok: false, error: "Enter this advisor's Zoom email, Account ID, Client ID, and Client Secret." };
+    return { ok: false as const, error: "Enter this advisor's Zoom email, Account ID, Client ID, and Client Secret." };
   }
   const response = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(accountId)}`, {
     method: "POST",
@@ -535,12 +542,12 @@ async function saveAdvisorZoom(advisorId, input) {
     }
     const lower = reason.toLowerCase();
     const message = lower.includes("disabled") ? "Zoom has this app turned off. Open the app and press Activate your app. Until it is activated, the keys will not work." : lower.includes("client") ? "Zoom rejected the Client ID or Client Secret. In that Zoom app, activate it first, then copy the Client ID and Client Secret again. The Account ID is a different value." : lower.includes("account") ? "Zoom rejected the Account ID. Copy the Account ID from the same app page as the Client ID." : `Zoom refused the keys. ${reason || "Activate the Server-to-Server app, then copy Account ID, Client ID, and Client Secret from that page."}`;
-    return { ok: false, error: message };
+    return { ok: false as const, error: message };
   }
   const json = await response.json();
-  if (!json.access_token) return { ok: false, error: "Zoom did not return access." };
+  if (!json.access_token) return { ok: false as const, error: "Zoom did not return access." };
   const who = await fetch(`https://api.zoom.us/v2/users/${encodeURIComponent(email)}`, { headers: { Authorization: `Bearer ${json.access_token}` } });
-  if (!who.ok) return { ok: false, error: "Those keys worked, but that email is not a user on this Zoom account." };
+  if (!who.ok) return { ok: false as const, error: "Those keys worked, but that email is not a user on this Zoom account." };
   await ensureLinkTables();
   const sealed = await sealSecret(clientSecret);
   await (await getSql())`
@@ -554,9 +561,9 @@ ${email}`}, ${sealed})
         login_user = excluded.login_user,
         login_pass = excluded.login_pass
   `;
-  return { ok: true, account: email };
+  return { ok: true as const, account: email };
 }
-async function disconnectAdvisorLink(advisorId, provider) {
+async function disconnectAdvisorLink(advisorId: number, provider: string) {
   if (previewWritesBlocked() || externalSideEffectsBlocked()) return;
   await ensureLinkTables();
   await (await getSql())`delete from advisor_links where advisor_id = ${advisorId} and provider = ${provider}`;
@@ -564,12 +571,12 @@ async function disconnectAdvisorLink(advisorId, provider) {
     await (await getSql())`delete from test_calendar_events where advisor_id = ${advisorId}`;
   }
 }
-async function linkAccessToken(advisorId, provider) {
+async function linkAccessToken(advisorId: number, provider: string) {
   return accessToken(advisorId, provider);
 }
-async function accessToken(advisorId, provider) {
+async function accessToken(advisorId: number, provider: string) {
   await ensureLinkTables();
-  const row = (await (await getSql())`
+  const row = (await (await getSql())<{ refresh_token: string; access_token: string; expires_at: string }>`
     select refresh_token, access_token, expires_at from advisor_links
     where advisor_id = ${advisorId} and provider = ${provider}
   `)[0];
@@ -606,23 +613,23 @@ async function accessToken(advisorId, provider) {
     return null;
   }
 }
-function graphWhen(value) {
+function graphWhen(value: string) {
   const raw = String(value || "").trim();
   if (!raw) return "";
   const zoned = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw) ? raw : `${raw}Z`;
   const date = new Date(zoned);
   return Number.isNaN(date.getTime()) ? "" : date.toISOString();
 }
-function whenRange(range) {
+function whenRange(range?: { start?: string; end?: string }) {
   if (range?.start && range?.end) return { start: range.start, end: range.end };
   const start = /* @__PURE__ */ new Date();
   const end = new Date(start.getTime() + 14 * 24 * 60 * 60 * 1e3);
   return { start: start.toISOString(), end: end.toISOString() };
 }
-async function deskSpan(advisorId, range = whenRange()) {
+async function deskSpan(advisorId: number, range = whenRange()) {
   try {
     await ensureDeskCalendar();
-    const rows = await (await getSql())`
+    const rows = await (await getSql())<{ source: string; title: string; start_at: string; minutes: number; location: string; join_url: string }>`
       select source, title, start_at, minutes, location, join_url from desk_calendar_events
       where advisor_id = ${advisorId} and start_at >= ${range.start} and start_at < ${range.end}
       order by start_at limit 24
@@ -636,10 +643,10 @@ async function deskSpan(advisorId, range = whenRange()) {
     return [];
   }
 }
-async function readCalendars(advisorId, range) {
+async function readCalendars(advisorId: number, range?: { start?: string; end?: string }) {
   noteLookup("calendar");
   const window = whenRange(range);
-  const events = [];
+  const events: Array<{ source?: string; id?: string; title: string; start: string; end?: string; join?: string; location?: string }> = [];
   const outlookLink = await accessToken(advisorId, "outlook_calendar");
   let outlook = outlookLink;
   if (!outlook) {
@@ -708,7 +715,7 @@ async function readCalendars(advisorId, range) {
   }
   return { connected: true, events: merged, ...outlookNote ? { error: outlookNote } : {} };
 }
-async function readZoom(advisorId) {
+async function readZoom(advisorId: number) {
   noteLookup("zoom");
   const token = await accessToken(advisorId, "zoom");
   if (!token) return { connected: false, error: "Zoom is not signed in. Press Sign in with Zoom." };
@@ -719,7 +726,7 @@ async function readZoom(advisorId) {
   const json = await response.json();
   return {
     connected: true,
-    meetings: (json.meetings ?? []).map((item) => ({
+    meetings: (json.meetings ?? []).map((item: { id: unknown; topic: string; start_time: string; duration: number; join_url: string }) => ({
       id: item.id ? String(item.id) : "",
       topic: item.topic || "Meeting",
       start: item.start_time || "",
@@ -728,13 +735,13 @@ async function readZoom(advisorId) {
     }))
   };
 }
-async function readDropboxText(advisorId, path) {
+async function readDropboxText(advisorId: number, path: string) {
   const safe = path.trim();
   if (!safe.startsWith("/") || safe.includes("..") || safe.length > 400) {
-    return { ok: false, error: "The Dropbox path must start with / , such as /Unique Advisor/clients.csv." };
+    return { ok: false as const, error: "The Dropbox path must start with / , such as /Unique Advisor/clients.csv." };
   }
   const token = await accessToken(advisorId, "dropbox");
-  if (!token) return { ok: false, error: "Dropbox is not connected. Connect it in Settings, then choose the file again." };
+  if (!token) return { ok: false as const, error: "Dropbox is not connected. Connect it in Settings, then choose the file again." };
   const response = await fetch("https://content.dropboxapi.com/2/files/download", {
     method: "POST",
     headers: {
@@ -744,15 +751,15 @@ async function readDropboxText(advisorId, path) {
   });
   if (!response.ok) {
     const detail = (await response.text()).replace(/\s+/g, " ").slice(0, 160);
-    return { ok: false, error: `Dropbox could not open that file. ${detail}` };
+    return { ok: false as const, error: `Dropbox could not open that file. ${detail}` };
   }
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > 15e5) return { ok: false, error: "That file is too large. Use a CSV under 1.5 MB." };
+  if (bytes.length > 15e5) return { ok: false as const, error: "That file is too large. Use a CSV under 1.5 MB." };
   const text = bytes.toString("utf8");
-  if (text.includes("\0")) return { ok: false, error: "That file is not a text list. Use CSV or JSON." };
-  return { ok: true, text };
+  if (text.includes("\0")) return { ok: false as const, error: "That file is not a text list. Use CSV or JSON." };
+  return { ok: true as const, text };
 }
-async function readDropbox(advisorId) {
+async function readDropbox(advisorId: number) {
   noteLookup("files");
   const token = await accessToken(advisorId, "dropbox");
   const login = token ? null : await savedPassword(advisorId, "dropbox");
@@ -760,16 +767,16 @@ async function readDropbox(advisorId) {
   const response = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
     method: "POST",
     headers: {
-      Authorization: token ? `Bearer ${token}` : basicAuth(login.username, login.password),
+      Authorization: token ? `Bearer ${token}` : basicAuth(login?.username || "", login?.password || ""),
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ path: "", limit: 20 })
   });
   if (!response.ok) return { connected: true, error: "Dropbox rejected this advisor\u2019s username or password." };
   const json = await response.json();
-  return { connected: true, files: (json.entries ?? []).map((item) => item.name || "Untitled") };
+  return { connected: true, files: (json.entries ?? []).map((item: { name: string }) => item.name || "Untitled") };
 }
-function stamp(value) {
+function stamp(value: string) {
   const text = value.trim().replace(" ", "T");
   const match = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/i);
   if (!match) {
@@ -783,14 +790,14 @@ function stamp(value) {
   if (Number.isNaN(parsed.getTime())) return "";
   return parsed.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
-async function createCalendarEvent(advisorId, input) {
-  if (previewWritesBlocked()) return { ok: false, error: PREVIEW_WRITE_BLOCK };
+async function createCalendarEvent(advisorId: number, input: { timeZone?: string; localStart?: string; localEnd?: string; start?: string; minutes?: number; provider: string; title?: string; details?: string; location?: string }) {
+  if (previewWritesBlocked()) return { ok: false as const, error: PREVIEW_WRITE_BLOCK };
   const zoned = Boolean(input.timeZone && input.localStart && input.localEnd);
-  const start = zoned ? input.localStart : stamp(input.start);
-  const end = zoned ? input.localEnd : "";
-  if (!start) return { ok: false, error: "The meeting time could not be read. Ask again with a date and a time." };
-  const endDate = zoned ? null : new Date(new Date(start).getTime() + input.minutes * 6e4);
-  const endStamp = zoned ? end : endDate.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const start = zoned ? input.localStart || "" : stamp(input.start || "");
+  const end = zoned ? input.localEnd || "" : "";
+  if (!start) return { ok: false as const, error: "The meeting time could not be read. Ask again with a date and a time." };
+  const endDate = zoned ? null : new Date(new Date(start).getTime() + (Number(input.minutes) || 30) * 6e4);
+  const endStamp = zoned ? end : endDate ? endDate.toISOString().replace(/\.\d{3}Z$/, "Z") : "";
   const zone = input.timeZone || "UTC";
   if (input.provider === "outlook_calendar") {
     let token = await accessToken(advisorId, "outlook_calendar");
@@ -815,10 +822,10 @@ async function createCalendarEvent(advisorId, input) {
       });
       if (response.ok) {
         const json = await response.json();
-        return { ok: true, detail: "Added to Outlook Calendar.", eventId: String(json.id || "") };
+        return { ok: true as const, detail: "Added to Outlook Calendar.", eventId: String(json.id || "") };
       }
       const reason = (await response.text()).replace(/\s+/g, " ").slice(0, 280);
-      return { ok: false, error: `Outlook did not add the event: ${reason || response.status}` };
+      return { ok: false as const, error: `Outlook did not add the event: ${reason || response.status}` };
     }
   } else {
     const token = await accessToken(advisorId, "google");
@@ -830,31 +837,31 @@ async function createCalendarEvent(advisorId, input) {
       });
       if (response.ok) {
         const json = await response.json();
-        return { ok: true, detail: "Added to Google Calendar.", eventId: String(json.id || "") };
+        return { ok: true as const, detail: "Added to Google Calendar.", eventId: String(json.id || "") };
       }
     }
   }
-  return { ok: false, error: input.provider === "outlook_calendar" ? "Outlook Calendar is not connected." : "Google Calendar is not connected." };
+  return { ok: false as const, error: input.provider === "outlook_calendar" ? "Outlook Calendar is not connected." : "Google Calendar is not connected." };
 }
-async function createZoomMeeting(advisorId, input) {
-  if (previewWritesBlocked()) return { ok: false, error: PREVIEW_WRITE_BLOCK };
-  const start = stamp(input.start);
-  if (!start) return { ok: false, error: "The meeting time could not be read. Ask again with a date and a time." };
+async function createZoomMeeting(advisorId: number, input: { start?: string; title: string; minutes: number }) {
+  if (previewWritesBlocked()) return { ok: false as const, error: PREVIEW_WRITE_BLOCK };
+  const start = stamp(input.start || "");
+  if (!start) return { ok: false as const, error: "The meeting time could not be read. Ask again with a date and a time." };
   const token = await accessToken(advisorId, "zoom");
-  if (!token) return { ok: false, error: "Zoom is not signed in. Press Sign in with Zoom." };
+  if (!token) return { ok: false as const, error: "Zoom is not signed in. Press Sign in with Zoom." };
   const response = await fetch("https://api.zoom.us/v2/users/me/meetings", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ topic: input.title, type: 2, start_time: start, duration: input.minutes, timezone: "UTC" })
   });
-  if (!response.ok) return { ok: false, error: "Zoom did not create the meeting." };
+  if (!response.ok) return { ok: false as const, error: "Zoom did not create the meeting." };
   const json = await response.json();
-  return { ok: true, detail: json.join_url ? `Zoom meeting created. Join link: ${json.join_url}` : "Zoom meeting created." };
+  return { ok: true as const, detail: json.join_url ? `Zoom meeting created. Join link: ${json.join_url}` : "Zoom meeting created." };
 }
-async function saveDropboxNote(advisorId, input) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
+async function saveDropboxNote(advisorId: number, input: { name: string; content: string }) {
+  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
   const token = await accessToken(advisorId, "dropbox");
-  if (!token) return { ok: false, error: "Dropbox is not connected." };
+  if (!token) return { ok: false as const, error: "Dropbox is not connected." };
   const safe = input.name.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "note";
   const response = await fetch("https://content.dropboxapi.com/2/files/upload", {
     method: "POST",
@@ -865,32 +872,32 @@ async function saveDropboxNote(advisorId, input) {
     },
     body: input.content
   });
-  if (!response.ok) return { ok: false, error: "Dropbox did not save the note." };
-  return { ok: true, detail: `Saved ${safe}.txt in the Dropbox folder Unique Advisor.` };
+  if (!response.ok) return { ok: false as const, error: "Dropbox did not save the note." };
+  return { ok: true as const, detail: `Saved ${safe}.txt in the Dropbox folder Unique Advisor.` };
 }
-async function prepareLink(provider) {
+async function prepareLink(provider: string) {
   const config = await appConfig(provider);
   if (!config) return null;
   return config;
 }
-async function createLinkAuthorization(input) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
-  if (!isLinkProvider(input.provider)) return { ok: false, error: "That connection is not available." };
+async function createLinkAuthorization(input: { provider: string; redirectUri: string; request: Request; advisorId: number; slug: string }) {
+  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
+  if (!isLinkProvider(input.provider)) return { ok: false as const, error: "That connection is not available." };
   let config;
   try {
     config = await prepareLink(input.provider);
   } catch (error) {
     const message = error instanceof Error ? error.message : "The saved app secret could not be read.";
-    return { ok: false, error: message };
+    return { ok: false as const, error: message };
   }
   if (!config) {
-    return { ok: false, error: "This connection is not set up yet. Add the app in Superadmin, then try again." };
+    return { ok: false as const, error: "This connection is not set up yet. Add the app in Superadmin, then try again." };
   }
   let redirectUri = "";
   try {
     redirectUri = assertLinkCallback(input.redirectUri, input.request);
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : "The return address is not valid." };
+    return { ok: false as const, error: error instanceof Error ? error.message : "The return address is not valid." };
   }
   const { verifier, challenge } = createLinkPkce();
   const state = randomBytes(24).toString("base64url");
@@ -901,7 +908,7 @@ async function createLinkAuthorization(input) {
     insert into oauth_states (state, advisor_id, slug, verifier, redirect_uri, display_name, provider)
     values (${state}, ${input.advisorId}, ${input.slug}, ${verifier}, ${redirectUri}, ${""}, ${input.provider})
   `;
-  return { ok: true, url: linkAuthorizeUrl({ provider: input.provider, clientId: config.clientId, redirectUri, state, challenge }) };
+  return { ok: true as const, url: linkAuthorizeUrl({ provider: input.provider, clientId: config.clientId, redirectUri, state, challenge }) };
 }
 async function ensureDeskCalendar() {
   await ensureLinkTables();
@@ -918,15 +925,15 @@ async function ensureDeskCalendar() {
   await (await getSql()).query("alter table desk_calendar_events add column if not exists location text not null default ''");
   await (await getSql()).query("alter table desk_calendar_events add column if not exists join_url text not null default ''");
 }
-function monthRange(year, month) {
+function monthRange(year: number, month: number) {
   const start = new Date(Date.UTC(year, month, 1, 0, 0, 0));
   const end = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0));
   return { start, end };
 }
-function stampCompact(date) {
+function stampCompact(date: Date) {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
-function parseIcsTime(raw) {
+function parseIcsTime(raw: string) {
   const value = raw.trim();
   const zoned = value.match(/(\d{8}T\d{6})Z/);
   const local = value.match(/(\d{8}T\d{6})/);
@@ -943,9 +950,9 @@ function parseIcsTime(raw) {
   }
   return null;
 }
-function eventsFromIcs(text, source) {
+function eventsFromIcs(text: string, source: string) {
   const unfolded = text.replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
-  const events = [];
+  const events: Array<{ source: string; title: string; start: string; minutes: number; externalId: string }> = [];
   for (const block of unfolded.split("BEGIN:VEVENT").slice(1)) {
     const title = (block.match(/SUMMARY:(.*)/) || [])[1]?.replace(/\\n/g, " ").replace(/\\,/g, ",").trim() || "Busy";
     const start = parseIcsTime((block.match(/DTSTART[^:]*:(.*)/) || [])[1] || "");
@@ -957,7 +964,7 @@ function eventsFromIcs(text, source) {
   }
   return events;
 }
-async function davRequest(url, username, password, method, body, depth = "0") {
+async function davRequest(url: string, username: string, password: string, method: string, body: string, depth = "0") {
   let current = url;
   for (let hop = 0; hop < 5; hop += 1) {
     const response = await fetch(current, {
@@ -990,15 +997,15 @@ async function davRequest(url, username, password, method, body, depth = "0") {
     body
   });
 }
-function xmlHrefs(xml) {
+function xmlHrefs(xml: string) {
   return [...xml.matchAll(/<(?:[A-Za-z0-9]+:)?href\b[^>]*>([^<]+)<\/(?:[A-Za-z0-9]+:)?href>/gi)].map((match) => decodeURIComponent(match[1].replace(/&/g, "&").trim())).filter((href) => href.length > 0 && href !== "/");
 }
-function absoluteUrl(base, href) {
+function absoluteUrl(base: string | URL, href: string) {
   if (href.startsWith("http://") || href.startsWith("https://")) return href;
   if (href.startsWith("/")) return new URL(base).origin + href;
   return new URL(href, base).toString();
 }
-async function icloudCollection(username, password) {
+async function icloudCollection(username: string, password: string) {
   const root = await davRequest(
     "https://caldav.icloud.com/",
     username,
@@ -1006,12 +1013,12 @@ async function icloudCollection(username, password) {
     "PROPFIND",
     `<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:current-user-principal/></d:prop></d:propfind>`
   );
-  if (root.status === 401 || root.status === 403) return { ok: false, error: "unauthorized" };
-  if (!root.ok && root.status !== 207) return { ok: false, error: "iCloud calendar could not be reached." };
+  if (root.status === 401 || root.status === 403) return { ok: false as const, error: "unauthorized" };
+  if (!root.ok && root.status !== 207) return { ok: false as const, error: "iCloud calendar could not be reached." };
   const rootXml = await root.text();
   const rootHrefs = xmlHrefs(rootXml);
   const principalHref = rootHrefs.find((item) => /principal/i.test(item));
-  if (!principalHref) return { ok: false, error: "iCloud did not return this Apple ID's calendar." };
+  if (!principalHref) return { ok: false as const, error: "iCloud did not return this Apple ID's calendar." };
   const principal = absoluteUrl("https://caldav.icloud.com/", principalHref);
   const homeResponse = await davRequest(
     principal,
@@ -1022,16 +1029,16 @@ async function icloudCollection(username, password) {
   );
   const homeXml = await homeResponse.text();
   const homeHref = xmlHrefs(homeXml).find((item) => /\/calendars\/?/i.test(item)) || xmlHrefs(homeXml).find((item) => /calendar/i.test(item));
-  if (!homeHref) return { ok: false, error: "iCloud did not return a calendar folder." };
+  if (!homeHref) return { ok: false as const, error: "iCloud did not return a calendar folder." };
   const home = absoluteUrl(principal, homeHref);
   const list = await davRequest(home, username, password, "PROPFIND", `<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/></d:prop></d:propfind>`, "1");
   const listXml = await list.text();
   const homePath = home.replace(/\/$/, "");
   const calendars = xmlHrefs(listXml).map((href) => absoluteUrl(home, href)).filter((href) => href.replace(/\/$/, "") !== homePath && href.startsWith(homePath));
   const calendar = calendars.find((href) => /\/home\/?$/i.test(href)) || calendars[0] || home;
-  return { ok: true, calendar };
+  return { ok: true as const, calendar };
 }
-async function reportEvents(url, username, password, start, end, source) {
+async function reportEvents(url: string, username: string, password: string, start: Date, end: Date, source: string) {
   const response = await davRequest(
     url,
     username,
@@ -1046,15 +1053,15 @@ async function reportEvents(url, username, password, start, end, source) {
 </c:calendar-query>`,
     "1"
   );
-  if (response.status === 401 || response.status === 403) return { ok: false, error: `${source} rejected the username or password.` };
-  if (!response.ok && response.status !== 207) return { ok: false, error: `${source} could not be read.` };
-  return { ok: true, events: eventsFromIcs(await response.text(), source) };
+  if (response.status === 401 || response.status === 403) return { ok: false as const, error: `${source} rejected the username or password.` };
+  if (!response.ok && response.status !== 207) return { ok: false as const, error: `${source} could not be read.` };
+  return { ok: true as const, events: eventsFromIcs(await response.text(), source) };
 }
-async function pullProvider(advisorId, source, start, end) {
-  if (source === "desk") return { ok: true, events: [] };
+async function pullProvider(advisorId: number, source: string, start: Date, end: Date) {
+  if (source === "desk") return { ok: true as const, events: [] };
   if (source === "icloud") {
     const login2 = await savedPassword(advisorId, "icloud");
-    if (!login2) return { ok: false, error: "Sign in to iCloud first. Use an Apple ID and an app-specific password." };
+    if (!login2) return { ok: false as const, error: "Sign in to iCloud first. Use an Apple ID and an app-specific password." };
     const found = await icloudCollection(login2.username, login2.password);
     if (!found.ok) return found;
     return reportEvents(found.calendar, login2.username, login2.password, start, end, "iCloud");
@@ -1076,18 +1083,18 @@ async function pullProvider(advisorId, source, start, end) {
     url2.searchParams.set("$select", "id,subject,start,end,location,onlineMeeting");
     url2.searchParams.set("$top", "80");
     const response = await fetch(url2, { headers: { Authorization: `Bearer ${token}`, Prefer: 'outlook.timezone="UTC"' } });
-    if (!response.ok) return { ok: false, error: response.status === 403 ? "Microsoft is signed in, but the calendar was not allowed yet. Press Sign in with Microsoft again and accept the calendar." : "Outlook Calendar refused the request. Press Sign in with Microsoft again." };
+    if (!response.ok) return { ok: false as const, error: response.status === 403 ? "Microsoft is signed in, but the calendar was not allowed yet. Press Sign in with Microsoft again and accept the calendar." : "Outlook Calendar refused the request. Press Sign in with Microsoft again." };
     const json = await response.json();
     return {
-      ok: true,
-      events: (json.value || []).map((item) => {
-        const startAt = graphWhen(item.start?.dateTime);
-        const endAt = graphWhen(item.end?.dateTime);
+      ok: true as const,
+      events: (json.value || []).map((item: { start?: { dateTime?: string }; end?: { dateTime?: string }; subject?: string; id?: string }) => {
+        const startAt = graphWhen(item.start?.dateTime || "");
+        const endAt = graphWhen(item.end?.dateTime || "");
         const startDate = startAt ? new Date(startAt) : /* @__PURE__ */ new Date(NaN);
         const endDate = endAt ? new Date(endAt) : /* @__PURE__ */ new Date(NaN);
         const minutes = Number.isNaN(endDate.getTime()) || Number.isNaN(startDate.getTime()) ? 30 : Math.max(15, Math.round((endDate.getTime() - startDate.getTime()) / 6e4));
         return { source: "Outlook", title: item.subject || "Busy", start: startAt, minutes, externalId: String(item.id || "") };
-      }).filter((item) => item.start && !Number.isNaN(new Date(item.start).getTime()))
+      }).filter((item: { start: string }) => item.start && !Number.isNaN(new Date(item.start).getTime()))
     };
   }
   if (token && source === "google") {
@@ -1098,41 +1105,41 @@ async function pullProvider(advisorId, source, start, end) {
     url2.searchParams.set("orderBy", "startTime");
     url2.searchParams.set("maxResults", "80");
     const response = await fetch(url2, { headers: { Authorization: `Bearer ${token}` } });
-    if (!response.ok) return { ok: false, error: "Google Calendar refused the request. Connect it again." };
+    if (!response.ok) return { ok: false as const, error: "Google Calendar refused the request. Connect it again." };
     const json = await response.json();
     return {
-      ok: true,
-      events: (json.items || []).map((item) => {
+      ok: true as const,
+      events: (json.items || []).map((item: { start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }; summary?: string; id?: string }) => {
         const startAt = new Date(item.start?.dateTime || item.start?.date || "");
         const endAt = new Date(item.end?.dateTime || item.end?.date || "");
         const minutes = Number.isNaN(endAt.getTime()) ? 30 : Math.max(15, Math.round((endAt.getTime() - startAt.getTime()) / 6e4));
         return { source: "Google", title: item.summary || "Busy", start: startAt.toISOString(), minutes, externalId: String(item.id || "") };
-      }).filter((item) => item.start && !Number.isNaN(new Date(item.start).getTime()))
+      }).filter((item: { start: string }) => item.start && !Number.isNaN(new Date(item.start).getTime()))
     };
   }
   const login = await savedPassword(advisorId, provider);
-  if (!login) return { ok: false, error: `Sign in to ${label} first.` };
+  if (!login) return { ok: false as const, error: `Sign in to ${label} first.` };
   const url = source === "google" ? `https://apidata.googleusercontent.com/caldav/v2/${encodeURIComponent(login.username)}/events/` : "https://outlook.office365.com/owa/calendar";
   return reportEvents(url, login.username, login.password, start, end, label);
 }
-function applePasswordChoices(raw) {
+function applePasswordChoices(raw: string) {
   const cleaned = raw.replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\s/g, "");
   const letters = cleaned.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   const dashed = letters.length === 16 ? `${letters.slice(0, 4)}-${letters.slice(4, 8)}-${letters.slice(8, 12)}-${letters.slice(12)}` : "";
   return [...new Set([cleaned, dashed, letters].filter((item) => item.length >= 6))];
 }
-async function isNormalApplePassword(username, password) {
+async function isNormalApplePassword(username: string, password: string) {
   const response = await fetch(`https://setup.icloud.com/setup/authenticate/${encodeURIComponent(username)}`, {
     method: "POST",
     headers: { Authorization: basicAuth(username, password), Origin: "https://www.icloud.com" }
   });
   return response.status === 409;
 }
-async function connectIcloudCalendar(advisorId, username, password) {
+async function connectIcloudCalendar(advisorId: number, username: string, password: string) {
   const user = username.trim().toLowerCase();
   const choices = applePasswordChoices(password);
   if (!user.includes("@") || choices.length === 0) {
-    return { ok: false, error: "Enter the Apple ID email you use at appleid.apple.com, and the app-specific password Apple showed as four groups." };
+    return { ok: false as const, error: "Enter the Apple ID email you use at appleid.apple.com, and the app-specific password Apple showed as four groups." };
   }
   let found = null;
   let used = choices[0];
@@ -1146,11 +1153,11 @@ async function connectIcloudCalendar(advisorId, username, password) {
     if (found?.error === "unauthorized") {
       const normal = await isNormalApplePassword(user, choices[0]).catch(() => false);
       if (normal) {
-        return { ok: false, error: "That is your normal Apple ID password. Create an app-specific password at appleid.apple.com under Sign-In and Security, then paste all four groups." };
+        return { ok: false as const, error: "That is your normal Apple ID password. Create an app-specific password at appleid.apple.com under Sign-In and Security, then paste all four groups." };
       }
       const length = choices[0].length;
       const shape = length === 19 || length === 16 ? "The length looks right." : `An app password is 19 characters with the dashes. This one is ${length} characters.`;
-      return { ok: false, error: `Apple refused ${user}. ${shape} Use the same email you sign in with at appleid.apple.com, not a different iCloud address. Then create a new app-specific password and paste all four groups.` };
+      return { ok: false as const, error: `Apple refused ${user}. ${shape} Use the same email you sign in with at appleid.apple.com, not a different iCloud address. Then create a new app-specific password and paste all four groups.` };
     }
     return found || { ok: false, error: "iCloud calendar could not be reached." };
   }
@@ -1162,15 +1169,15 @@ async function connectIcloudCalendar(advisorId, username, password) {
     on conflict (advisor_id, provider) do update
     set account_label = excluded.account_label, login_user = excluded.login_user, login_pass = excluded.login_pass
   `;
-  return { ok: true, account: user };
+  return { ok: true as const, account: user };
 }
-async function calendarAccounts(advisorId) {
+async function calendarAccounts(advisorId: number) {
   await ensureLinkTables();
-  const rows = await (await getSql())`
+  const rows = await (await getSql())<{ provider: string; account_label: string }>`
     select provider, account_label from advisor_links where advisor_id = ${advisorId}
   `;
-  const has = (provider) => rows.some((row) => row.provider === provider);
-  const mail = await (await getSql())`select ms_refresh, mail_from from advisors where id = ${advisorId}`;
+  const has = (provider: string) => rows.some((row) => row.provider === provider);
+  const mail = await (await getSql())<{ ms_refresh: string; mail_from: string }>`select ms_refresh, mail_from from advisors where id = ${advisorId}`;
   const outlookMail = Boolean(mail[0]?.ms_refresh);
   return {
     google: has("google"),
@@ -1181,20 +1188,20 @@ async function calendarAccounts(advisorId) {
     icloudAccount: rows.find((row) => row.provider === "icloud")?.account_label || ""
   };
 }
-async function loadDeskCalendar(advisorId, year, month) {
+async function loadDeskCalendar(advisorId: number, year: number, month: number) {
   await ensureDeskCalendar();
   const { start, end } = monthRange(year, month);
-  const rows = await (await getSql())`
+  const rows = await (await getSql())<{ id: number; source: string; title: string; start_at: string; minutes: number; location: string }>`
     select id, source, title, start_at, minutes, location from desk_calendar_events
     where advisor_id = ${advisorId} and start_at >= ${start.toISOString()} and start_at < ${end.toISOString()}
     order by start_at
   `;
   const events = rows.map((row) => ({ id: Number(row.id), source: row.source, title: row.title, start: new Date(row.start_at).toISOString(), minutes: Number(row.minutes) || 30, location: String(row.location || "") }));
   await (await getSql()).query("alter table advisors add column if not exists time_zone text not null default 'America/Toronto'");
-  const zone = (await (await getSql())`select time_zone from advisors where id = ${advisorId}`)[0];
+  const zone = (await (await getSql())<{ time_zone: string }>`select time_zone from advisors where id = ${advisorId}`)[0];
   return { events, accounts: await calendarAccounts(advisorId), timeZone: safeZone(zone?.time_zone || "America/Toronto") };
 }
-async function syncDeskCalendar(advisorId, source, year, month) {
+async function syncDeskCalendar(advisorId: number, source: string, year: number, month: number) {
   await ensureDeskCalendar();
   const { start, end } = monthRange(year, month);
   const pulled = await pullProvider(advisorId, source, start, end);
@@ -1213,22 +1220,22 @@ async function syncDeskCalendar(advisorId, source, year, month) {
     `;
   }
   const loaded = await loadDeskCalendar(advisorId, year, month);
-  return { ok: true, count: pulled.events.length, ...loaded };
+  return { ok: true as const, count: pulled.events.length, ...loaded };
 }
-async function addDeskCalendarEvent(advisorId, input) {
+async function addDeskCalendarEvent(advisorId: number, input: { title: string; start: string; minutes: number; source: string }) {
   await ensureDeskCalendar();
   const title = input.title.trim().slice(0, 120);
   const start = new Date(input.start);
   const minutes = Math.min(480, Math.max(15, Number(input.minutes) || 30));
-  if (title.length < 2 || Number.isNaN(start.getTime())) return { ok: false, error: "Add a title and a date." };
+  if (title.length < 2 || Number.isNaN(start.getTime())) return { ok: false as const, error: "Add a title and a date." };
   const source = input.source === "google" ? "google" : input.source === "outlook" ? "outlook" : input.source === "icloud" ? "icloud" : "desk";
   const label = source === "google" ? "Google" : source === "outlook" ? "Outlook" : source === "icloud" ? "iCloud" : "Desk";
-  if (source !== "desk" && previewWritesBlocked()) return { ok: false, error: PREVIEW_WRITE_BLOCK };
+  if (source !== "desk" && previewWritesBlocked()) return { ok: false as const, error: PREVIEW_WRITE_BLOCK };
   let externalId = "";
   if (source === "google" || source === "outlook") {
     const accounts = await calendarAccounts(advisorId);
     const connected = source === "google" ? accounts.google : accounts.outlook;
-    if (!connected) return { ok: false, error: `Sign in to ${label} first.` };
+    if (!connected) return { ok: false as const, error: `Sign in to ${label} first.` };
     const pushed = await createCalendarEvent(advisorId, {
       provider: source === "google" ? "google" : "outlook_calendar",
       title,
@@ -1240,7 +1247,7 @@ async function addDeskCalendarEvent(advisorId, input) {
   }
   if (source === "icloud") {
     const login = await savedPassword(advisorId, "icloud");
-    if (!login) return { ok: false, error: "Sign in to iCloud first." };
+    if (!login) return { ok: false as const, error: "Sign in to iCloud first." };
     const found = await icloudCollection(login.username, login.password);
     if (!found.ok) return found;
     const end = new Date(start.getTime() + minutes * 6e4);
@@ -1264,33 +1271,33 @@ END:VCALENDAR\r
       body: ics
     });
     if (!response.ok && response.status !== 201 && response.status !== 204) {
-      return { ok: false, error: "iCloud did not add the event." };
+      return { ok: false as const, error: "iCloud did not add the event." };
     }
   }
   await (await getSql())`
     insert into desk_calendar_events (advisor_id, source, title, start_at, minutes, external_id)
     values (${advisorId}, ${label}, ${title}, ${start.toISOString()}, ${minutes}, ${externalId})
   `;
-  return { ok: true };
+  return { ok: true as const };
 }
-async function inspectDropboxClient(advisorId, query) {
+async function inspectDropboxClient(advisorId: number, query: { clientId: string; email: string; policy: unknown }) {
   const token = await accessToken(advisorId, "dropbox");
-  if (!token) return { ok: false, error: "Dropbox is not connected." };
+  if (!token) return { ok: false as const, error: "Dropbox is not connected." };
   const needle = String(query.clientId || query.email || query.policy || "").trim().toLowerCase();
-  if (!needle) return { ok: false, error: "A name is not enough to open a client folder." };
+  if (!needle) return { ok: false as const, error: "A name is not enough to open a client folder." };
   const response = await fetch("https://api.dropboxapi.com/2/files/list_folder", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ path: "/Unique Advisor/Assistant Test", recursive: true, limit: 80 }),
   });
-  if (!response.ok) return { ok: false, error: "Dropbox did not list files. I did not open another folder." };
+  if (!response.ok) return { ok: false as const, error: "Dropbox did not list files. I did not open another folder." };
   const json = await response.json();
-  const files = (json.entries ?? []).filter((item) => item[".tag"] === "file" && String(item.path_lower || "").includes(needle));
-  const folders = [...new Set(files.map((item) => String(item.path_lower || "").split("/").slice(0, -1).join("/")))];
-  if (!files.length) return { ok: true, detail: "No file path matched that client ID, email, or policy number. I did not open other clients' files." };
-  if (folders.length > 1) return { ok: true, detail: "More than one folder matches that identifier. I did not mix them." };
-  const lines = files.slice(0, 8).map((item) => `- ${item.name || "file"} — ${item.server_modified || "date unknown"}`);
-  return { ok: true, detail: `Files in the matching folder:\n${lines.join("\n")}\nI did not submit or overwrite anything.` };
+  const files = (json.entries ?? []).filter((item: { path_lower?: string; ".tag"?: string }) => item[".tag"] === "file" && String(item.path_lower || "").includes(needle));
+  const folders = [...new Set(files.map((item: { path_lower: string }) => String(item.path_lower || "").split("/").slice(0, -1).join("/")))];
+  if (!files.length) return { ok: true as const, detail: "No file path matched that client ID, email, or policy number. I did not open other clients' files." };
+  if (folders.length > 1) return { ok: true as const, detail: "More than one folder matches that identifier. I did not mix them." };
+  const lines = files.slice(0, 8).map((item: { name: string; server_modified: string }) => `- ${item.name || "file"} — ${item.server_modified || "date unknown"}`);
+  return { ok: true as const, detail: `Files in the matching folder:\n${lines.join("\n")}\nI did not submit or overwrite anything.` };
 }
 
 function sqlFlag(value: unknown) {

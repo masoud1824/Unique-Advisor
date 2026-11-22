@@ -21,6 +21,7 @@ import type { QuerySql } from "./library-store.ts";
 export type MockDelivery = {
   status: "accepted" | "failed" | "unknown";
   providerId: string;
+  detail?: string;
 };
 
 type SettingsRow = BirthdaySettings & { advisorId: number; lastRunDate: string; sourceRef: string };
@@ -150,7 +151,7 @@ async function finishClaim(sql: QuerySql, key: string, status: MockDelivery["sta
 
 export async function executeBirthdayJob(sql: QuerySql, input: {
   now: Date;
-  deliver?: (person: BirthdayPerson, card: { text: string }) => Promise<MockDelivery>;
+  deliver?: (person: BirthdayPerson, card: { text: string }, context: { advisorId: number }) => Promise<MockDelivery>;
   dropbox?: BirthdayFileReader;
   advisorId?: number;
 }) {
@@ -221,11 +222,17 @@ export async function executeBirthdayJob(sql: QuerySql, input: {
       let result: MockDelivery;
       try {
         providerCalls += 1;
-        result = await deliver(person, previewBirthdayCard(settings.cardTitle || "Happy birthday, {{name}}.", person));
+        result = await deliver(person, previewBirthdayCard(settings.cardTitle || "Happy birthday, {{name}}.", person), { advisorId: settings.advisorId });
       } catch {
         result = { status: "unknown", providerId: "" };
       }
-      await finishClaim(sql, key, result.status, result.providerId, result.status === "accepted" ? "provider accepted; delivery not confirmed" : result.status);
+      await finishClaim(
+        sql,
+        key,
+        result.status,
+        result.providerId,
+        result.detail || (result.status === "accepted" ? "provider accepted; delivery not confirmed" : result.status),
+      );
       outcomes.push({ name: person.name, outcome: result.status });
     }
     for (const missing of planned.missingDates.filter((item) => !item.repeat)) {

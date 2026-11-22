@@ -18,6 +18,8 @@ import {
   searchNewsletters,
   simulateNewsletterSend,
   NEWSLETTER_APPROVAL,
+  type ArchiveState,
+  type SavedNewsletter,
 } from "./newsletter-archive.ts";
 
 const now = "2026-11-18T12:00:00Z";
@@ -37,7 +39,7 @@ function stories(count: number) {
 describe("newsletter archive", () => {
   it("saves advisor and assistant newsletters with 1, 2, 3, and more articles without sending", () => {
     let state = emptyArchive();
-    const made = [];
+    const made: SavedNewsletter[] = [];
     for (const count of [1, 2, 3, 4]) {
       const created = createNewsletter(state, {
         advisorId: count % 2 ? advisor : advisor,
@@ -64,11 +66,19 @@ describe("newsletter archive", () => {
       now,
     }).state;
     const id = state.newsletters[0].id;
-    state = addArticle(state, advisor, id, article("Retirement", "A fourth article."), now).state;
+    const added = addArticle(state, advisor, id, article("Retirement", "A fourth article."), now);
+    if (!added.ok) throw new Error(added.error);
+    state = added.state;
     assert.equal(latestVersion(state.newsletters[0]).articles.length, 4);
-    state = editArticle(state, advisor, id, 0, { ...latestVersion(state.newsletters[0]).articles[0], text: "Edited first." }, now).state;
-    state = removeArticle(state, advisor, id, 3, now).state;
-    state = reorderArticles(state, advisor, id, 2, 0, now).state;
+    const edited = editArticle(state, advisor, id, 0, { ...latestVersion(state.newsletters[0]).articles[0], text: "Edited first." }, now);
+    if (!edited.ok) throw new Error(edited.error);
+    state = edited.state;
+    const removed = removeArticle(state, advisor, id, 3, now);
+    if (!removed.ok) throw new Error(removed.error);
+    state = removed.state;
+    const reordered = reorderArticles(state, advisor, id, 2, 0, now);
+    if (!reordered.ok) throw new Error(reordered.error);
+    state = reordered.state;
     const headings = latestVersion(state.newsletters[0]).articles.map((item) => item.heading);
     assert.deepEqual(headings, ["Article 3", "Article 1", "Article 2"]);
     const before = latestVersion(state.newsletters[0]).articles.map((item) => item.text);

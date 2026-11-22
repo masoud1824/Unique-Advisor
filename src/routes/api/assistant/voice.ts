@@ -31,7 +31,7 @@ export const Route = createFileRoute("/api/assistant/voice")({
               if (line.length < 2) return;
               chain = chain.then(async () => {
                 const parts: Buffer[] = [];
-                await speakSentence(line, (chunk) => parts.push(chunk), advisorId);
+                await speakSentence(line, (chunk: Buffer) => parts.push(chunk), advisorId);
                 const audio = Buffer.concat(parts).toString("base64");
                 if (audio) send({ type: "audio", mime: "audio/mpeg", audio });
               }).catch((error) => {
@@ -42,8 +42,8 @@ export const Route = createFileRoute("/api/assistant/voice")({
             };
             try {
               const result = await answerAdvisor(
-                { slug: body?.slug, code: body?.code, chatId: body?.chatId, page: body?.page, transcriptConfirmed: Boolean(body?.transcriptConfirmed), activeNewsletterId: Number(body?.activeNewsletterId) || 0, messages: [{ role: "user", content: String(body?.content || "") }] },
-                (text) => {
+                { slug: String(body?.slug || ""), code: String(body?.code || ""), chatId: Number(body?.chatId) || 0, page: Number(body?.page) || 0, transcriptConfirmed: Boolean(body?.transcriptConfirmed), activeNewsletterId: Number(body?.activeNewsletterId) || 0, messages: [{ role: "user", content: String(body?.content || "") }] },
+                (text: string) => {
                   send({ type: "delta", text });
                 },
               );
