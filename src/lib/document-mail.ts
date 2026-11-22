@@ -5,7 +5,7 @@ export const DOCUMENT_MAIL = {
   body: "This is a fictional test email, not a client message. The attachment is the Signature Workflow Test document from the test folder.",
 };
 
-export const MAIL_MONITORING = "Reply monitoring runs only while this preview process is awake. It does not run while the preview sleeps. Replies that arrive during sleep are checked the next time the preview is awake and this advisor opens the desk. Each new reply in this thread creates one notification.";
+export const MAIL_MONITORING = "Reply checks run on the hosted schedule even when this desk is closed. Each new reply in this thread creates one notification. The mailbox is not read while outbound checks are blocked.";
 
 export type MailAttachment = { path: string; name: string; size: number; hash: string };
 export type ThreadMessage = { id: string; conversationId: string; from: string };

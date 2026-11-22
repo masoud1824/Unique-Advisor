@@ -56,8 +56,6 @@ function requestHost() {
 }
 
 function requestIsSecure() {
-  const host = requestHost().split(":")[0].toLowerCase();
-  if (host === "youradviser.grok.me" || host.endsWith(".youradviser.grok.me")) return true;
   try {
     return getRequestProtocol() === "https";
   } catch {

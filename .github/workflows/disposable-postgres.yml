@@ -1,0 +1,41 @@
+name: disposable-postgres
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [portability/vercel-neon]
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ua
+          POSTGRES_PASSWORD: ua_disposable_local
+          POSTGRES_DB: ua_disposable_src
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ua -d ua_disposable_src"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install the Postgres client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: npm ci
+      - name: Migrate, dump, and restore a disposable database
+        env:
+          UA_DISPOSABLE_POSTGRES: "1"
+          DATABASE_URL: postgresql://ua:ua_disposable_local@127.0.0.1:5432/ua_disposable_src
+          DISPOSABLE_RESTORE_URL: postgresql://ua:ua_disposable_local@127.0.0.1:5432/ua_disposable_restore
+        run: |
+          psql "$DATABASE_URL" -c "create database ua_disposable_restore"
+          node scripts/release/disposable-postgres.mjs

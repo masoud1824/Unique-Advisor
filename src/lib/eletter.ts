@@ -1,5 +1,6 @@
 import { emptySocial, signatureLines, type NewsletterContact, type NewsletterSocial } from "./newsletter.ts";
 import { websiteButtonHtml } from "./advisor-website.ts";
+import { absoluteAppUrl } from "./public-origin.ts";
 
 export const ELETTER_DESIGNS = [
   { id: "plum", name: "Royal Plum", detail: "Gold crest on a deep plum header" },
@@ -127,7 +128,7 @@ export function renderEletter(input: {
   const contact = contactLines(input.contact);
   const social = socialLinks(input.letter.social, "#ffffff");
   const booked = input.letter.body.match(/\[\[book:([a-f0-9]{16,40})\]\]/i);
-  const bookHref = booked ? input.bookHref || `https://youradviser.grok.me/api/book/${booked[1]}` : "";
+  const bookHref = booked ? input.bookHref || absoluteAppUrl(`/api/book/${booked[1]}`) : "";
   const cleanBody = input.letter.body.replace(/\s*\[\[book:[a-f0-9]+\]\]\s*/gi, "\n\n").trim();
   const copy = `${letterCopy(cleanBody, theme)}${bookHref ? bookingButtonHtml(bookHref, theme) : ""}`;
   const shell = design === "ruled"

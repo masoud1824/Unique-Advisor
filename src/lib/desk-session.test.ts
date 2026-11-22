@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PGlite } from "@electric-sql/pglite";
-import { acceptStoredSession, deskSetCookie, DESK_STORAGE_KEY, hashDeskToken, readCookieToken, sessionStillValid, signedInFromCookie } from "./desk-session-check.ts";
+import { acceptStoredSession, cookieDomain, deskSetCookie, DESK_STORAGE_KEY, hashDeskToken, readCookieToken, sessionStillValid, signedInFromCookie } from "./desk-session-check.ts";
 import { deskDayWindow, msUntilZoneMidnight, onDeskDays } from "./meeting-time.ts";
 
 const advisor = { id: 4, slug: "masoud", code_hash: "abc" };
@@ -32,6 +32,10 @@ describe("desk session", () => {
     };
     assert.equal(signedInFromCookie({ setCookie: header, advisor, session }), true);
     assert.equal(signedInFromCookie({ setCookie: "", advisor, session }), false);
+    assert.equal(cookieDomain("youradviser.grok.me"), "");
+    assert.equal(cookieDomain("desk.example"), "");
+    const hostOnly = deskSetCookie(token, { secure: true });
+    assert.equal(hostOnly.includes("Domain="), false);
   });
 
   it("accepts an existing token after a restart when the database rows remain", () => {

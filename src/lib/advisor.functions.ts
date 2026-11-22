@@ -46,6 +46,7 @@ import { cardHtml, signatureWithWebsite, websiteButtonText } from "@/lib/advisor
 import { normalizeOperatorPassword, privateOperatorPassword } from "@/lib/operator-password";
 import { operatorSessionValid, readOperatorCookie } from "@/lib/operator-session";
 import { previewPathPrefix } from "@/lib/preview-path-prefix";
+import { absoluteAppUrl } from "@/lib/public-origin";
 import { allowsCustom, DEFAULT_PLATFORM, PLANS, setupPrice } from "@/lib/site-types";
 import { cleanProductIds, contactHistory, ensureContactRecords, writeContactLog } from "@/lib/contact-records";
 import { contactMatchesQuery, nameTokens } from "@/lib/contact-match";
@@ -1779,8 +1780,9 @@ function isInternalHost(host) {
 }
 function cardPublicUrl(image) {
 	const name = String(image ?? "").trim();
-	if (/^\/cards\/[a-z0-9-]+\.jpg$/.test(name) || /^\/api\/(?:platform-)?cards\/\d+$/.test(name)) return `https://youradviser.grok.me${name}`;
-	return "";
+	if (!/^\/cards\/[a-z0-9-]+\.jpg$/.test(name) && !/^\/api\/(?:platform-)?cards\/\d+$/.test(name)) return "";
+	const url = absoluteAppUrl(name);
+	return /^https:\/\//.test(url) || /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?\//.test(url) ? url : "";
 }
 function logoBytes(value) {
 	const match = String(value ?? "").trim().match(/^data:image\/(?:jpeg|jpg|png|webp);base64,([A-Za-z0-9+/=\s]+)$/);

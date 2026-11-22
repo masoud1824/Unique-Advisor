@@ -55,9 +55,7 @@ export function deskSetCookie(token: string, opts: { secure: boolean; domain?: s
   return parts.join("; ");
 }
 
-export function cookieDomain(host: string) {
-  const name = host.split(":")[0].trim().toLowerCase();
-  if (name === "youradviser.grok.me" || name.endsWith(".youradviser.grok.me")) return "youradviser.grok.me";
+export function cookieDomain(_host: string) {
   return "";
 }
 

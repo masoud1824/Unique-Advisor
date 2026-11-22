@@ -19,7 +19,8 @@ describe("document email preview", () => {
     assert.match(preview.preview, /Subject: Signature Workflow Test/);
     assert.match(preview.preview, /fictional test email/);
     assert.match(preview.preview, new RegExp(attachment.hash));
-    assert.match(preview.preview, /does not run while the preview sleeps/);
+    assert.match(preview.preview, /hosted schedule/);
+    assert.match(preview.preview, /not read while outbound checks are blocked/);
     assert.equal(preview.preview.includes("test-only"), false);
   });
 

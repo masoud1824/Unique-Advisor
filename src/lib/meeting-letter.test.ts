@@ -272,10 +272,15 @@ describe("meeting letters", () => {
 describe("saved advisor website", () => {
   const oldSite = "https://youradviser.grok.me/a/masoud-zangeneh/site";
   const ownSite = "https://masoud.example";
+  const builtin = "/a/masoud-zangeneh/site";
 
   it("uses the website saved in Settings and falls back only when that field is empty", () => {
+    const pub = process.env.PUBLIC_APP_URL;
+    const auth = process.env.BETTER_AUTH_URL;
+    delete process.env.PUBLIC_APP_URL;
+    delete process.env.BETTER_AUTH_URL;
     assert.equal(shownWebsite({ siteMode: "own", siteUrl: ownSite, publicWebsite: oldSite, slug: "masoud-zangeneh" }), ownSite);
-    assert.equal(shownWebsite({ siteMode: "builtin", siteUrl: "", publicWebsite: "", slug: "masoud-zangeneh" }), oldSite);
+    assert.equal(shownWebsite({ siteMode: "builtin", siteUrl: "", publicWebsite: "", slug: "masoud-zangeneh" }), builtin);
     const letter = buildMeetingLetter({
       kind: "confirm",
       audience: "client",
@@ -305,11 +310,19 @@ describe("saved advisor website", () => {
     assert.equal(useCurrentWebsite(`Visit my website ${oldSite}`, ownSite).includes(oldSite), false);
     const booking = "https://youradviser.grok.me/api/book/abc123abc123abc123abc123abc123ab";
     assert.equal(useCurrentWebsite(`<a href="${booking}">Book a meeting</a>`, ownSite, [oldSite]), `<a href="${booking}">Book a meeting</a>`);
+    if (pub === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = pub;
+    if (auth === undefined) delete process.env.BETTER_AUTH_URL;
+    else process.env.BETTER_AUTH_URL = auth;
   });
 
   it("switches e-cards and newsletters to the system website and hides the raw address", () => {
+    const pub = process.env.PUBLIC_APP_URL;
+    const auth = process.env.BETTER_AUTH_URL;
+    delete process.env.PUBLIC_APP_URL;
+    delete process.env.BETTER_AUTH_URL;
     const system = shownWebsite({ siteMode: "builtin", siteUrl: ownSite, publicWebsite: ownSite, slug: "masoud-zangeneh" });
-    assert.equal(system, oldSite);
+    assert.equal(system, builtin);
     const contact = {
       name: "Masoud Zangeneh",
       title: "Financial Advisor",
@@ -330,13 +343,21 @@ describe("saved advisor website", () => {
     });
     const card = cardHtml("Dear Max Santiago,\n\nThinking of you.", "", signatureWithWebsite("Masoud Zangeneh\nFinancial Advisor\nhttps://masoud.example", system));
     for (const html of [news, letter, card]) {
-      assert.match(html, new RegExp(`href="${oldSite}"`));
+      assert.match(html, new RegExp(`href="${builtin}"`));
       assert.match(html, /#C9A227/);
       assert.match(html, />Visit my website</);
       const shown = html.replace(/<[^>]+>/g, " ");
       assert.doesNotMatch(shown, /https?:\/\//);
       assert.doesNotMatch(shown, /masoud\.example/);
+      assert.doesNotMatch(html, /grok\.me/);
     }
-    assert.equal(websiteButtonText(system), `Visit my website: ${oldSite}`);
+    process.env.PUBLIC_APP_URL = "https://desk.example";
+    const configured = shownWebsite({ siteMode: "builtin", siteUrl: "", publicWebsite: "", slug: "masoud-zangeneh" });
+    assert.equal(configured, "https://desk.example/a/masoud-zangeneh/site");
+    assert.equal(websiteButtonText(system), `Visit my website: ${builtin}`);
+    if (pub === undefined) delete process.env.PUBLIC_APP_URL;
+    else process.env.PUBLIC_APP_URL = pub;
+    if (auth === undefined) delete process.env.BETTER_AUTH_URL;
+    else process.env.BETTER_AUTH_URL = auth;
   });
 });

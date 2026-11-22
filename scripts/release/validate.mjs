@@ -37,6 +37,7 @@ const tests = [
   "src/lib/chat-preview-ui.test.ts",
   "src/lib/card-correction.test.ts",
   "src/lib/hosted-jobs.test.ts",
+  "src/lib/hosted-dispatch.test.ts",
   "scripts/hosted-guard.test.mjs",
 ];
 

@@ -1,3 +1,5 @@
+import { absoluteAppUrl } from "./public-origin.ts";
+
 export function isBuiltinAdvisorSite(value: string) {
   return /\/a\/[^/]+\/site\/?$/i.test(String(value || "").trim());
 }
@@ -7,7 +9,7 @@ export function shownWebsite(input: { siteMode?: string; siteUrl?: string; publi
   const own = String(input.siteUrl || "").trim();
   const profile = String(input.publicWebsite || "").trim();
   const slug = String(input.slug || "").trim();
-  const builtin = slug ? `https://youradviser.grok.me/a/${slug}/site` : "";
+  const builtin = slug ? absoluteAppUrl(`/a/${slug}/site`) : "";
   const custom = (value: string) => (value && !isBuiltinAdvisorSite(value) ? value.slice(0, 300) : "");
   if (mode === "builtin") {
     if (builtin) return builtin;
@@ -46,6 +48,10 @@ export const WEBSITE_BUTTON_COLOR = "#C9A227";
 export function websiteHref(value: string) {
   const raw = String(value || "").trim().replace(/^visit my website:\s*/i, "");
   if (!raw || /\s/.test(raw) || raw.includes("@")) return "";
+  if (raw.startsWith("/") && !raw.startsWith("//")) {
+    if (!/^\/(?:a\/[^/]+\/site\/?|api\/book\/[a-f0-9]+|api\/meetings\/ics\?token=[A-Za-z0-9_-]+)$/i.test(raw)) return "";
+    return raw;
+  }
   if (/^[\d()+\-./]+$/.test(raw)) return "";
   const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {

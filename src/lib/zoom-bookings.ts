@@ -12,6 +12,7 @@ import { placePending as placePendingHandler } from "@/lib/desk-handlers";
 import { hasMeetingWhen, isTimeAgreement, localClock, meetingLabel, resolveMeetingWhen, safeZone, confirmAsk, zoomMeetingTitle, deskDayWindow, onDeskDays, formatMeetingSpan } from "@/lib/meeting-time";
 import { buildMeetingLetter, meetingIcs } from "@/lib/meeting-letter";
 import { shownWebsite } from "@/lib/advisor-db";
+import { absoluteAppUrl } from "@/lib/public-origin";
 
 export { meetingReply };
 
@@ -353,7 +354,7 @@ function composeMeetingLetter(
     meetingId: detail.meetingId,
     passcode: detail.passcode,
     icsToken: detail.icsToken,
-    icsUrl: detail.icsToken && kind !== "cancel" ? `https://youradviser.grok.me/api/meetings/ics?token=${encodeURIComponent(detail.icsToken)}` : "",
+    icsUrl: detail.icsToken && kind !== "cancel" ? absoluteAppUrl(`/api/meetings/ics?token=${encodeURIComponent(detail.icsToken)}`) : "",
     design: "plum",
   });
 }

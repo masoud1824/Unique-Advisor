@@ -1,5 +1,6 @@
 import { zoomMeetingTitle } from "./meeting-time.ts";
 import { chatJoinLink } from "./assistant-reply.ts";
+import { absoluteAppUrl } from "./public-origin.ts";
 
 function newToken() {
   const id = globalThis.crypto?.randomUUID?.() || `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 10)}`;
@@ -77,7 +78,7 @@ export async function commitZoomBooking(input: {
   }
   let outlookId = "";
   let icsToken = newToken();
-  const icsUrl = `https://youradviser.grok.me/api/meetings/ics?token=${encodeURIComponent(icsToken)}`;
+  const icsUrl = absoluteAppUrl(`/api/meetings/ics?token=${encodeURIComponent(icsToken)}`);
   if (!input.priorMeeting) {
   if (!input.outlookToken) {
     log("outlook-result", "no Outlook token");

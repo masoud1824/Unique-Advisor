@@ -201,7 +201,7 @@ export function SupportSettings({ code }: { code: string }) {
     >
       <h3 style={{ marginBottom: 8 }}>Support</h3>
       <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Support email</label>
-      <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="support@youradviser.grok.me" style={{ marginBottom: 12 }} />
+      <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="support@example.com" style={{ marginBottom: 12 }} />
       <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Support webhook URL</label>
       <input value={webhook} onChange={(event) => setWebhook(event.target.value)} placeholder="https://example.com/hooks/support" style={{ marginBottom: 12 }} />
       <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Webhook secret</label>

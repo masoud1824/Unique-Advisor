@@ -34,7 +34,7 @@ import { DEFAULT_ASSISTANT, type AssistantSettings } from "@/lib/assistant-polic
 import { CARDS } from "@/lib/catalog";
 import { ELETTER_DESIGNS, ELETTER_SWATCH, packEletter, type EletterDesign } from "@/lib/eletter";
 import { loadLinkApps, saveConnectionApp } from "@/lib/advisor-links.functions";
-import { ZOOM_REDIRECT } from "@/lib/zoom-oauth";
+import { zoomRedirectUri } from "@/lib/public-origin";
 import { emptySocial } from "@/lib/newsletter";
 import { SupportAdmin, SupportSettings } from "@/components/support-admin";
 import { VoiceLogsAdmin } from "@/components/voice-logs-admin";
@@ -1559,7 +1559,7 @@ function Admin() {
               >
                 {siteSave === "saving" ? "Saving…" : siteSave === "saved" ? "Saved" : "Save website"}
               </button>
-              <a className="btn-sm btn-primary" href="https://youradviser.grok.me" target="_blank" rel="noreferrer" style={{ padding: "10px 18px" }}>Open home page</a>
+              <a className="btn-sm btn-primary" href="/" target="_blank" rel="noreferrer" style={{ padding: "10px 18px" }}>Open home page</a>
               </div>
             </form>
           </div>
@@ -1653,7 +1653,7 @@ function Admin() {
               ) : (
                 <p style={{ color: "#5a6a7a", marginBottom: 12 }}>No Zoom app is saved yet.</p>
               )}
-              <p style={{ marginBottom: 12 }}>Redirect URL: {ZOOM_REDIRECT}</p>
+              <p style={{ marginBottom: 12 }}>Redirect URL: {zoomRedirectUri() || "Set PUBLIC_APP_URL to this site before Zoom sign-in."}</p>
               <input value={zoomClientId} onChange={(event) => setZoomClientId(event.target.value)} placeholder="Client ID" style={{ marginBottom: 8 }} autoComplete="off" />
               <input type="password" value={zoomSecret} onChange={(event) => setZoomSecret(event.target.value)} placeholder="Client Secret" style={{ marginBottom: 12 }} autoComplete="off" />
               <button type="submit" className="btn-sm btn-primary">Save Zoom app</button>

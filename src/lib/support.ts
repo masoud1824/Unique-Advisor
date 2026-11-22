@@ -2,6 +2,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypt
 import { getSql } from "@/lib/db";
 import { accessTokenForAdvisor, graphSendMail } from "@/lib/microsoft-mail";
 import { outboundBlocked } from "@/lib/outbound-guard";
+import { absoluteAppUrl } from "@/lib/public-origin";
 
 export const TICKET_STATUSES = ["Open", "In progress", "Waiting on advisor", "Resolved", "Closed"] as const;
 export const TICKET_PRIORITIES = ["Low", "Normal", "High", "Urgent"] as const;
@@ -200,7 +201,7 @@ async function notify(ticket: TicketRow, latest: string, kind: "created" | "advi
   if (outboundBlocked()) return;
   const advisor = await advisorOf(ticket.advisor_id);
   const settings = await readSupportSettings();
-  const link = `https://youradviser.grok.me/admin?ticket=${encodeURIComponent(ticket.number)}`;
+  const link = absoluteAppUrl(`/admin?ticket=${encodeURIComponent(ticket.number)}`);
   const payload = {
     ticketNumber: ticket.number,
     id: Number(ticket.id),

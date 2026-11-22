@@ -1,5 +1,6 @@
 import { getRequest } from "@tanstack/react-start/server";
 import { previewPathPrefix } from "@/lib/preview-path-prefix";
+import { absoluteAppUrl, configuredPublicOrigin } from "@/lib/public-origin";
 import { createCalendarEvent, readCalendars } from "@/lib/advisor-links";
 import { getSql } from "@/lib/db";
 import { writeContactLog } from "@/lib/contact-records";
@@ -24,20 +25,20 @@ type LinkRow = {
 
 export function bookingHref(token: string) {
   const path = `/api/book/${token}`;
-  const published = `https://youradviser.grok.me${path}`;
   try {
     const request = getRequest();
     const referer = request?.headers.get("referer") || "";
-    if (!referer) return published;
-    const url = new URL(referer);
-    const prefix = previewPathPrefix(url.hostname, url.pathname) || "";
-    if (prefix || url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "youradviser.grok.me" || url.hostname.endsWith(".grok.me")) {
-      return `${url.origin}${prefix}${path}`;
+    if (referer) {
+      const url = new URL(referer);
+      const prefix = previewPathPrefix(url.hostname, url.pathname) || "";
+      const origin = configuredPublicOrigin();
+      const local = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      if (prefix || local || (origin && url.origin === origin)) return `${url.origin}${prefix}${path}`;
     }
   } catch {
-    /* use the published booking page */
+    /* configured origin, or a same-site path when the origin is not set */
   }
-  return published;
+  return absoluteAppUrl(path);
 }
 
 export function appointmentUrl(token: string) {

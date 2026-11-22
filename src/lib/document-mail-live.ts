@@ -258,6 +258,7 @@ export async function checkDocumentReplies(advisorId: number, io?: Parameters<ty
 }
 
 export function startDocumentMailWatch() {
+  if (process.env.UA_DATA_PLANE === "postgres") return;
   if (previewWritesBlocked() || externalSideEffectsBlocked()) return;
   watch.__uaMailCheck = checkDocumentReplies;
   if (watch.__uaMailTimer) return;
