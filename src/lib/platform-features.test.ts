@@ -25,7 +25,7 @@ import {
 import { ribbonDirection, visibleAnnouncements, type Announcement } from "./news-ribbon.ts";
 import { ISOLATED_TEST_BANNER } from "./isolated-test-desk.ts";
 import { STAGING_BANNER, deskStatusBanner } from "./staging-banner.ts";
-import { outboundBlocked, OUTBOUND_BLOCKED } from "./outbound-guard.ts";
+import { MODEL_OFF, modelTransportOpen, outboundBlocked, OUTBOUND_BLOCKED } from "./outbound-guard.ts";
 import { externalSideEffectsBlocked } from "./isolated-test-desk.ts";
 import { asksArchiveSearch, asksContactRecord, asksEmailThreadStatus, asksIssueDates, asksMeetingPreview, asksSavedCampaignReview, archiveSearchTerm, classifyAudience, matchingNewsletterCopies, meetingDetailReply, meetingPreviewFacts, namedPeople } from "./delivery-audience.ts";
 import { eletterRecipient, isBareRefusal, isInboxAsk, taskKind } from "./advisor-intent.ts";
@@ -80,6 +80,59 @@ describe("outbound guard does not depend on the database", () => {
     delete process.env.UA_ISOLATED_TEST;
     try {
       assert.equal(outboundBlocked(), false);
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+});
+
+describe("model transport is not the outbound guard", () => {
+  it("keeps mail blocked while a separately enabled model may be called", () => {
+    const previous = {
+      UA_OUTBOUND_BLOCK: process.env.UA_OUTBOUND_BLOCK,
+      UA_RELEASE_ENV: process.env.UA_RELEASE_ENV,
+      UA_HOST_ENV: process.env.UA_HOST_ENV,
+      VERCEL_ENV: process.env.VERCEL_ENV,
+      UA_AI_ENABLED: process.env.UA_AI_ENABLED,
+      UA_BUDGET_HALT: process.env.UA_BUDGET_HALT,
+      UA_BUDGET_HALT_OPENAI: process.env.UA_BUDGET_HALT_OPENAI,
+    };
+    process.env.UA_OUTBOUND_BLOCK = "1";
+    process.env.UA_RELEASE_ENV = "staging";
+    process.env.UA_AI_ENABLED = "1";
+    delete process.env.UA_BUDGET_HALT;
+    delete process.env.UA_BUDGET_HALT_OPENAI;
+    try {
+      assert.equal(outboundBlocked(), true);
+      assert.equal(externalSideEffectsBlocked(), true);
+      assert.deepEqual(modelTransportOpen(), { ok: true });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it("does not treat a missing approval or a closed model budget as a successful model call", () => {
+    const previous = {
+      UA_AI_ENABLED: process.env.UA_AI_ENABLED,
+      UA_BUDGET_HALT_OPENAI: process.env.UA_BUDGET_HALT_OPENAI,
+      UA_OUTBOUND_BLOCK: process.env.UA_OUTBOUND_BLOCK,
+    };
+    delete process.env.UA_AI_ENABLED;
+    delete process.env.UA_BUDGET_HALT_OPENAI;
+    delete process.env.UA_OUTBOUND_BLOCK;
+    try {
+      const off = modelTransportOpen();
+      assert.equal(off.ok, false);
+      if (!off.ok) assert.equal(off.reason, MODEL_OFF);
+      process.env.UA_AI_ENABLED = "1";
+      process.env.UA_BUDGET_HALT_OPENAI = "1";
+      assert.equal(modelTransportOpen().ok, false);
     } finally {
       for (const [key, value] of Object.entries(previous)) {
         if (value === undefined) delete process.env[key];

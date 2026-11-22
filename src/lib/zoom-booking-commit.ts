@@ -8,10 +8,13 @@ function newToken() {
 }
 
 export function meetingReply(result: { booked?: boolean; message?: string; error?: string; join?: string }) {
+  if (result.error) {
+    const error = result.error.replace(/\s*Not booked\.?$/i, "").trim();
+    return /^not booked\b/i.test(error) ? error : `Not booked. ${error}`;
+  }
   if (result.booked && result.join) return result.message || `Booked. ${chatJoinLink(result.join)}`;
-  if (result.message && !result.error) return result.message;
-  const error = (result.error || "No Zoom meeting, Outlook event, or confirmation email was created.").replace(/\s*Not booked\.?$/i, "").trim();
-  return /^not booked\b/i.test(error) ? error : `Not booked. ${error}`;
+  if (result.message) return result.message;
+  return "Not booked. No Zoom meeting, Outlook event, or confirmation email was created.";
 }
 
 export async function commitZoomBooking(input: {

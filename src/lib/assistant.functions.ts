@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK, isolatedProviderNotice } from "@/lib/isolated-test-desk";
-import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
+import { modelTransportOpen, outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 import { archiveMessages, listDrips, saveDrip, sendApprovedAdvisorMail, startDrip } from "@/lib/advisor.functions";
 import { createCalendarEvent, createZoomMeeting, ensureLinkTables, accessToken, readCalendars, readDropbox, readZoom, saveDropboxNote, storedAdvisorLink, storedMailboxLink } from "@/lib/advisor-links";
 import { bookZoom, advisorZone, confirmPendingZoom, clearPendingZoom, findNamedContacts, listUpcomingMeetings, meetingReply } from "@/lib/zoom-bookings";
@@ -196,7 +196,8 @@ async function saveAssistantDiagnostic(advisorId: number | null, handledBy: stri
 export const speakAssistant = createServerFn({ method: "POST" }).validator((input: { slug?: string; code?: string; text?: string }) => input).handler(async ({ data }) => {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   const text = String(data.text || "").replace(/\s+/g, " ").trim().slice(0, 700);
   if (!text) return { ok: false as const, error: "Nothing to say." };
   const apiKey = await companyApiKey();
@@ -215,7 +216,7 @@ export const speakAssistant = createServerFn({ method: "POST" }).validator((inpu
 });
 var voiceWarmed: Promise<void> | null = null;
 export async function warmVoiceLink() {
-  if (outboundBlocked()) return;
+  if (!modelTransportOpen().ok) return;
   if (!voiceWarmed) {
     voiceWarmed = (async () => {
       const started = Date.now();
@@ -234,7 +235,8 @@ export async function warmVoiceLink() {
   return voiceWarmed;
 }
 export async function speakSentence(text: string, onChunk: (chunk: Buffer) => void, advisorId = 0) {
-  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
+  const model = modelTransportOpen();
+  if (!model.ok) throw new Error(model.reason);
   const apiKey = await companyApiKey();
   if (!apiKey) throw new Error("No voice key.");
   const started = Date.now();
@@ -268,7 +270,8 @@ export const warmAssistantVoice = createServerFn({ method: "POST" }).validator((
 export const transcribeAssistant = createServerFn({ method: "POST" }).validator((input: { slug?: string; code?: string; audio?: string; mime?: string; names?: unknown[]; language?: string }) => input).handler(async ({ data }) => {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   const audio = String(data.audio || "");
   if (audio.length < 80) return { ok: false as const, error: "No speech was captured." };
   if (audio.length > 8e6) return { ok: false as const, error: "That recording is too long. Speak one sentence, then pause." };
@@ -1248,7 +1251,8 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
   const made: Array<{ id: number; kind: string; summary: string; preview: string; previewHtml: string; previewImage: string }> = [];
   let ready5 = "";
   let lastProblem = "";
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   for (let round = 0; round < 4; round += 1) {
     const payload = { model: OPENAI_CHAT, temperature: 0.3, max_tokens: 4e3, messages, ...allowTools ? { tools, tool_choice: "auto" } : {} };
     let failure = null;
@@ -1534,7 +1538,8 @@ export const testOpenAiAccount = createServerFn({ method: "POST" }).validator((i
     }
   }
   if (!apiKey) return { ok: false as const, error: "No OpenAI key is saved yet. Paste the key, then choose Test connection or Save." };
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   if (typed && (!typed.startsWith("sk-") || typed.length < 20)) return { ok: false as const, error: "That key does not look like an OpenAI key. It should start with sk-." };
   const check = await fetch(`${OPENAI}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!check.ok) return { ok: false as const, error: "OpenAI did not accept this key." };
@@ -1555,7 +1560,8 @@ export const connectOpenAiAccount = createServerFn({ method: "POST" }).validator
   if (!gate.ok) return gate;
   const apiKey = String(data.apiKey || "").trim();
   if (!apiKey.startsWith("sk-") || apiKey.length < 20) return { ok: false as const, error: "Paste the OpenAI API key. It starts with sk-." };
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   const check = await fetch(`${OPENAI}/models`, { headers: { Authorization: `Bearer ${apiKey}` } });
   if (!check.ok) return { ok: false as const, error: "That OpenAI key was not accepted." };
   await ensureAssistantTables();
@@ -3640,7 +3646,7 @@ export async function runDeskTurn(advisorId: number, slug: string, code: string,
   return directAdvisorCommand(advisorId, slug, code, chatId, text);
 }
 async function hearWithGrok(advisorId: number, text: string, rulesNote: string, lastAssistant: string, calls: ProviderCall[]) {
-  if (outboundBlocked()) return null;
+  if (!modelTransportOpen().ok) return null;
   const apiKey = await companyApiKey();
   if (!apiKey) return null;
   let titles = "";
@@ -4189,7 +4195,8 @@ export const discardAssistantAction = createServerFn({ method: "POST" }).validat
   return { ok: true as const };
 });
 export async function openAiSpeech(text: string, voice: string): Promise<{ ok: false; error: string } | { ok: true; audio: ArrayBuffer; mime: string; voice: string; model: string }> {
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  const model = modelTransportOpen();
+  if (!model.ok) return { ok: false as const, error: model.reason };
   const chosen = openAiVoice(voice);
   try {
     const apiKey = await companyApiKey();

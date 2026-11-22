@@ -101,7 +101,12 @@ describe("zoom booking commit", () => {
       saveDesk: async () => undefined,
     });
     assert.equal(emailFail.ok, false);
-    if (!emailFail.ok) assert.match(emailFail.error, /confirmation email failed: Mailbox full/);
+    if (!emailFail.ok) {
+      assert.match(emailFail.error, /client invitation failed: Mailbox full/);
+      assert.match(meetingReply(emailFail), /^Not booked/);
+      assert.match(meetingReply(emailFail), /client invitation failed: Mailbox full/);
+      assert.doesNotMatch(meetingReply(emailFail), /^Booked/);
+    }
   });
 
   it("treats yes and confirm as the signal to book", () => {

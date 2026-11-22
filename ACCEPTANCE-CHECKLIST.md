@@ -15,4 +15,4 @@ Preview only, on the new staging host, after you have seen a tick answer that no
 11. Birthday, drip, reply, and signature rows for a fictional advisor with no connected mailbox or Dropbox stay blocked. They are not marked sent.
 12. Stop. Live mail, signatures, uploads, bookings, and campaigns are not part of this checklist.
 13. Microphone permission, spoken playback, and interruption are a separate browser check on this HTTPS desk. A typed message is not that check. Leave it pending until you choose to allow the microphone.
-14. The English and Farsi wording in step 7 is the language check. A missing OpenAI key is expected. Do not add one for this list.
+14. Step 7 only checks that the saved fictional records appear. It is not a model test. Do not add an OpenAI key for this list. A real natural-language or spoken-model check is a later, separate approval and is not done here.
