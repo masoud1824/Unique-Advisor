@@ -173,22 +173,22 @@ describe("handler calls with disposable fixtures and stub providers", () => {
   it("checkDocumentReplies stores one disposable notice and ignores the same reply", async () => {
     const seen = [];
     const messages = [
-      { id: "sent-1", conversationId: "thread-1", from: "info@zangenehlaw.ca" },
-      { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
+      { id: "sent-1", conversationId: "thread-1", from: "desk@example.invalid" },
+      { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
     ];
     const first = await checkDocumentReplies({
-      isolated: false, conversationId: "thread-1", sentMessageId: "sent-1", sender: "info@zangenehlaw.ca", seenIds: seen, messages,
+      isolated: false, conversationId: "thread-1", sentMessageId: "sent-1", sender: "desk@example.invalid", seenIds: seen, messages,
       remember: async (notice) => { if (seen.includes(notice.messageId)) return false; seen.push(notice.messageId); return true; },
     });
     assert.equal(first.stored, 1);
     assert.equal(first.providerCalled, false);
     const second = await checkDocumentReplies({
-      isolated: false, conversationId: "thread-1", sentMessageId: "sent-1", sender: "info@zangenehlaw.ca", seenIds: seen, messages,
+      isolated: false, conversationId: "thread-1", sentMessageId: "sent-1", sender: "desk@example.invalid", seenIds: seen, messages,
       remember: async () => { throw new Error("provider"); },
     });
     assert.equal(second.stored, 0);
     const blocked = await checkDocumentReplies({
-      isolated: true, conversationId: "thread-1", sentMessageId: "sent-1", sender: "info@zangenehlaw.ca", seenIds: seen, messages,
+      isolated: true, conversationId: "thread-1", sentMessageId: "sent-1", sender: "desk@example.invalid", seenIds: seen, messages,
       remember: async () => { throw new Error("provider"); },
     });
     assert.equal(blocked.providerCalled, false);

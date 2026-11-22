@@ -35,8 +35,8 @@ describe("document email preview", () => {
       seen: [],
       messages: [
         { id: "sent-1", conversationId: "thread-1", from: "advisor@example.com" },
-        { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
-        { id: "other", conversationId: "thread-2", from: "masoudz@outlook.com" },
+        { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
+        { id: "other", conversationId: "thread-2", from: "reviewer@example.invalid" },
       ],
     });
     assert.deepEqual(first.map((item) => item.messageId), ["reply-1"]);
@@ -46,8 +46,8 @@ describe("document email preview", () => {
       sender: "advisor@example.com",
       seen: ["reply-1"],
       messages: [
-        { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
-        { id: "reply-2", conversationId: "thread-1", from: "masoudz@outlook.com" },
+        { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
+        { id: "reply-2", conversationId: "thread-1", from: "reviewer@example.invalid" },
       ],
     });
     assert.deepEqual(again.map((item) => item.messageId), ["reply-2"]);
@@ -58,13 +58,13 @@ describe("reply notice regression", () => {
   const thread = {
     conversationId: "thread-1",
     sentMessageId: "sent-1",
-    sender: "info@zangenehlaw.ca",
+    sender: "desk@example.invalid",
   };
   const messages = [
-    { id: "sent-1", conversationId: "thread-1", from: "info@zangenehlaw.ca" },
-    { id: "own-followup", conversationId: "thread-1", from: "info@zangenehlaw.ca" },
-    { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
-    { id: "other-thread", conversationId: "thread-2", from: "masoudz@outlook.com" },
+    { id: "sent-1", conversationId: "thread-1", from: "desk@example.invalid" },
+    { id: "own-followup", conversationId: "thread-1", from: "desk@example.invalid" },
+    { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
+    { id: "other-thread", conversationId: "thread-2", from: "reviewer@example.invalid" },
   ];
   it("detects one reply and creates one advisor notice", () => {
     const planned = planReplyNotices({ ...thread, seen: [], messages });
@@ -88,7 +88,7 @@ describe("reviewed test send restriction", () => {
   const exact = {
     advisorSlug: REVIEWED_ADVISOR,
     sender: "advisor@example.com",
-    to: ["masoudz@outlook.com"],
+    to: ["reviewer@example.invalid"],
     attachment: REVIEWED_ATTACHMENT,
     approvalText: REVIEWED_APPROVAL,
     alreadySent: false,
@@ -102,7 +102,7 @@ describe("reviewed test send restriction", () => {
     assert.equal(body.includes("bccRecipients"), false);
     assert.equal(allowed.message.toRecipients.length, 1);
     assert.equal(reviewedTestDecision({ ...exact, advisorSlug: "other-advisor" }).ok, false);
-    assert.equal(reviewedTestDecision({ ...exact, to: ["masoudz@outlook.com", "other@example.com"] }).ok, false);
+    assert.equal(reviewedTestDecision({ ...exact, to: ["reviewer@example.invalid", "other@example.com"] }).ok, false);
     assert.equal(reviewedTestDecision({ ...exact, to: ["other@example.com"] }).ok, false);
     assert.equal(reviewedTestDecision({ ...exact, cc: ["other@example.com"] }).ok, false);
     assert.equal(reviewedTestDecision({ ...exact, bcc: ["other@example.com"] }).ok, false);

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "./isolated-test-desk.ts";
 
 export const DROPBOX_SIGN_AUTH = "https://app.hellosign.com/oauth/authorize";
 export const DROPBOX_SIGN_TOKEN = "https://app.hellosign.com/oauth/token";

@@ -136,13 +136,13 @@ describe("explicit constraints beat broad fixtures", () => {
   it("describes the saved thread without substituting TEST ONLY", () => {
     const reply = emailThreadStatusReply({
       subject: "Signature Workflow Test — fictional document",
-      recipient: "masoudz@outlook.com",
+      recipient: "reviewer@example.invalid",
       isolated: true,
       stored: false,
       conversationKnown: false,
     });
     assert.match(reply, /Signature Workflow Test/);
-    assert.match(reply, /masoudz@outlook.com/);
+    assert.match(reply, /reviewer@example.invalid/);
     assert.match(reply, /cannot check replies/i);
     assert.match(reply, /Microsoft is not contacted/i);
     assert.doesNotMatch(reply, /TEST ONLY/);

@@ -88,7 +88,7 @@ describe("routing repair paraphrases", () => {
       assert.equal(deliveryRequested(line), false);
       const reply = emailThreadStatusReply({
         subject: "Signature Workflow Test — fictional document",
-        recipient: "masoudz@outlook.com",
+        recipient: "reviewer@example.invalid",
         isolated: true,
         stored: true,
         conversationKnown: false,

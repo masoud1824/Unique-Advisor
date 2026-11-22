@@ -5,7 +5,7 @@ export const SIGNATURE_TEST = {
   title: "TEST ONLY",
   statement: "This is a system test, not a client document.",
   signerName: "Test Signer",
-  signerEmail: "masoudz@outlook.com",
+  signerEmail: "reviewer@example.invalid",
   testMode: true,
   folder: "/Unique Advisor/Dropbox Sign Test",
   documentId: "test-only",

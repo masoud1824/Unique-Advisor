@@ -171,14 +171,14 @@ describe("workflow entry points used by the desk handlers", () => {
   it("ingestDocumentReplies, called by checkDocumentReplies, stores one notice and ignores the same reply", async () => {
     const seen: string[] = [];
     const messages = [
-      { id: "sent-1", conversationId: "thread-1", from: "info@zangenehlaw.ca" },
-      { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
-      { id: "other", conversationId: "thread-2", from: "masoudz@outlook.com" },
+      { id: "sent-1", conversationId: "thread-1", from: "desk@example.invalid" },
+      { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
+      { id: "other", conversationId: "thread-2", from: "reviewer@example.invalid" },
     ];
     const first = await ingestDocumentReplies({
       conversationId: "thread-1",
       sentMessageId: "sent-1",
-      sender: "info@zangenehlaw.ca",
+      sender: "desk@example.invalid",
       seenIds: seen,
       messages,
       remember: async (notice) => {
@@ -192,7 +192,7 @@ describe("workflow entry points used by the desk handlers", () => {
     const second = await ingestDocumentReplies({
       conversationId: "thread-1",
       sentMessageId: "sent-1",
-      sender: "info@zangenehlaw.ca",
+      sender: "desk@example.invalid",
       seenIds: seen,
       messages,
       remember: async () => { throw new Error("provider"); },

@@ -11,7 +11,7 @@ const base = {
   width: 180,
   height: 28,
   signerName: "Alex Example",
-  deliveryEmail: "masoudz@outlook.com",
+  deliveryEmail: "reviewer@example.invalid",
   pageWidth: 612,
   pageHeight: 792,
   pageCount: 37,

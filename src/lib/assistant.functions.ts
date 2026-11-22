@@ -2616,7 +2616,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     return preparedWork(saved.reply, saved.actions);
   }
   if (archiveIntent(tidy)) {
-    const sender = slug === "masoud-zangeneh-2" ? "info@zangenehlaw.ca" : "";
+    const sender = slug === "masoud-zangeneh-2" ? "desk@example.invalid" : "";
     const result = newsletterArchiveTurn(advisorArchive(String(advisorId)), { advisorId: String(advisorId), request: tidy, sender, now: new Date().toISOString(), approval: tidy });
     if (result.handled) {
       rememberAdvisorArchive(String(advisorId), result.state);
@@ -2695,7 +2695,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
   if (await wantsCard(advisorId, tidy)) {
     if (/\bfictional\b|\bsimulated\b/i.test(tidy)) {
       if (slug !== "masoud-zangeneh-2") return preparedWork("This fictional card demonstration is only for masoud-zangeneh-2. Nothing was sent.");
-      const planned = planCardPreview({ request: tidy, sender: "info@zangenehlaw.ca", alreadySent: [...cardSimulationStore()] });
+      const planned = planCardPreview({ request: tidy, sender: "desk@example.invalid", alreadySent: [...cardSimulationStore()] });
       if (!planned.ok) return preparedWork(planned.error);
       rememberCardRequest(advisorId, tidy);
       return preparedWork(planned.preview);
@@ -3159,7 +3159,7 @@ async function holdOther(advisorId, kind, text) {
       const dropbox = await storedAdvisorLink(advisorId, "dropbox");
       return { reply: `${isolatedProviderNotice("mailbox", mailbox)} ${isolatedProviderNotice("dropbox", dropbox)}`, actions: [] };
     }
-    const preview = documentMailPreview({ sender: "info@zangenehlaw.ca", attachment: REVIEWED_ATTACHMENT });
+    const preview = documentMailPreview({ sender: "desk@example.invalid", attachment: REVIEWED_ATTACHMENT });
     const body = preview.ok ? preview.preview : preview.error;
     return { reply: `${body}\n\nRecorded test sender for ${DOCUMENT_MAIL.subject}. A new message was not created. ${holdNote("email")}`, actions: [] };
   }
@@ -3282,7 +3282,7 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
     const result = newsletterArchiveTurn(advisorArchive(String(advisorId)), {
       advisorId: String(advisorId),
       request: tidy.trim(),
-      sender: slug === "masoud-zangeneh-2" ? "info@zangenehlaw.ca" : "",
+      sender: slug === "masoud-zangeneh-2" ? "desk@example.invalid" : "",
       now: new Date().toISOString(),
     });
     rememberAdvisorArchive(String(advisorId), result.state);
@@ -3290,11 +3290,11 @@ async function directAdvisorCommand(advisorId, slug, code, chatId, text, onDelta
   }
   if (tidy.trim() === CARD_APPROVAL && /simulated card preview/i.test(lastAssistant)) {
     const request = rememberedCardRequest(advisorId);
-    const planned = planCardPreview({ request, sender: "info@zangenehlaw.ca", alreadySent: [...cardSimulationStore()] });
+    const planned = planCardPreview({ request, sender: "desk@example.invalid", alreadySent: [...cardSimulationStore()] });
     if (!planned.ok || planned.preview.trim() !== lastAssistant.trim()) {
       return replyWith(advisorId, chatId, "That card preview is no longer current. Nothing was sent.", onDelta);
     }
-    const result = simulateCardDelivery({ request, sender: "info@zangenehlaw.ca", approval: tidy.trim(), sent: cardSimulationStore() });
+    const result = simulateCardDelivery({ request, sender: "desk@example.invalid", approval: tidy.trim(), sent: cardSimulationStore() });
     return replyWith(advisorId, chatId, result.ok ? result.detail : result.error, onDelta);
   }
   if (tidy.trim() === "I approve this exact preview" && /this email has not been sent/i.test(lastAssistant)) {

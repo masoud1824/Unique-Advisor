@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { CARD_APPROVAL, planCardPreview, simulateCardDelivery } from "./card-preview.ts";
 
-const sender = "info@zangenehlaw.ca";
+const sender = "desk@example.invalid";
 
 describe("fictional e-card preview", () => {
   it("selects a recorded group, excludes unsubscribed and missing email, and does not send", () => {

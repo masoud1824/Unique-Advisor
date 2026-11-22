@@ -42,7 +42,7 @@ export function DocumentMailPreview({ code, slug }: { code: string; slug: string
       {loaded && !loaded.isolated && (
         <div className="mt-4 grid gap-2 text-sm">
           <p>From: {loaded.sender || "No mailbox is connected for this advisor."}</p>
-          <p>To: {loaded.recipient || "masoudz@outlook.com"}</p>
+          <p>To: {loaded.recipient || "reviewer@example.invalid"}</p>
           <p>Subject: {loaded.subject || "Signature Workflow Test — fictional document"}</p>
           <p>Body: {loaded.body || "This is a fictional test email, not a client message."}</p>
           {file && <p>Attachment: {file.path} · {file.size} bytes · {file.hash}</p>}

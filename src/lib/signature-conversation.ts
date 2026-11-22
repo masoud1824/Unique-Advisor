@@ -57,7 +57,7 @@ export const PREPARED_DRAFT = {
   fileName: "LP257-6-26-C-1001-prepared-draft.pdf",
   folder: "/Unique Advisor/Assistant Test/C-1001",
   signerName: "Test signer",
-  signerEmail: "masoudz@outlook.com",
+  signerEmail: "reviewer@example.invalid",
 };
 
 export function preparedDraftPath() {

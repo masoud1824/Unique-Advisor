@@ -1,5 +1,5 @@
 export const DOCUMENT_MAIL = {
-  recipient: "masoudz@outlook.com",
+  recipient: "reviewer@example.invalid",
   title: "Signature Workflow Test",
   subject: "Signature Workflow Test — fictional document",
   body: "This is a fictional test email, not a client message. The attachment is the Signature Workflow Test document from the test folder.",
@@ -59,7 +59,7 @@ export function reviewedTestDecision(input: {
   const sender = input.sender.trim().toLowerCase();
   if (!sender.includes("@")) return { ok: false as const, error: "This advisor has no connected mailbox. Nothing was sent." };
   const to = input.to.map((item) => item.trim().toLowerCase()).filter(Boolean);
-  if (to.length !== 1 || to[0] !== DOCUMENT_MAIL.recipient) return { ok: false as const, error: "Only masoudz@outlook.com can receive this test. Nothing was sent." };
+  if (to.length !== 1 || to[0] !== DOCUMENT_MAIL.recipient) return { ok: false as const, error: "Only reviewer@example.invalid can receive this test. Nothing was sent." };
   if ((input.cc || []).some((item) => item.trim()) || (input.bcc || []).some((item) => item.trim())) {
     return { ok: false as const, error: "CC and BCC are not allowed for this test. Nothing was sent." };
   }

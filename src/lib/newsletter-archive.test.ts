@@ -21,7 +21,7 @@ import {
 } from "./newsletter-archive.ts";
 
 const now = "2026-11-18T12:00:00Z";
-const sender = "info@zangenehlaw.ca";
+const sender = "desk@example.invalid";
 const advisor = "34";
 const other = "35";
 

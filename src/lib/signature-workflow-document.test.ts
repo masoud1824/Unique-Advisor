@@ -18,7 +18,7 @@ describe("general Dropbox document choice", () => {
     assert.equal(chooseDropboxDocument(files, "LP257").ok, false);
     const field = workflowSignField();
     const preview = workflowPreviewText({ path: chosen.file.path, field });
-    assert.match(preview, /masoudz@outlook.com/);
+    assert.match(preview, /reviewer@example.invalid/);
     assert.match(preview, /Dropbox Sign test mode/);
     assert.match(preview, /labelled Signature/);
     assert.match(preview, /page 1, x 72, y 628, width 240, height 48/);

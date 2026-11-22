@@ -9,7 +9,7 @@ describe("signature conversation", () => {
     assert.equal(asksForTestSignature("Send the client application for signature"), false);
     const preview = signaturePreviewText();
     assert.match(preview, /Document: TEST ONLY/);
-    assert.match(preview, /masoudz@outlook.com/);
+    assert.match(preview, /reviewer@example.invalid/);
     assert.match(preview, /One signature field/);
     assert.match(preview, /\/Unique Advisor\/Dropbox Sign Test/);
     assert.match(preview, /Nothing is sent until you approve/);
@@ -20,7 +20,7 @@ describe("signature conversation", () => {
     assert.equal(asksForTestSignature("Prepare a signature preview for the prepared draft"), false);
     const prepared = preparedDraftPreviewText({ path: preparedDraftPath(), edition: "LP257 6/26", placement: PLACEMENT_NOT_CHOSEN });
     assert.match(prepared, /LP257-6-26-C-1001-prepared-draft\.pdf/);
-    assert.match(prepared, /Test signer <masoudz@outlook.com>/);
+    assert.match(prepared, /Test signer <reviewer@example.invalid>/);
     assert.match(prepared, /not chosen/);
     assert.match(prepared, /not the earlier TEST ONLY request/);
     assert.match(prepared, /Nothing was sent/);

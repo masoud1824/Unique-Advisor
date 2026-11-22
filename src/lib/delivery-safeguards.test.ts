@@ -63,7 +63,7 @@ describe("offline delivery safeguards", () => {
     const exact = reviewedTestDecision({
       advisorSlug: REVIEWED_ADVISOR,
       sender: "advisor@example.com",
-      to: ["masoudz@outlook.com"],
+      to: ["reviewer@example.invalid"],
       attachment: REVIEWED_ATTACHMENT,
       approvalText: REVIEWED_APPROVAL,
       alreadySent: false,
@@ -72,7 +72,7 @@ describe("offline delivery safeguards", () => {
     assert.equal(reviewedTestDecision({
       advisorSlug: REVIEWED_ADVISOR,
       sender: "advisor@example.com",
-      to: ["masoudz@outlook.com"],
+      to: ["reviewer@example.invalid"],
       attachment: { ...REVIEWED_ATTACHMENT, hash: "different" },
       approvalText: REVIEWED_APPROVAL,
       alreadySent: false,
@@ -81,11 +81,11 @@ describe("offline delivery safeguards", () => {
 
   it("dedupes reply notices for the same message", () => {
     const messages = [
-      { id: "sent-1", conversationId: "thread-1", from: "info@zangenehlaw.ca" },
-      { id: "reply-1", conversationId: "thread-1", from: "masoudz@outlook.com" },
-      { id: "other", conversationId: "thread-2", from: "masoudz@outlook.com" },
+      { id: "sent-1", conversationId: "thread-1", from: "desk@example.invalid" },
+      { id: "reply-1", conversationId: "thread-1", from: "reviewer@example.invalid" },
+      { id: "other", conversationId: "thread-2", from: "reviewer@example.invalid" },
     ];
-    const planned = planReplyNotices({ conversationId: "thread-1", sentMessageId: "sent-1", sender: "info@zangenehlaw.ca", seen: [], messages });
+    const planned = planReplyNotices({ conversationId: "thread-1", sentMessageId: "sent-1", sender: "desk@example.invalid", seen: [], messages });
     const first = noticesToCreate(planned, []);
     const second = noticesToCreate(planned, first.map((item) => item.messageId));
     assert.deepEqual(first.map((item) => item.messageId), ["reply-1"]);

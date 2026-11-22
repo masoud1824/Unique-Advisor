@@ -7,7 +7,7 @@ export const WORKFLOW_DOCUMENT = {
   folder: "/Unique Advisor/Assistant Test",
   statement: "Fictional document for the signature workflow. Not a client file.",
   signerName: "Test signer",
-  signerEmail: "masoudz@outlook.com",
+  signerEmail: "reviewer@example.invalid",
   documentId: "signature-workflow-test",
   page: { width: 612, height: 792 },
   box: { page: 1, x: 72, y: 116, width: 240, height: 48 },

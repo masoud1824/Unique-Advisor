@@ -8,7 +8,7 @@ describe("signature workflow send", () => {
     const request = workflowSignRequest("34");
     assert.equal(request.testMode, true);
     assert.equal(request.documentId, "signature-workflow-test");
-    assert.equal(request.signers[0]?.email, "masoudz@outlook.com");
+    assert.equal(request.signers[0]?.email, "reviewer@example.invalid");
     assert.equal(request.fields[0]?.page, 1);
     assert.equal(request.fields[0]?.x, 72);
     assert.equal(request.fields[0]?.y, 628);
