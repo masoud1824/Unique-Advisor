@@ -45,10 +45,31 @@ describe("isolated test desk gate", () => {
 
   it("refuses the test copy when isolation is off, and does not claim side effects are blocked", () => {
     delete process.env.UA_ISOLATED_TEST;
+    delete process.env.UA_OUTBOUND_BLOCK;
+    delete process.env.UA_RELEASE_ENV;
+    delete process.env.UA_HOST_ENV;
+    delete process.env.VERCEL_ENV;
     process.env.PGLITE_DATA_DIR = ISOLATED_TEST_DIR;
     assert.equal(externalSideEffectsBlocked(), false);
     assert.equal(typeof refusePreviewDataDir(ISOLATED_TEST_DIR), "string");
     assert.equal(refusePreviewDataDir("/workspace/.preview-data/pglite"), null);
+  });
+
+  it("blocks a Vercel preview and a staging host even when the release flag was forgotten", () => {
+    delete process.env.UA_OUTBOUND_BLOCK;
+    delete process.env.UA_RELEASE_ENV;
+    delete process.env.UA_ISOLATED_TEST;
+    process.env.VERCEL_ENV = "preview";
+    assert.equal(externalSideEffectsBlocked(), true);
+    delete process.env.VERCEL_ENV;
+    process.env.UA_HOST_ENV = "staging";
+    assert.equal(externalSideEffectsBlocked(), true);
+    delete process.env.UA_HOST_ENV;
+    process.env.VERCEL_ENV = "production";
+    process.env.UA_HOST_ENV = "production";
+    assert.equal(externalSideEffectsBlocked(), false);
+    delete process.env.VERCEL_ENV;
+    delete process.env.UA_HOST_ENV;
   });
 
   it("describes a stored link without calling the provider", () => {

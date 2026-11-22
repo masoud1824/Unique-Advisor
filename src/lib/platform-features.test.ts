@@ -66,15 +66,25 @@ describe("outbound guard does not depend on the database", () => {
   });
 
   it("does not block the ordinary unit-test process", () => {
-    const previous = process.env.UA_RELEASE_ENV;
+    const previous = {
+      UA_RELEASE_ENV: process.env.UA_RELEASE_ENV,
+      UA_OUTBOUND_BLOCK: process.env.UA_OUTBOUND_BLOCK,
+      UA_HOST_ENV: process.env.UA_HOST_ENV,
+      VERCEL_ENV: process.env.VERCEL_ENV,
+      UA_ISOLATED_TEST: process.env.UA_ISOLATED_TEST,
+    };
     delete process.env.UA_RELEASE_ENV;
     delete process.env.UA_OUTBOUND_BLOCK;
+    delete process.env.UA_HOST_ENV;
+    delete process.env.VERCEL_ENV;
     delete process.env.UA_ISOLATED_TEST;
     try {
       assert.equal(outboundBlocked(), false);
     } finally {
-      if (previous === undefined) delete process.env.UA_RELEASE_ENV;
-      else process.env.UA_RELEASE_ENV = previous;
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });

@@ -80,6 +80,7 @@ const openEnv: Record<string, string | undefined> = {
   UA_JOBS_EXECUTE: "1",
   UA_OUTBOUND_BLOCK: undefined,
   UA_RELEASE_ENV: undefined,
+  VERCEL_ENV: undefined,
   UA_BUDGET_HALT: undefined,
   UA_BUDGET_HALT_MAIL: undefined,
   UA_BUDGET_HALT_SIGNATURE: undefined,

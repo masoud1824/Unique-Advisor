@@ -39,3 +39,31 @@ jobs:
         run: |
           psql "$DATABASE_URL" -c "create database ua_disposable_restore"
           node scripts/release/disposable-postgres.mjs
+      - name: Seed a second empty disposable database
+        env:
+          UA_DISPOSABLE_POSTGRES: "1"
+          DATABASE_URL: postgresql://ua:ua_disposable_local@127.0.0.1:5432/ua_disposable_seed
+          DATABASE_URL_UNPOOLED: postgresql://ua:ua_disposable_local@127.0.0.1:5432/ua_disposable_seed
+          UA_HOST_ENV: development
+          UA_SEED_SECRET_FILE: /tmp/ua-seed-access.txt
+        run: |
+          psql "postgresql://ua:ua_disposable_local@127.0.0.1:5432/ua_disposable_src" -c "create database ua_disposable_seed"
+          node scripts/migrate.mjs
+          node scripts/release/seed-hosted.mjs > /tmp/ua-seed-out.json
+          node --input-type=module -e '
+            import assert from "node:assert/strict";
+            import { readFileSync } from "node:fs";
+            const out = readFileSync("/tmp/ua-seed-out.json", "utf8");
+            const report = JSON.parse(out);
+            assert.equal(report.contacts, 6);
+            assert.equal(report.activeDrips, 0);
+            assert.equal(report.printedSecrets, false);
+            assert.equal(out.includes("advisor-code"), false);
+            assert.equal(out.includes("operator-password"), false);
+            const secret = readFileSync("/tmp/ua-seed-access.txt", "utf8");
+            const code = secret.match(/advisor-code: (\S+)/)[1];
+            assert.equal(out.includes(code), false);
+            assert.equal(secret.toLowerCase().includes("superadmin"), false);
+          '
+          rm -f /tmp/ua-seed-access.txt /tmp/ua-seed-out.json
+

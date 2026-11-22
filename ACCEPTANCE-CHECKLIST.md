@@ -14,3 +14,5 @@ Preview only, on the new staging host, after you have seen a tick answer that no
 10. Confirm `UA_JOBS_EXECUTE` is unset or unused. A value of `1` on this host must still leave `sent` at 0.
 11. Birthday, drip, reply, and signature rows for a fictional advisor with no connected mailbox or Dropbox stay blocked. They are not marked sent.
 12. Stop. Live mail, signatures, uploads, bookings, and campaigns are not part of this checklist.
+13. Microphone permission, spoken playback, and interruption are a separate browser check on this HTTPS desk. A typed message is not that check. Leave it pending until you choose to allow the microphone.
+14. The English and Farsi wording in step 7 is the language check. A missing OpenAI key is expected. Do not add one for this list.

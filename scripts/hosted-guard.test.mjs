@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertDisposablePostgresUrl,
+  assertHostedSeedTarget,
   budgetOpen,
   cronAuthorized,
   migrationApproved,
@@ -78,4 +79,27 @@ test("disposable rehearsal refuses remote and non-disposable names", () => {
   assert.doesNotThrow(() => assertDisposablePostgresUrl("postgresql://user@127.0.0.1:5432/ua_disposable_proof"));
   if (previous === undefined) delete process.env.UA_DISPOSABLE_POSTGRES;
   else process.env.UA_DISPOSABLE_POSTGRES = previous;
+});
+
+test("hosted seed refuses production names and accepts only a closed staging target", () => {
+  const keys = ["UA_DISPOSABLE_POSTGRES", "UA_HOSTED_SEED", "UA_HOST_ENV", "UA_RELEASE_ENV", "UA_OUTBOUND_BLOCK", "UA_MIGRATE_APPROVED"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  delete process.env.UA_DISPOSABLE_POSTGRES;
+  process.env.UA_HOSTED_SEED = "yes";
+  process.env.UA_HOST_ENV = "staging";
+  process.env.UA_RELEASE_ENV = "staging";
+  process.env.UA_OUTBOUND_BLOCK = "1";
+  delete process.env.UA_MIGRATE_APPROVED;
+  assert.equal(assertHostedSeedTarget("postgresql://user@ep.neon.tech/ua_staging?sslmode=require"), "staging");
+  assert.throws(() => assertHostedSeedTarget("postgresql://user@ep.neon.tech/ua_staging"), /sslmode/);
+  assert.throws(() => assertHostedSeedTarget("postgresql://user@ep.neon.tech/production?sslmode=require"), /staging/);
+  process.env.UA_HOST_ENV = "production";
+  assert.throws(() => assertHostedSeedTarget("postgresql://user@ep.neon.tech/ua_staging?sslmode=require"), /UA_HOST_ENV/);
+  process.env.UA_DISPOSABLE_POSTGRES = "1";
+  assert.throws(() => assertHostedSeedTarget("postgresql://user@ep.neon.tech/ua_disposable_seed"), /loopback|refuses/);
+  assert.equal(assertHostedSeedTarget("postgresql://user@127.0.0.1/ua_disposable_seed"), "disposable");
+  for (const key of keys) {
+    if (previous[key] === undefined) delete process.env[key];
+    else process.env[key] = previous[key];
+  }
 });

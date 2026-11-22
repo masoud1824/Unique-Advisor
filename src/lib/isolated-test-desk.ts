@@ -21,6 +21,10 @@ export function externalSideEffectsBlocked() {
   if (process.env.UA_OUTBOUND_BLOCK === "1") return true;
   const release = process.env.UA_RELEASE_ENV;
   if (release === "development" || release === "staging") return true;
+  const host = process.env.UA_HOST_ENV;
+  if (host === "development" || host === "staging") return true;
+  const vercelEnv = process.env.VERCEL_ENV;
+  if (vercelEnv === "preview" || vercelEnv === "development") return true;
   return isolatedTestRequested() && isolatedDataDir() === ISOLATED_TEST_DIR;
 }
 

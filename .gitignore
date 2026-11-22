@@ -5,6 +5,7 @@ dist
 .env
 .env.*
 !.env.example
+staging-access.local.txt
 *.log
 .DS_Store
 .preview-data

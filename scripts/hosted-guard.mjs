@@ -80,3 +80,33 @@ export function assertDisposablePostgresUrl(url) {
     throw new Error("Disposable database name must start with ua_disposable.");
   }
 }
+
+/**
+ * Staging seed target. Disposable mode stays on loopback.
+ * A real staging seed must name the database staging and keep outbound closed.
+ * The URL is not returned and must not be logged.
+ */
+export function assertHostedSeedTarget(url) {
+  if (process.env.UA_DISPOSABLE_POSTGRES === "1") {
+    assertDisposablePostgresUrl(url);
+    return "disposable";
+  }
+  if (process.env.UA_HOSTED_SEED !== "yes") throw new Error("Hosted seed requires UA_HOSTED_SEED=yes.");
+  if (process.env.UA_HOST_ENV !== "staging") throw new Error("Hosted seed requires UA_HOST_ENV=staging.");
+  if (process.env.UA_RELEASE_ENV !== "staging") throw new Error("Hosted seed requires UA_RELEASE_ENV=staging.");
+  if (process.env.UA_OUTBOUND_BLOCK !== "1") throw new Error("Hosted seed requires UA_OUTBOUND_BLOCK=1.");
+  if (process.env.UA_MIGRATE_APPROVED === "1") throw new Error("Hosted seed refuses an approved production migration flag.");
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("Hosted seed URL is not a URL.");
+  }
+  const name = decodeURIComponent(parsed.pathname.replace(/^\//, "").split("?")[0]);
+  if (!name || !/staging/i.test(name)) throw new Error("Hosted seed database name must include staging.");
+  if (/production|acceptance|live/i.test(name)) throw new Error("Hosted seed refuses that database name.");
+  if (/grok\.me/i.test(url)) throw new Error("Hosted seed refuses that database.");
+  const remote = parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost";
+  if (remote && !/sslmode=require/i.test(url)) throw new Error("Hosted seed requires sslmode=require.");
+  return "staging";
+}
