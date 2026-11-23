@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { archiveMessages, deleteLetter, listTemplates, saveLetter } from "@/lib/advisor.functions";
-import { LETTERS } from "@/lib/catalog";
 import { isEletterPack } from "@/lib/eletter";
 import {
   NEWSLETTER_DESIGNS,
+  blankIssue,
   packNewsletter,
   plainNewsletter,
   renderNewsletter,
@@ -15,19 +15,9 @@ import {
 } from "@/lib/newsletter";
 import { type DeskData } from "@/lib/site-types";
 import { turnPhoto } from "@/lib/turn-photo";
+import { ArticleLibraryDesk } from "@/components/article-library-desk";
 
 type Story = NewsletterArticle & { id: string };
-
-function savedNewsletter(letters: { id: number; title: string; body: string }[]) {
-  const packs = letters
-    .filter((letter) => !isEletterPack(letter.body))
-    .map((letter) => ({ id: letter.id, issue: unpackNewsletter(letter.body) }))
-    .filter((item): item is { id: number; issue: NewsletterIssue } => Boolean(item.issue));
-  const titled = packs.filter((item) => item.issue.title.trim().toLowerCase() === "test newsletter");
-  if (titled.length > 1) return null;
-  if (titled.length === 1) return titled[0];
-  return packs.length === 1 ? packs[0] : null;
-}
 
 export function NewsletterDesk({
   code,
@@ -40,9 +30,10 @@ export function NewsletterDesk({
   reload: () => Promise<void>;
   ping: (text: string) => void;
 }) {
-  const opened = savedNewsletter(desk.letters);
-  const [issue, setIssue] = useState<NewsletterIssue>(() => opened?.issue ?? starterIssue());
-  const [stories, setStories] = useState<Story[]>(() => (opened?.issue.articles ?? starterIssue().articles).map(story));
+  const [issue, setIssue] = useState<NewsletterIssue>(() => blankIssue());
+  const [stories, setStories] = useState<Story[]>(() => blankIssue().articles.map(story));
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [tag, setTag] = useState("");
   const [busy, setBusy] = useState(false);
@@ -65,7 +56,7 @@ export function NewsletterDesk({
       stop = true;
     };
   }, [brand.photo, brand.flip]);
-  const [openId, setOpenId] = useState<number | null>(opened?.id ?? null);
+  const [openId, setOpenId] = useState<number | null>(null);
   const preview = renderNewsletter({
     issue: { ...issue, articles: stories, social: brand.social },
     contact,
@@ -81,16 +72,14 @@ export function NewsletterDesk({
   }, [openId]);
 
   useEffect(() => {
+    if (openId == null) return;
     const saved = desk.letters.filter((letter) => !isEletterPack(letter.body));
-    const open = openId == null ? null : saved.find((letter) => letter.id === openId);
-    const only = saved.length === 1 ? saved[0] : null;
-    const source = open || (issue.title === starterIssue().title ? only : null);
+    const source = saved.find((letter) => letter.id === openId);
     if (!source) return;
     const packed = unpackNewsletter(source.body);
     if (!packed) return;
     const same = stories.length === packed.articles.length && stories.every((item, index) => item.title === packed.articles[index]?.title && item.body === packed.articles[index]?.body);
     if (same && issue.title === packed.title) return;
-    if (openId == null) setOpenId(source.id);
     apply(packed);
   }, [desk.letters, openId]);
 
@@ -100,6 +89,7 @@ export function NewsletterDesk({
   }
 
   function loadPlain(title: string, subject: string, body: string) {
+    setEditorOpen(true);
     const packed = unpackNewsletter(body);
     if (packed) {
       apply(packed);
@@ -150,11 +140,23 @@ export function NewsletterDesk({
   return (
     <>
       <section className="ua-panel p-6">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <button type="button" className="ua-btn" onClick={() => setLibraryOpen((value) => !value)}>{libraryOpen ? "Close article library" : "Article library"}</button>
+          <button type="button" className="ua-btn" onClick={() => {
+            setOpenId(null);
+            const blank = blankIssue();
+            setIssue(blank);
+            setStories(blank.articles.map(story));
+            setEditorOpen(true);
+            setLibraryOpen(false);
+          }}>Create newsletter</button>
+        </div>
+        {libraryOpen && <ArticleLibraryDesk slug={desk.slug} code={code} ping={ping} />}
         <h2 className="text-lg font-semibold">Newsletter design</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "#5a6a7a" }}>
           Pick a layout, then choose how many articles this issue has. The matching boxes open below. Every article shows in full in the editor, the preview, and the email. Your picture is included only when Show profile picture on newsletters is ticked in Profile and you save.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="ua-design-grid">
           {NEWSLETTER_DESIGNS.map((item) => (
             <button
               key={item.id}
@@ -170,11 +172,6 @@ export function NewsletterDesk({
           ))}
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
-          {LETTERS.map((letter) => (
-            <button key={letter.id} type="button" className="ua-btn-line" onClick={() => loadPlain(letter.title, letter.subject, letter.body)}>
-              {letter.title}
-            </button>
-          ))}
           {shared.map((letter) => (
             <button key={letter.id} type="button" className="ua-btn-line" onClick={() => loadPlain(letter.name, letter.detail, letter.body || letter.detail)}>
               {letter.name}
@@ -186,7 +183,7 @@ export function NewsletterDesk({
             <p className="text-sm font-semibold">Saved newsletters</p>
             {desk.letters.filter((letter) => !isEletterPack(letter.body)).map((letter) => (
               <div key={letter.id} className="flex items-center gap-2">
-                <button type="button" className="ua-btn-line" style={{ flex: "1 1 auto", textAlign: "left" }} onClick={() => { setOpenId(letter.id); loadPlain(letter.title, letter.subject, letter.body); }}>
+                <button type="button" className="ua-btn-line" style={{ flex: "1 1 auto", textAlign: "left" }} onClick={() => { setOpenId(letter.id); setEditorOpen(true); loadPlain(letter.title, letter.subject, letter.body); }}>
                   {letter.title}
                 </button>
                 <button
@@ -208,7 +205,7 @@ export function NewsletterDesk({
           </div>
         )}
       </section>
-      <section className="ua-panel mt-6 p-6">
+      {editorOpen && <section className="ua-panel mt-6 p-6">
         <h2 className="mb-4 text-lg font-semibold">This issue</h2>
         <label className="mb-3 grid gap-1 text-sm font-semibold">
           Word in the header
@@ -263,8 +260,8 @@ export function NewsletterDesk({
         >
           Save newsletter
         </button>
-      </section>
-      <section className="ua-panel mt-6 p-6">
+      </section>}
+      {editorOpen && <section className="ua-panel mt-6 p-6">
         <h2 className="mb-3 text-lg font-semibold">Preview</h2>
         <p className="mb-3 text-sm font-semibold">{issue.title}</p>
         <iframe
@@ -292,7 +289,7 @@ export function NewsletterDesk({
           ))}
         </ul>
         <button type="button" disabled={busy} className="ua-btn mt-4" onClick={() => void send()}>{busy ? "Sending…" : "Send newsletter"}</button>
-      </section>
+      </section>}
     </>
   );
 }

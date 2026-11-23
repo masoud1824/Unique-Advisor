@@ -33,6 +33,7 @@ import { taskOn, taskPaused } from "@/lib/secretary-rules";
 import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
+import { blockedReadNote, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, pendingFormRequest, readPublicHttps, searchPublicFormPages } from "@/lib/form-lookup";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
 import { DOCUMENT_MAIL, REVIEWED_ATTACHMENT, documentMailPreview } from "@/lib/document-mail";
@@ -2258,14 +2259,14 @@ async function formBrief(advisorId: number, text: string) {
     )`);
     links = await sql<{ label: string; url: string }>`select label, url from useful_links where advisor_id = ${advisorId} order by id`;
   } catch {
-    return "Useful Links could not be read. I did not open a form.";
+    return "Useful Links could not be read. That is an access failure, not a missing form. I did not search the web.";
   }
-  const matched = chooseSavedLink(links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })), text);
-  if (!insurerNamed(text)) return "Which insurer's forms page should I use? I will only open a Useful Link saved on this desk.";
-  if (!matched.length) return "No saved Useful Link matches that insurer. Add or select the ivari forms page under Useful Links. I did not open a page or substitute an address.";
+  const matched = insurerNamed(text) ? chooseSavedLink(links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })), text) : linksForFormRequest(links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })), text);
+  if (!matched.length) return formWebPrompt(text);
   if (matched.length > 1) return `Which saved page?\n${matched.map((link) => `- ${link.label}`).join("\n")}\nNothing was sent.`;
   const pageUrl = matched[0].url;
-  if (!/^https:\/\//i.test(pageUrl)) return "That Useful Link is not a secure page. I did not open it.";
+  const safePage = /^https:\/\//i.test(pageUrl);
+  if (!safePage) return "That Useful Link is not a secure page. I did not open it, and I did not call the form missing.";
   let forms: FormChoice[] = [];
   let simulated = false;
   const fixture = acceptanceFormFallback(matched[0].label);
@@ -2273,28 +2274,15 @@ async function formBrief(advisorId: number, text: string) {
     forms = fixture;
     simulated = true;
   } else if (/\.pdf(?:$|\?)/i.test(pageUrl)) {
-    forms = [{ title: matched[0].label, href: pageUrl, purpose: "unknown", jurisdiction: "unknown", version: "unknown" }];
+    return foundFormNote(matched[0].label, pageUrl, matched[0].label);
   } else {
-    if (outboundBlocked()) return OUTBOUND_BLOCKED;
-    let html = "";
-    try {
-      const response = await fetch(pageUrl, { signal: AbortSignal.timeout(20000) });
-      if (response.ok) html = (await response.text()).slice(0, 1500000);
-      else if (!acceptanceFormFallback(matched[0].label).length) return `The saved forms page did not open (${response.status}). I did not substitute another form.`;
-    } catch {
-      if (!acceptanceFormFallback(matched[0].label).length) return "The saved forms page did not open. I did not substitute another form.";
-    }
-    forms = html ? formsFromPage(html, pageUrl) : [];
-  }
-  if (!forms.length) {
-    const fallback = acceptanceFormFallback(matched[0].label);
-    if (fallback.length) {
-      forms = fallback;
-      simulated = true;
-    }
+    const read = await readPublicHttps(pageUrl);
+    if (!read.ok) return read.blocked ? blockedReadNote() : read.access;
+    forms = formsOnSavedPage(read.text, read.finalUrl, text);
+    if (!forms.length) forms = formsFromPage(read.text, read.finalUrl);
   }
   const choice = chooseForm(forms, text);
-  if (choice.kind === "none") return `The saved Useful Link “${matched[0].label}” has no form matching the request. I did not substitute a similar form.`;
+  if (choice.kind === "none") return formWebPrompt(text);
   if (choice.kind === "many") return `More than one form fits. Which one?\n${choice.forms.map((form) => `- ${form.title} — purpose ${form.purpose}; jurisdiction ${form.jurisdiction}; version ${form.version}`).join("\n")}\nNothing was sent.`;
   const form = choice.form;
   const query = clientLookupQuery(String(text || ""), String(advisorId));
@@ -3323,6 +3311,9 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
   const tidy = tidyHeard(command);
   const thread = await advisorThread(advisorId, chatId);
   const lastAssistant = [...thread].reverse().find((turn) => turn.role === "assistant")?.content || "";
+  if (isFormWebAgreement(tidy, lastAssistant)) {
+    return replyWith(advisorId, chatId, await searchPublicFormPages(pendingFormRequest(lastAssistant)), onDelta);
+  }
   if (isBareRefusal(tidy) || /\bcancel the pending approval\b/i.test(tidy)) {
     const facts = await cancellationFacts(advisorId);
     await cancelWaitingCard(advisorId);
@@ -3882,6 +3873,10 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
     }
     console.info("[assistant] ask");
     const lastSaid = [...thread].reverse().find((turn) => turn.role === "assistant")?.content || "";
+    if (isFormWebAgreement(command, lastSaid) || isFormWebAgreement(latest.content, lastSaid)) {
+      handled = "fixed";
+      return replyWith(gate.row.id, chatId, await searchPublicFormPages(pendingFormRequest(lastSaid)), onDelta);
+    }
     const control = orchestrationControl(command);
     if (asksLibraryConversation(command) || asksLibraryConversation(latest.content)) {
       await discardPreviewActions(gate.row.id, true);

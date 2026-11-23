@@ -759,6 +759,25 @@ body:has(.ua-assistant-lock) {
   position: fixed;
   inset: 0;
 }
+.ua-design-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+.ua-design-grid .ua-cardart {
+  min-width: 0;
+  height: auto;
+  padding: 8px;
+  overflow: visible;
+}
+.ua-design-grid h3 { font-size: 0.92rem; margin: 0; }
+.ua-design-grid p { font-size: 0.75rem; margin: 4px 0 0; }
+@media (min-width: 640px) {
+  .ua-design-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .ua-design-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .ua-cardart {
   color: #1a2332;
   text-align: left;

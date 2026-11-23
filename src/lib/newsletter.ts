@@ -61,6 +61,17 @@ export function emptySocial(): NewsletterSocial {
   return { linkedin: "", instagram: "", facebook: "", youtube: "" };
 }
 
+export function blankIssue(): NewsletterIssue {
+  return {
+    design: "navy",
+    kicker: "",
+    title: "",
+    subject: "",
+    articles: [{ title: "", body: "" }],
+    social: emptySocial(),
+  };
+}
+
 export function starterIssue(): NewsletterIssue {
   return {
     design: "navy",

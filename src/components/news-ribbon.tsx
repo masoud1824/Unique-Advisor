@@ -24,7 +24,6 @@ function Headline({ item }: { item: Item }) {
 export function NewsRibbon({ slug, code }: { slug: string; code: string }) {
   const [items, setItems] = useState<Item[]>([]);
   const [paused, setPaused] = useState(false);
-  const [open, setOpen] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
   const [motion, setMotion] = useState({ startPx: 0, durationMs: 0 });
@@ -70,22 +69,8 @@ export function NewsRibbon({ slug, code }: { slug: string; code: string }) {
         </div>
         <div className="ua-ribbon-tools" role="toolbar" aria-label="News controls">
           <button type="button" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>{paused ? "Run" : "Pause"}</button>
-          <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide" : "List"}</button>
         </div>
       </div>
-      {open && (
-        <ul className="ua-ribbon-list">
-          {items.map((item) => {
-            const link = newsHeadlineLink(item.link);
-            return (
-              <li key={item.id}>
-                {link ? <a href={link.href} target={link.target || undefined} rel={link.rel || undefined}><strong>{item.title}</strong></a> : <strong>{item.title}</strong>}
-                {item.text ? ` ${item.text}` : ""}
-              </li>
-            );
-          })}
-        </ul>
-      )}
     </section>
   );
 }

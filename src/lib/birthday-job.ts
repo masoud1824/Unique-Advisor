@@ -230,3 +230,33 @@ export function summarizeAdvisorNotice(recipients: Array<{ name: string; outcome
   const failed = recipients.length - accepted;
   return `Birthday check: ${accepted} accepted by the provider, ${failed} not accepted. Accepted is not confirmed delivery. ${lines.join("; ")}`;
 }
+
+export type BirthdayCardReport = "sent" | "not sent" | "failed" | "unavailable";
+
+export function birthdayCardReport(status: string | null | undefined): BirthdayCardReport {
+  if (status == null || status === "" || status === "skipped") return "not sent";
+  if (status === "accepted") return "sent";
+  if (status === "failed") return "failed";
+  return "unavailable";
+}
+
+export function todaysBirthdayReport(input: {
+  people: BirthdayPerson[];
+  claims: Array<{ key: string; status: string }>;
+  now: Date;
+  timeZone: string;
+  feb29: Feb29Policy;
+  advisorId: number;
+}) {
+  const zone = input.timeZone || "America/Toronto";
+  const local = zonedParts(input.now, zone);
+  const claims = new Map(input.claims.map((claim) => [claim.key, claim.status]));
+  const people = input.people
+    .filter((person) => personHasBirthday(person, local, input.feb29))
+    .map((person) => ({
+      contactId: person.contactId,
+      name: person.name,
+      card: birthdayCardReport(claims.has(claimKey(input.advisorId, person.contactId, local.year)) ? claims.get(claimKey(input.advisorId, person.contactId, local.year)) : null),
+    }));
+  return { date: local.date, timeZone: zone, people };
+}

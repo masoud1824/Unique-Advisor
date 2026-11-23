@@ -34,6 +34,25 @@ describe("english desk and news ribbon source", () => {
     assert.match(desk, /ua-practice-shell/);
     assert.match(desk, /ua-assistant-lock/);
     assert.match(read("src/lib/voice-desk.ts"), /export function preferredBrowserVoice/);
+    assert.match(read("src/lib/voice-desk.ts"), /BROWSER_VOICE_FALLBACK/);
+    assert.match(assistant, /BROWSER_VOICE_FALLBACK/);
+    assert.doesNotMatch(ribbon, /List/);
+    const nav = desk.slice(desk.indexOf("const nav = ["), desk.indexOf("];", desk.indexOf("const nav = [")));
+    assert.doesNotMatch(nav, /Birthdays|Article library/);
+    const toolbar = desk.slice(desk.indexOf("ua-desk-toolbar"), desk.indexOf("jsx(InstallPhone"));
+    assert.match(toolbar, /AI assistant/);
+    assert.doesNotMatch(toolbar, /Voice command|New chat/);
+    assert.match(desk, /TodayBirthdays/);
+    assert.match(desk, /Birthday settings|onSettings/);
+    assert.match(read("src/components/install-phone.tsx"), /Install the desk/);
+    assert.match(read("src/components/install-phone.tsx"), /does not sign out other devices/);
+    assert.doesNotMatch(read("src/components/install-phone.tsx"), /Install the desk on your phone/);
+    assert.match(read("src/components/newsletter-desk.tsx"), /Create newsletter/);
+    assert.match(read("src/components/newsletter-desk.tsx"), /Article library/);
+    assert.doesNotMatch(read("src/components/newsletter-desk.tsx"), /Market Update|Financial Tips|Seasonal Greeting/);
+    assert.match(read("src/lib/newsletter.ts"), /export function blankIssue/);
+    assert.match(read("src/styles.css"), /\.ua-design-grid \{[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/);
+    assert.match(read("src/lib/form-lookup.ts"), /It was not found in Useful Links\. Do you want me to search the web\?/);
     const replay = assistant.slice(assistant.indexOf("async function replaySpoken"), assistant.indexOf("async function askByVoice"));
     assert.match(replay, /speakInBrowser\(line\)/);
     assert.doesNotMatch(replay, /await speak\(line\)/);
@@ -49,7 +68,7 @@ const playwright = [
 ].find((path) => existsSync(path));
 
 describe("news ribbon motion", { skip: !chrome || !playwright }, () => {
-  it("crosses the full width for short and long headlines and keeps Pause and List still", async () => {
+  it("crosses the full width for short and long headlines and keeps Pause still", async () => {
     const require = createRequire(import.meta.url);
     const { chromium } = require(playwright);
     const css = read("src/styles.css").replace(/^@import[^\n]*\n/, "");
@@ -72,8 +91,7 @@ describe("news ribbon motion", { skip: !chrome || !playwright }, () => {
               </div>
             </div>
             <div class="ua-ribbon-tools" role="toolbar">
-              <button type="button" id="pause">Pause</button>
-              <button type="button" id="list">List</button>
+              <button type="button" id="pause" style="min-width:48px">Pause</button>
             </div>
           </div>
           <script>
@@ -226,7 +244,7 @@ describe("assistant command bar", { skip: !chrome || !playwright }, () => {
                 <section class="ua-panel">Install the desk on your phone. ${"Add it to the home screen. ".repeat(12)}</section>
                 <section class="ua-panel">Signature workflow preview. ${"Nothing is sent. ".repeat(20)}</section>
                 <div class="ua-desk-heading"><h1>AI assistant</h1><span>Practice</span></div>
-                <div class="ua-ribbon-bar"><div class="ua-ribbon-viewport"><div class="ua-ribbon-track"><a class="ua-ribbon-item" href="https://example.invalid/rates">Rates</a></div></div><div class="ua-ribbon-tools"><button type="button">Pause</button><button type="button">List</button></div></div>
+                <div class="ua-ribbon-bar"><div class="ua-ribbon-viewport"><div class="ua-ribbon-track"><a class="ua-ribbon-item" href="https://example.invalid/rates">Rates</a></div></div><div class="ua-ribbon-tools"><button type="button">Pause</button></div></div>
                 <div class="ua-assist-stage">
                   <section class="ua-assist-panel">
                     <div class="ua-assist-tools"><h2>AI assistant</h2></div>

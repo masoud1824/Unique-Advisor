@@ -78,6 +78,7 @@ import { clearPhoneLogin, readPhoneLogin, savePhoneLogin } from "@/lib/phone-app
 
 installDeskSessionFetch();
 import { AssistantDesk } from "@/components/assistant-desk";
+import { TodayBirthdays } from "@/components/today-birthdays";
 import { InstallPhone } from "@/components/install-phone";
 import { ConnectionsDesk } from "@/components/connections-desk";
 import { AdvisorTimeZone } from "@/components/advisor-time-zone";
@@ -292,9 +293,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 		return params.get("mail") || params.get("zoom") || params.get("link") ? "settings" : "dashboard";
 	});
 	const [toast, setToast] = useState("");
-	const [talking, setTalking] = useState(false);
-	const [voicing, setVoicing] = useState(false);
-	const [spoken, setSpoken] = useState<{ id: number; text: string; page?: string } | null>(null);
+	const [spoken] = useState<{ id: number; text: string; page?: string } | null>(null);
 	const [assistFrom, setAssistFrom] = useState<{ page: string; id: number } | null>(null);
 	const titles: Record<string, string> = {
 		dashboard: "Dashboard",
@@ -322,8 +321,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 		["contacts", "Contacts"],
 		["cards", "E-Cards"],
 		["letters", "E-Newsletters"],
-		["library", "Article library"],
-		["birthdays", "Birthdays"],
 		["eletters", "E-Letters"],
 		["drips", "Drip Campaigns"],
 		["links", "Useful Links"],
@@ -333,8 +330,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 		["settings", "Settings"],
 		["profile", "Profile"]
 	];
-	const [freshChat, setFreshChat] = useState(0);
-	const [voiceCue, setVoiceCue] = useState(0);
 	const [meetings, setMeetings] = useState<DeskMeeting[]>([]);
 	const [meetingZone, setMeetingZone] = useState("America/Toronto");
 	const [dayTick, setDayTick] = useState(0);
@@ -380,10 +375,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 	function talk() {
 		setAssistFrom({ page: titles[tab] || "Desk", id: Date.now() });
 		setTab("assistant");
-	}
-	function voiceCommand() {
-		setTab("assistant");
-		setVoiceCue(Date.now());
 	}
 	useEffect(() => {
 		if (tab !== "assistant") return;
@@ -449,22 +440,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 							},
 							onClick: talk,
 							children: "AI assistant"
-						}), ai && /* @__PURE__ */ jsx("button", {
-							type: "button",
-							className: "ua-btn",
-							style: {
-								background: talking || voicing ? "#b42318" : "#0f4c81"
-							},
-							onClick: voiceCommand,
-							children: talking || voicing ? "Stop voice" : "Voice command"
-						}), /* @__PURE__ */ jsx("button", {
-							type: "button",
-							className: "ua-btn-line",
-							onClick: () => {
-								setTab("assistant");
-								setFreshChat(Date.now());
-							},
-							children: "New chat"
 						})]
 					}),
 					/* @__PURE__ */ jsx(InstallPhone, {}),
@@ -504,6 +479,11 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 						]
 					}),
 					/* @__PURE__ */ jsx(NewsRibbon, { slug: desk.slug, code }),
+					tab === "dashboard" && /* @__PURE__ */ jsx(TodayBirthdays, {
+						slug: desk.slug,
+						code,
+						onSettings: () => setTab("birthdays")
+					}),
 					tab === "dashboard" && /* @__PURE__ */ jsx(Dashboard, {
 						code,
 						desk,
@@ -570,13 +550,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 						desk,
 						spoken,
 						assistFrom,
-						freshChat,
-						voiceCue,
-						hearing: talking,
-						onVoice: (status: { listening: boolean; speaking: boolean }) => {
-							setTalking(status.listening);
-							setVoicing(status.speaking);
-						},
 						onOpenSettings: () => setTab("settings")
 					}),
 					tab === "assistant" && !ai && /* @__PURE__ */ jsxs("section", {

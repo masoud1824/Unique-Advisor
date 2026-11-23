@@ -124,7 +124,7 @@ export function EletterDesk({
         <p className="mt-1 mb-4 text-sm" style={{ color: "#5a6a7a" }}>
           One letter, not a set of articles. Pick a style. The whole letter shows in the email. Old Lined Paper looks like stationery with a red margin.
         </p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="ua-design-grid">
           {ELETTER_DESIGNS.map((item) => (
             <button
               key={item.id}

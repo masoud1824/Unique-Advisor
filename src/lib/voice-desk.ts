@@ -395,7 +395,10 @@ export function voicePlaybackNote(input: { spoken: boolean; audible: boolean; cl
   return "No spoken audio came back. Press Play reply.";
 }
 
-/** Pick a browser voice for English replies. This does not play audio. */
+/** Shown whenever the desk speaks with the browser instead of the selected OpenAI voice. */
+export const BROWSER_VOICE_FALLBACK = "Spoken with this browser's English voice. This is not the selected OpenAI voice.";
+
+/** Pick a browser voice for English replies. This does not play audio and is not an OpenAI voice. */
 export function preferredBrowserVoice(voices: Array<{ lang: string; name: string }>) {
   const list = voices.filter((voice) => /^en(-|$)/i.test(voice.lang || ""));
   return list.find((voice) => /^en-US/i.test(voice.lang))

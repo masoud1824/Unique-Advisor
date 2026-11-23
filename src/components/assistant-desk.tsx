@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
-import { isEcho, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, voicePlaybackNote, type ClipPlay } from "@/lib/voice-desk";
+import { BROWSER_VOICE_FALLBACK, isEcho, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, voicePlaybackNote, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
@@ -1082,20 +1082,17 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     const line = lastSpokenLine;
     if (!line) return;
     const outcome = await speakInBrowser(line);
-    if (voiceAudible([outcome])) {
-      setReplayReady(false);
-      setPlaybackNote("");
-      setError("");
-      return;
-    }
     setReplayReady(true);
-    setPlaybackNote(voicePlaybackNote({
-      spoken: true,
-      audible: false,
-      clips: replayClips.current.length,
-      blocked: outcome.blocked,
-      dropped: outcome.dropped,
-    }));
+    setPlaybackNote(voiceAudible([outcome])
+      ? BROWSER_VOICE_FALLBACK
+      : `${BROWSER_VOICE_FALLBACK} ${voicePlaybackNote({
+        spoken: true,
+        audible: false,
+        clips: 0,
+        blocked: outcome.blocked,
+        dropped: outcome.dropped,
+      })}`);
+    if (voiceAudible([outcome])) setError("");
   }
 
   async function askByVoice(content: string, id: number, mine: number, confirmed = false) {
@@ -1319,19 +1316,16 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         emitVoice({ phase: "off", error: "", listening: false, speaking: false });
         if (clips.length === 0 && brief) {
           const outcome = await speakInBrowser(brief);
-          if (voiceAudible([outcome])) {
-            setReplayReady(false);
-            setPlaybackNote("");
-            return;
-          }
           setReplayReady(true);
-          setPlaybackNote(voicePlaybackNote({
-            spoken: true,
-            audible: false,
-            clips: 0,
-            blocked: outcome.blocked,
-            dropped: outcome.dropped,
-          }));
+          setPlaybackNote(voiceAudible([outcome])
+            ? BROWSER_VOICE_FALLBACK
+            : `${BROWSER_VOICE_FALLBACK} ${voicePlaybackNote({
+              spoken: true,
+              audible: false,
+              clips: 0,
+              blocked: outcome.blocked,
+              dropped: outcome.dropped,
+            })}`);
           return;
         }
         setReplayReady(true);
