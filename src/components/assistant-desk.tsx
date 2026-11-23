@@ -294,7 +294,7 @@ function emitDraft(text: string) {
 export function voiceLabel(phase: string, error = "") {
   if (phase === "listening" && !liveWords) return "Listening. Tap Stop when you finish.";
   if (phase === "listening") return "Listening";
-  if (phase === "processing") return "Processing";
+  if (phase === "processing") return "Thinking";
   if (phase === "speaking") return "Speaking";
   if (phase === "error") return `Error: ${error || "The microphone stopped."}`;
   return "";
@@ -855,6 +855,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [wideDesk, setWideDesk] = useState(false);
+  const [showJump, setShowJump] = useState(false);
   const [birthdayCards, setBirthdayCards] = useState(true);
   const [newsletterReminder, setNewsletterReminder] = useState(true);
   const [showBirthday, setShowBirthday] = useState(true);
@@ -894,6 +897,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const generation = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true);
   rulesOpenRef.current = rulesOpen;
   chatIdRef.current = chatId;
   phaseRef.current = voicePhase;
@@ -916,6 +920,17 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     return () => window.removeEventListener("ua-active-draft", onDraft);
   }, []);
 
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 900px)");
+    const apply = () => {
+      setWideDesk(query.matches);
+      setHistoryOpen(query.matches);
+    };
+    apply();
+    query.addEventListener("change", apply);
+    return () => query.removeEventListener("change", apply);
+  }, []);
+
   useEffect(() => subscribeAdvisorDraft((said) => {
     setText(said);
     setHeard(said);
@@ -923,20 +938,26 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   useEffect(() => {
     const log = logRef.current;
-    if (!log) return;
+    if (!log || !stickRef.current) {
+      if (log && log.scrollHeight - log.scrollTop - log.clientHeight > 80) setShowJump(true);
+      return;
+    }
     const pin = () => {
-      const previews = log.querySelectorAll(".ua-mail-preview");
-      const preview = previews[previews.length - 1];
-      if (preview instanceof HTMLElement) {
-        log.scrollTop = Math.max(0, preview.offsetTop - 8);
-        return;
-      }
       log.scrollTop = log.scrollHeight;
+      setShowJump(false);
     };
     pin();
     const frame = requestAnimationFrame(pin);
     return () => cancelAnimationFrame(frame);
   }, [turns, busy, chatId, rulesOpen, actions.length]);
+
+  function onLogScroll() {
+    const log = logRef.current;
+    if (!log) return;
+    const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    stickRef.current = near;
+    setShowJump(!near && log.scrollHeight > log.clientHeight + 8);
+  }
 
   useEffect(() => {
     const list = listRef.current;
@@ -1596,15 +1617,36 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   const linkedPreviewIds = new Set(turns.flatMap((turn) => (turn.previews || []).map((item) => item.id)));
   const trayActions = actions.filter((item) => trayOffers(item, linkedPreviewIds));
+  const liveState = voicePhase === "listening" || voicePhase === "speaking" || voicePhase === "error"
+    ? voiceLabel(voicePhase, voiceError)
+    : busy || voicePhase === "processing"
+      ? "Thinking"
+      : "";
+  const historyPane = (drawer: boolean) => (
+    <aside className={drawer ? "ua-assist-list ua-history-drawer" : "ua-assist-list"} aria-label="Previous chats" onClick={drawer ? (event) => event.stopPropagation() : undefined}>
+      <p className="ua-assist-head">Previous chats</p>
+      <div className="ua-assist-chats" ref={listRef}>
+        {chats.length === 0 && <p className="px-3 py-3 text-sm" style={{ color: "#5a6a7a" }}>No earlier chats.</p>}
+        {chats.map((chat) => (
+          <div key={chat.id} className={`ua-assist-row ${chat.id === chatId ? "on" : ""}`}>
+            <button type="button" className="title" onClick={() => { void refresh(chat.id); if (drawer) setHistoryOpen(false); }}>
+              <span className="name">{chat.title && chat.title !== "New chat" ? chat.title : "Untitled"}</span>
+              {stamp(chat.at) && <span className="when">{stamp(chat.at)}</span>}
+            </button>
+            <button type="button" className="remove" onClick={() => void removeChat(chat.id)}>Remove</button>
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
   return (
     <div className="ua-assist-stage">
       <section id="ai-assistant" className="ua-panel ua-assist-panel">
-        <div className="ua-assist-tools flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">AI assistant</h2>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={rulesOpen ? "ua-btn-line" : "ua-btn"} style={{ padding: "6px 12px" }} onClick={() => setRulesOpen(false)}>Chats</button>
-            <button type="button" className={rulesOpen ? "ua-btn" : "ua-btn-line"} style={{ padding: "6px 12px" }} onClick={openRules}>Rules</button>
-          </div>
+        <div className="ua-assist-tools flex flex-wrap items-center gap-2">
+          <button type="button" className="ua-btn-line" data-history style={{ padding: "6px 12px" }} aria-expanded={historyOpen} onClick={() => setHistoryOpen((value) => !value)}>{historyOpen ? "Close history" : "History"}</button>
+          <button type="button" className="ua-btn" data-new-chat style={{ padding: "6px 12px" }} onClick={() => void newChat()}>New chat</button>
+          <button type="button" className={rulesOpen ? "ua-btn" : "ua-btn-line"} style={{ padding: "6px 12px" }} onClick={() => { if (rulesOpen) setRulesOpen(false); else openRules(); }}>Rules</button>
+          <span className="ua-live-state" role="status" data-assistant-state>{liveState}</span>
         </div>
         {rulesOpen ? (
           <form onSubmit={(event) => void saveRules(event)} className="ua-assist-rules mt-4 grid gap-3 rounded-lg border p-4" style={{ borderColor: "#e1e8ef" }}>
@@ -1727,25 +1769,11 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
             {rulesSaved && <p className="text-sm font-semibold" style={{ color: "#0d7a4f" }}>{rulesSaved}</p>}
           </form>
         ) : (
-        <div className="ua-assist">
-          <aside className="ua-assist-list">
-            <p className="ua-assist-head">Previous chats</p>
-            <div className="ua-assist-chats" ref={listRef}>
-              {chats.length === 0 && <p className="px-3 py-3 text-sm" style={{ color: "#5a6a7a" }}>No earlier chats.</p>}
-              {chats.map((chat) => (
-                <div key={chat.id} className={`ua-assist-row ${chat.id === chatId ? "on" : ""}`}>
-                  <button type="button" className="title" onClick={() => void refresh(chat.id)}>
-                    <span className="name">{chat.title && chat.title !== "New chat" ? chat.title : "Untitled"}</span>
-                    {stamp(chat.at) && <span className="when">{stamp(chat.at)}</span>}
-                  </button>
-                  <button type="button" className="remove" onClick={() => void removeChat(chat.id)}>Remove</button>
-                </div>
-              ))}
-            </div>
-          </aside>
+        <div className={`ua-assist${wideDesk && historyOpen ? " history-open" : ""}`}>
+          {wideDesk && historyOpen && historyPane(false)}
           <div className="ua-assist-talk" id="ai-assistant-chat">
-            <p className="ua-assist-head">This chat</p>
-            <div className="ua-assist-log" ref={logRef}>
+            <div className="ua-log-wrap">
+            <div className="ua-assist-log" ref={logRef} onScroll={onLogScroll}>
               {turns.map((turn, index) => (
                 <div key={`${turn.role}-${turn.id || index}`} className="rounded-lg px-4 py-3 text-sm" style={{ background: turn.role === "user" ? "#e8f4fd" : "#f7f9fc" }}>
                   <div className="flex items-baseline justify-between gap-3">
@@ -1763,6 +1791,13 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                 </div>
               ))}
               {turns.length === 0 && <p className="text-sm" style={{ color: "#5a6a7a" }}>Ask who needs a call, whose yearly KYC is due, or where an upsell or cross-sell may exist.</p>}
+            </div>
+            {showJump && <button type="button" className="ua-btn ua-jump-latest" data-jump-latest onClick={() => {
+              const log = logRef.current;
+              stickRef.current = true;
+              if (log) log.scrollTop = log.scrollHeight;
+              setShowJump(false);
+            }}>Latest</button>}
             </div>
             {trayActions.length > 0 && (
               <div className="ua-assist-tray grid gap-3 border-t p-3" style={{ borderColor: "#e1e8ef" }}>
@@ -1890,29 +1925,40 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                 id="ai-assistant-input"
                 value={text}
                 onChange={(event) => setText(event.target.value)}
+                onInput={(event) => {
+                  const node = event.currentTarget;
+                  node.style.height = "auto";
+                  const limit = Number.parseFloat(getComputedStyle(node).maxHeight) || 132;
+                  node.style.height = `${Math.min(node.scrollHeight, limit)}px`;
+                }}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || event.key === "Process") return;
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     void ask();
                   }
                 }}
-                rows={3}
+                rows={2}
                 maxLength={2000}
                 placeholder="Ask the AI assistant"
                 className="ua-field font-normal"
               />
+              {error && <p className="ua-assist-note text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
               <div className="ua-command-row">
-                {replayReady && <button type="button" className="ua-btn" data-play-reply style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => void replaySpoken()}>Play reply</button>}
-                <button type="button" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem", background: listening || speaking ? "#b42318" : "#0f4c81" }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
-                <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
-                <button type="submit" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy}>{busy ? "Working…" : "Ask"}</button>
-                <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => void newChat()}>New chat</button>
+                {replayReady && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => void replaySpoken()}>Play reply</button>}
+                <button type="button" className="ua-btn ua-voice-command" data-voice-command style={{ background: listening || speaking ? "#b42318" : undefined }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
+                <button type="submit" className="ua-btn ua-ask" data-ask disabled={busy}>{busy ? "Thinking…" : "Ask"}</button>
+                <button type="button" className="ua-btn-line" style={{ padding: "8px 12px" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
               </div>
             </form>
           </div>
         </div>
         )}
-        {error && <p className="ua-assist-note mt-3 text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
+        {!wideDesk && historyOpen && !rulesOpen && (
+          <div className="ua-history-backdrop" onClick={() => setHistoryOpen(false)}>
+            {historyPane(true)}
+          </div>
+        )}
         {connectionNeeded(`${error} ${[...turns].reverse().find((turn) => turn.role === "assistant")?.content || ""}`) && (
           <p className="mt-3 text-sm font-semibold">
             That account is not connected.{" "}

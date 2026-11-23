@@ -80,6 +80,7 @@ installDeskSessionFetch();
 import { AssistantDesk } from "@/components/assistant-desk";
 import { TodayBirthdays } from "@/components/today-birthdays";
 import { InstallPhone } from "@/components/install-phone";
+import { DeskDrawer } from "@/components/desk-drawer";
 import { ConnectionsDesk } from "@/components/connections-desk";
 import { AdvisorTimeZone } from "@/components/advisor-time-zone";
 import { EletterDesk } from "@/components/eletter-desk";
@@ -295,6 +296,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 	const [toast, setToast] = useState("");
 	const [spoken] = useState<{ id: number; text: string; page?: string } | null>(null);
 	const [assistFrom, setAssistFrom] = useState<{ page: string; id: number } | null>(null);
+	const [deskDrawer, setDeskDrawer] = useState<"" | "signature" | "mail">("");
 	const titles: Record<string, string> = {
 		dashboard: "Dashboard",
 		calendar: "Calendar",
@@ -397,7 +399,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 		className: `ua-desk md:flex${tab === "assistant" ? " ua-assistant-lock" : ""}`,
 		children: [
 			/* @__PURE__ */ jsxs("aside", {
-				className: "ua-side md:fixed md:inset-y-0 md:flex md:w-[260px] md:flex-col md:overflow-hidden",
+				className: tab === "assistant" ? "ua-side ua-assistant-nav" : "ua-side md:fixed md:inset-y-0 md:flex md:w-[260px] md:flex-col md:overflow-hidden",
 				children: [/* @__PURE__ */ jsx("div", {
 					className: "ua-logo shrink-0",
 					style: {
@@ -427,9 +429,9 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 				})]
 			}),
 			/* @__PURE__ */ jsxs("main", {
-				className: "min-w-0 flex-1 px-5 py-6 md:ml-[260px] md:px-10 md:py-8",
+				className: tab === "assistant" ? "ua-assistant-main" : "min-w-0 flex-1 px-5 py-6 md:ml-[260px] md:px-10 md:py-8",
 				children: [
-					/* @__PURE__ */ jsxs("div", {
+					tab !== "assistant" && /* @__PURE__ */ jsxs("div", {
 						className: "ua-desk-toolbar sticky top-0 z-20 -mx-5 mb-5 flex items-center gap-2 bg-[#f7f9fc] px-5 py-3 md:-mx-10 md:px-10",
 						children: [/* @__PURE__ */ jsx("button", {
 							type: "button",
@@ -442,10 +444,15 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 							children: "AI assistant"
 						})]
 					}),
-					/* @__PURE__ */ jsx(InstallPhone, {}),
-					/* @__PURE__ */ jsx(DeskNotices, { code, slug: desk.slug }),
-					/* @__PURE__ */ jsx(SignatureNotices, { code, slug: desk.slug }),
+					tab !== "assistant" && /* @__PURE__ */ jsx(InstallPhone, {}),
 					/* @__PURE__ */ jsxs("div", {
+						className: tab === "assistant" ? "ua-assistant-alerts" : undefined,
+						children: [
+							/* @__PURE__ */ jsx(DeskNotices, { code, slug: desk.slug }),
+							/* @__PURE__ */ jsx(SignatureNotices, { code, slug: desk.slug })
+						]
+					}),
+					tab !== "assistant" && /* @__PURE__ */ jsxs("div", {
 						className: "ua-desk-heading mb-7 flex flex-wrap items-center justify-between gap-3",
 						children: [
 							/* @__PURE__ */ jsx("h1", {
@@ -475,6 +482,28 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 								},
 								onClick: () => setTab("pricing"),
 								children: "Upgrade Plan"
+							})
+						]
+					}),
+					tab === "assistant" && /* @__PURE__ */ jsxs("header", {
+						className: "ua-workspace-bar",
+						children: [
+							/* @__PURE__ */ jsx("h1", { children: "AI assistant" }),
+							/* @__PURE__ */ jsx("span", { className: "ua-plan-pill", children: PLAN_LABELS[desk.plan] }),
+							/* @__PURE__ */ jsx(InstallPhone, {}),
+							ai && /* @__PURE__ */ jsx("button", {
+								type: "button",
+								className: "ua-btn-line",
+								style: { padding: "6px 10px" },
+								onClick: () => setDeskDrawer("signature"),
+								children: "Signature preview"
+							}),
+							ai && /* @__PURE__ */ jsx("button", {
+								type: "button",
+								className: "ua-btn-line",
+								style: { padding: "6px 10px" },
+								onClick: () => setDeskDrawer("mail"),
+								children: "Document email"
 							})
 						]
 					}),
@@ -537,20 +566,17 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 						code,
 						slug: desk.slug
 					}),
-					tab === "assistant" && ai && /* @__PURE__ */ jsx(WorkflowSignaturePreview, {
-						code,
-						slug: desk.slug
-					}),
-					tab === "assistant" && ai && /* @__PURE__ */ jsx(DocumentMailPreview, {
-						code,
-						slug: desk.slug
-					}),
 					tab === "assistant" && ai && /* @__PURE__ */ jsx(AssistantDesk, {
 						code,
 						desk,
 						spoken,
 						assistFrom,
 						onOpenSettings: () => setTab("settings")
+					}),
+					tab === "assistant" && ai && deskDrawer && /* @__PURE__ */ jsx(DeskDrawer, {
+						label: deskDrawer === "signature" ? "Signature workflow preview" : "Document email preview",
+						onClose: () => setDeskDrawer(""),
+						children: deskDrawer === "signature" ? /* @__PURE__ */ jsx(WorkflowSignaturePreview, { code, slug: desk.slug }) : /* @__PURE__ */ jsx(DocumentMailPreview, { code, slug: desk.slug })
 					}),
 					tab === "assistant" && !ai && /* @__PURE__ */ jsxs("section", {
 						className: "ua-panel p-6",

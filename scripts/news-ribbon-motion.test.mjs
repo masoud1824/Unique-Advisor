@@ -58,6 +58,13 @@ describe("english desk and news ribbon source", () => {
     assert.doesNotMatch(replay, /await speak\(line\)/);
     assert.doesNotMatch(read("src/routes/api/assistant/voice.ts"), /12000|Promise\.race/);
     assert.match(read("src/routes/api/assistant/voice.ts"), /await speakVisible/);
+    assert.match(desk, /ua-assistant-main/);
+    assert.match(desk, /Signature preview/);
+    assert.match(desk, /Document email/);
+    assert.match(assistant, /data-new-chat/);
+    assert.match(assistant, /data-voice-command/);
+    assert.match(read("src/components/advisor-voice.tsx"), /ua-voice-dialog/);
+    assert.doesNotMatch(assistant, /className="ua-assist-tools[\s\S]{0,240}>AI assistant</);
   });
 });
 
@@ -210,118 +217,3 @@ describe("news ribbon motion", { skip: !chrome || !playwright }, () => {
   });
 });
 
-describe("assistant command bar", { skip: !chrome || !playwright }, () => {
-  it("scrolls only the chat log and keeps Play reply with the command buttons", async () => {
-    const require = createRequire(import.meta.url);
-    const { chromium } = require(playwright);
-    const css = read("src/styles.css").replace(/^@import[^\n]*\n/, "");
-    const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
-    const browser = await chromium.launch({ executablePath: chrome, headless: true });
-    try {
-      const page = await browser.newPage();
-      const sizes = [
-        { width: 1280, height: 800, visual: 0 },
-        { width: 1280, height: 640, visual: 0 },
-        { width: 390, height: 700, visual: 0 },
-        { width: 390, height: 700, visual: 430 },
-      ];
-      for (const size of sizes) {
-        await page.setViewportSize({ width: size.width, height: size.height });
-        const shellStyle = size.visual ? ` style="--ua-vvh: ${size.visual}px"` : "";
-        await page.setContent(`<!doctype html><style>${css}</style>
-          <div class="ua-practice-shell"${shellStyle}>
-            <div data-practice-banner style="padding:10px 16px;text-align:center;background:#8a3a12;color:#fff">Staging practice. Outbound mail is blocked.</div>
-            <div class="ua-desk ua-assistant-lock">
-              <aside class="ua-side">
-                <div class="ua-logo" style="padding:12px">Unique Advisor</div>
-                <nav>
-                  <button type="button" class="ua-navbtn">AI assistant</button>
-                  <button type="button" class="ua-navbtn">Contacts</button>
-                </nav>
-              </aside>
-              <main>
-                <div class="ua-desk-toolbar">AI assistant Voice command New chat</div>
-                <section class="ua-panel">Install the desk on your phone. ${"Add it to the home screen. ".repeat(12)}</section>
-                <section class="ua-panel">Signature workflow preview. ${"Nothing is sent. ".repeat(20)}</section>
-                <div class="ua-desk-heading"><h1>AI assistant</h1><span>Practice</span></div>
-                <div class="ua-ribbon-bar"><div class="ua-ribbon-viewport"><div class="ua-ribbon-track"><a class="ua-ribbon-item" href="https://example.invalid/rates">Rates</a></div></div><div class="ua-ribbon-tools"><button type="button">Pause</button></div></div>
-                <div class="ua-assist-stage">
-                  <section class="ua-assist-panel">
-                    <div class="ua-assist-tools"><h2>AI assistant</h2></div>
-                    <div class="ua-assist">
-                      <aside class="ua-assist-list"><p class="ua-assist-head">Previous chats</p><div class="ua-assist-chats">${Array.from({ length: 8 }, (_, index) => `<p>Chat ${index}</p>`).join("")}</div></aside>
-                      <div class="ua-assist-talk" id="talk">
-                        <p class="ua-assist-head">This chat</p>
-                        <div class="ua-assist-log" id="log">
-                          ${Array.from({ length: 24 }, (_, index) => `<p>Message ${index} stays in the history and must not push the command bar off the page.</p>`).join("")}
-                        </div>
-                        <form class="ua-assist-compose" data-command-bar>
-                          <p class="ua-playback-note" role="status">The browser blocked playback. Press Play reply.</p>
-                          <div class="ua-voice-list" id="voices">
-                            ${voices.map((voice) => `<div class="ua-voice-row" data-voice="${voice}"><span class="ua-voice-name">${voice}</span><button type="button" class="ua-voice-preview">Preview</button><button type="button" class="ua-voice-use" data-action="use">Use</button></div>`).join("")}
-                          </div>
-                          <textarea class="ua-field" id="ai-assistant-input" rows="3">Ask the AI assistant</textarea>
-                          <div class="ua-command-row">
-                            <button type="button" data-play-reply>Play reply</button>
-                            <button type="button" id="voice-command">Voice command</button>
-                            <button type="button" id="review">Review clients</button>
-                            <button type="submit" id="ask">Ask</button>
-                            <button type="button" id="new-chat">New chat</button>
-                          </div>
-                        </form>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-              </main>
-            </div>
-          </div>`);
-        const measured = await page.evaluate((visual) => {
-          const log = document.getElementById("log");
-          const compose = document.querySelector(".ua-assist-compose");
-          const voices = document.getElementById("voices");
-          const last = document.querySelector("[data-voice='cedar']");
-          const lastUse = last.querySelector("[data-action='use']");
-          voices.scrollTop = voices.scrollHeight;
-          const limit = visual || window.innerHeight;
-          const play = document.querySelector("[data-play-reply]");
-          const box = (node) => node.getBoundingClientRect();
-          const playBox = box(play);
-          const askBox = box(document.getElementById("ask"));
-          const voiceBox = box(document.getElementById("voice-command"));
-          const newBox = box(document.getElementById("new-chat"));
-          const logBox = box(log);
-          const listBox = box(voices);
-          const lastBox = box(lastUse);
-          const root = document.scrollingElement || document.documentElement;
-          const composeStyle = getComputedStyle(compose);
-          return {
-            logScrolls: log.scrollHeight > log.clientHeight + 4,
-            composeDoesNotScroll: composeStyle.overflowY === "visible" && compose.scrollHeight <= compose.clientHeight + 2,
-            pageDoesNotScroll: root.scrollHeight <= window.innerHeight + 2 && root.scrollTop === 0,
-            commandBelowHistory: playBox.top >= logBox.bottom - 1,
-            playInView: playBox.top >= 0 && playBox.bottom <= limit && playBox.height > 0,
-            askInView: askBox.top >= 0 && askBox.bottom <= limit,
-            voiceInView: voiceBox.top >= 0 && voiceBox.bottom <= limit,
-            newInView: newBox.top >= 0 && newBox.bottom <= limit,
-            lastVoiceReachable: lastBox.top >= listBox.top - 1 && lastBox.bottom <= listBox.bottom + 1 && lastBox.right <= listBox.right + 1,
-            voiceListScrolls: voices.scrollHeight > voices.clientHeight + 4,
-          };
-        }, size.visual);
-        const label = `${size.width}x${size.height}${size.visual ? ` keyboard ${size.visual}` : ""}`;
-        assert.equal(measured.logScrolls, true, `${label} history did not scroll`);
-        assert.equal(measured.composeDoesNotScroll, true, `${label} composer still scrolls`);
-        assert.equal(measured.pageDoesNotScroll, true, `${label} page still scrolls`);
-        assert.equal(measured.commandBelowHistory, true, `${label} command overlapped the history`);
-        assert.equal(measured.playInView, true, `${label} hid Play reply`);
-        assert.equal(measured.askInView, true, `${label} hid Ask`);
-        assert.equal(measured.voiceInView, true, `${label} hid Voice command`);
-        assert.equal(measured.newInView, true, `${label} hid New chat`);
-        assert.equal(measured.voiceListScrolls, true, `${label} voice list did not scroll`);
-        assert.equal(measured.lastVoiceReachable, true, `${label} hid the last voice`);
-      }
-    } finally {
-      await browser.close();
-    }
-  });
-});

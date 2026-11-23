@@ -34,6 +34,8 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
   const [note, setNote] = useState("");
   const [clips, setClips] = useState<Record<string, string>>({});
   const players = useRef<Record<string, HTMLAudioElement | null>>({});
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     void loadAdvisorVoice({ data: { slug, code } }).then((result) => {
@@ -41,6 +43,21 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
       if (voice) setCurrent(voice);
     }).catch(() => setNote("The saved voice could not be loaded."));
   }, [slug, code]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement;
+    closeRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      const back = previous instanceof HTMLElement ? previous : triggerRef.current;
+      back?.focus();
+    };
+  }, [open]);
 
   async function preview(voice: string) {
     setNote("");
@@ -83,55 +100,61 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
 
   return (
     <div className="w-full">
-      <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => setOpen((value) => !value)}>
+      <button ref={triggerRef} type="button" className="ua-btn-line" data-voice-chooser aria-haspopup="dialog" aria-expanded={open} style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => setOpen(true)}>
         Voice: {current}
       </button>
       {open && (
-        <div className="ua-voice-panel mt-2 rounded-lg border p-3" style={{ borderColor: "#e1e8ef", background: "#fff" }}>
-          <p className="text-sm" style={{ color: "#5a6a7a" }}>Press Preview to hear a voice. The voice marked In use is saved for this advisor. gpt-4o-mini-tts accepts alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, and cedar. OpenAI says these voices are optimized for English and recommends marin or cedar for quality. This desk does not label an accent for any voice. English speech asks the model for a neutral North American English delivery.</p>
-          <div className="ua-voice-list">
-          {OPENAI_VOICES.map((voice) => (
-            <div key={voice} className="ua-voice-row" data-voice={voice}>
-              <span className="ua-voice-name">
-                <strong className="text-sm">{voice}</strong>
-                {voice === current && <span className="ua-voice-used">In use</span>}
-              </span>
-              <audio
-                controls
-                preload="none"
-                src={clips[voice] || undefined}
-                ref={(node) => { players.current[voice] = node; }}
-                onError={(event) => {
-                  const player = event.currentTarget;
-                  if (!player.src) return;
-                  setNote(`The browser rejected the ${voice} sample${player.error ? ` (code ${player.error.code})` : ""}.`);
-                }}
-              />
-              <button type="button" className="ua-btn-line ua-voice-preview" style={{ padding: "4px 10px", fontSize: "0.8rem" }} disabled={busy === voice} onClick={() => void preview(voice)}>
-                {busy === voice ? "Loading…" : "Preview"}
-              </button>
-              <button
-                type="button"
-                className="ua-btn ua-voice-use"
-                data-action="use"
-                style={{ padding: "4px 10px", fontSize: "0.8rem" }}
-                onClick={() => {
-                  void saveAdvisorVoice({ data: { slug, code, voice } }).then((result) => {
-                    if (!result?.ok) {
-                      setNote(result && "error" in result ? result.error : "That voice was not saved.");
-                      return;
-                    }
-                    setCurrent(result.voice);
-                    setNote(`${result.voice} is now the assistant voice.`);
-                  }).catch(() => setNote("That voice was not saved."));
-                }}
-              >
-                Use
-              </button>
+        <div className="ua-modal" role="presentation" onClick={() => setOpen(false)}>
+          <div className="ua-voice-dialog" role="dialog" aria-modal="true" aria-label="Assistant voice" onClick={(event) => event.stopPropagation()}>
+            <div className="ua-voice-dialog-bar">
+              <h2>Assistant voice</h2>
+              <button ref={closeRef} type="button" className="ua-btn-line" data-voice-close style={{ padding: "6px 12px" }} onClick={() => setOpen(false)}>Close</button>
             </div>
-          ))}
+            <p className="ua-voice-note">Press Preview to hear a voice. The voice marked In use is saved for this advisor. These voices are optimized for English. This desk asks for a neutral North American English delivery and does not label an accent.</p>
+            <div className="ua-voice-list">
+            {OPENAI_VOICES.map((voice) => (
+              <div key={voice} className="ua-voice-row" data-voice={voice} data-in-use={voice === current ? "true" : undefined}>
+                <span className="ua-voice-name">
+                  <strong className="text-sm">{voice}</strong>
+                  {voice === current && <span className="ua-voice-used">In use</span>}
+                </span>
+                <audio
+                  controls
+                  preload="none"
+                  src={clips[voice] || undefined}
+                  ref={(node) => { players.current[voice] = node; }}
+                  onError={(event) => {
+                    const player = event.currentTarget;
+                    if (!player.src) return;
+                    setNote(`The browser rejected the ${voice} sample${player.error ? ` (code ${player.error.code})` : ""}.`);
+                  }}
+                />
+                <button type="button" className="ua-btn-line ua-voice-preview" style={{ padding: "4px 10px", fontSize: "0.8rem" }} disabled={busy === voice} onClick={() => void preview(voice)}>
+                  {busy === voice ? "Loading…" : "Preview"}
+                </button>
+                <button
+                  type="button"
+                  className="ua-btn ua-voice-use"
+                  data-action="use"
+                  style={{ padding: "4px 10px", fontSize: "0.8rem" }}
+                  onClick={() => {
+                    void saveAdvisorVoice({ data: { slug, code, voice } }).then((result) => {
+                      if (!result?.ok) {
+                        setNote(result && "error" in result ? result.error : "That voice was not saved.");
+                        return;
+                      }
+                      setCurrent(result.voice);
+                      setNote(`${result.voice} is now the assistant voice.`);
+                    }).catch(() => setNote("That voice was not saved."));
+                  }}
+                >
+                  Use
+                </button>
+              </div>
+            ))}
+            </div>
+            {note && <p className="text-sm font-semibold" style={{ color: "#b42318" }}>{note}</p>}
           </div>
-          {note && <p className="text-sm font-semibold" style={{ color: "#b42318" }}>{note}</p>}
         </div>
       )}
     </div>
