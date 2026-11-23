@@ -1,8 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { answerAdvisor, speakSentence, warmVoiceLink } from "@/lib/assistant.functions";
 import { gateAdvisor } from "@/lib/advisor-db";
-import { spokenReply } from "@/lib/assistant-reply";
-import { spokenBrief } from "@/lib/voice-desk";
+import { spokenBrief, deliverSpokenLines } from "@/lib/voice-desk";
 import { takeSentences } from "@/lib/voice-stream";
 
 export const Route = createFileRoute("/api/assistant/voice")({
@@ -25,23 +24,20 @@ export const Route = createFileRoute("/api/assistant/voice")({
             void warmVoiceLink();
             const gate = await gateAdvisor(body?.slug || "", body?.code || "").catch(() => null);
             const advisorId = gate && "ok" in gate && gate.ok ? gate.row.id : 0;
-            let chain = Promise.resolve();
-            let sentAudio = false;
-            const queue = (sentence: string) => {
-              const line = spokenReply(sentence).trim();
-              if (line.length < 2) return;
-              chain = chain.then(async () => {
-                const parts: Buffer[] = [];
-                await speakSentence(line, (chunk: Buffer) => parts.push(chunk), advisorId);
-                const audio = Buffer.concat(parts).toString("base64");
-                if (audio) {
-                  sentAudio = true;
-                  send({ type: "audio", mime: "audio/mpeg", audio });
-                }
-              }).catch((error) => {
-                const message = error instanceof Error ? error.message : "The voice could not be spoken.";
-                console.info(`[voice] tts-error ${message}`);
-                send({ type: "tts-error", error: message });
+            const speakLine = async (line: string) => {
+              const parts: Buffer[] = [];
+              await speakSentence(line, (chunk: Buffer) => parts.push(chunk), advisorId);
+              return Buffer.concat(parts).toString("base64");
+            };
+            const speakVisible = async (text: string) => {
+              const brief = spokenBrief(text, String(body?.content || ""));
+              if (brief.trim().length < 2) return;
+              send({ type: "speak", text: brief });
+              const pieces = takeSentences(`${brief.trim()} `).sentences;
+              const lines = (pieces.length ? pieces : [brief.trim()]).filter((line) => line.trim().length >= 2);
+              await deliverSpokenLines(lines, speakLine, (event) => {
+                if (event.type === "tts-error") console.info(`[voice] tts-error ${event.error}`);
+                send(event);
               });
             };
             try {
@@ -53,21 +49,10 @@ export const Route = createFileRoute("/api/assistant/voice")({
               );
               if (!result.ok) {
                 const message = "error" in result && typeof result.error === "string" ? result.error : "The assistant could not answer.";
+                await speakVisible(message);
                 send({ type: "error", error: message });
               } else {
-                const brief = spokenBrief(String(result.reply || ""), String(body?.content || ""));
-                send({ type: "speak", text: brief });
-                const pieces = takeSentences(`${brief.trim()} `).sentences;
-                (pieces.length ? pieces : [brief.trim()]).filter(Boolean).forEach((line) => queue(line));
-                let timedOut = false;
-                await Promise.race([
-                  chain.then(() => undefined),
-                  new Promise((resolve) => setTimeout(() => {
-                    timedOut = true;
-                    resolve(undefined);
-                  }, 12000)),
-                ]);
-                if (timedOut && !sentAudio) send({ type: "tts-error", error: "The spoken reply was not ready in time. Press Play reply." });
+                await speakVisible(String(result.reply || ""));
                 send({ type: "done", reply: result.reply, drafts: result.drafts || [], actions: result.actions || [] });
               }
             } catch (error) {

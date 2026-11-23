@@ -25,6 +25,12 @@ describe("english desk and news ribbon source", () => {
     assert.match(read("src/routes/admin.tsx"), /Sign out/);
     assert.doesNotMatch(newsAdmin, /en or fa|فارسی/);
     assert.match(read("src/lib/news-ribbon.ts"), /export function advisorRibbonLanguage/);
+    assert.match(css, /\.ua-assist-compose \{[^}]*overflow:\s*visible/);
+    assert.doesNotMatch(css, /\.ua-assist-compose \{[^}]*max-height:\s*62%/);
+    assert.match(assistant, /data-command-bar/);
+    assert.match(assistant, /data-play-reply/);
+    assert.doesNotMatch(read("src/routes/api/assistant/voice.ts"), /12000|Promise\.race/);
+    assert.match(read("src/routes/api/assistant/voice.ts"), /await speakVisible/);
   });
 });
 
@@ -171,6 +177,78 @@ describe("news ribbon motion", { skip: !chrome || !playwright }, () => {
         assert.equal(measured.scrolled, true, `${width} did not scroll to the last voice`);
         assert.equal(measured.lastVisible, true, `${width} hid the last Use button`);
         assert.equal(measured.ashUseInside, true, `${width} wrapped the selected voice controls`);
+      }
+    } finally {
+      await browser.close();
+    }
+  });
+});
+
+describe("assistant command bar", { skip: !chrome || !playwright }, () => {
+  it("scrolls only the chat log and keeps Play reply with the command buttons", async () => {
+    const require = createRequire(import.meta.url);
+    const { chromium } = require(playwright);
+    const css = read("src/styles.css").replace(/^@import[^\n]*\n/, "");
+    const voices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
+    const browser = await chromium.launch({ executablePath: chrome, headless: true });
+    try {
+      const page = await browser.newPage();
+      for (const size of [{ width: 1280, height: 800 }, { width: 390, height: 700 }]) {
+        await page.setViewportSize(size);
+        await page.setContent(`<!doctype html><style>${css}</style>
+          <section class="ua-assist-talk" id="talk">
+            <p class="ua-assist-head">This chat</p>
+            <div class="ua-assist-log" id="log">
+              ${Array.from({ length: 12 }, (_, index) => `<p>Message ${index} stays in the history.</p>`).join("")}
+            </div>
+            <form class="ua-assist-compose" data-command-bar>
+              <p class="ua-playback-note" role="status">The browser blocked playback. Press Play reply.</p>
+              <div class="ua-voice-list" id="voices">
+                ${voices.map((voice) => `<div class="ua-voice-row" data-voice="${voice}"><span class="ua-voice-name">${voice}</span><button type="button">Use</button></div>`).join("")}
+              </div>
+              <textarea class="ua-field" id="ai-assistant-input" rows="3">Ask the AI assistant</textarea>
+              <div class="ua-command-row">
+                <button type="button" data-play-reply>Play reply</button>
+                <button type="button" id="voice-command">Voice command</button>
+                <button type="submit" id="ask">Ask</button>
+              </div>
+            </form>
+          </section>`);
+        const measured = await page.evaluate(() => {
+          const log = document.getElementById("log");
+          const compose = document.querySelector(".ua-assist-compose");
+          const voices = document.getElementById("voices");
+          const last = document.querySelector("[data-voice='cedar']");
+          last.scrollIntoView({ block: "nearest" });
+          const play = document.querySelector("[data-play-reply]");
+          const ask = document.getElementById("ask");
+          play.scrollIntoView({ block: "nearest" });
+          const playBox = play.getBoundingClientRect();
+          const askBox = ask.getBoundingClientRect();
+          const voiceBox = document.getElementById("voice-command").getBoundingClientRect();
+          const logBox = log.getBoundingClientRect();
+          const listBox = voices.getBoundingClientRect();
+          const lastBox = last.getBoundingClientRect();
+          const composeStyle = getComputedStyle(compose);
+          return {
+            logScrolls: log.scrollHeight > log.clientHeight + 4,
+            composeDoesNotScroll: composeStyle.overflowY === "visible" && compose.scrollHeight <= compose.clientHeight + 2,
+            commandBelowHistory: playBox.top >= logBox.bottom - 1,
+            playInView: playBox.top >= 0 && playBox.bottom <= window.innerHeight && playBox.height > 0,
+            askInView: askBox.top >= 0 && askBox.bottom <= window.innerHeight,
+            voiceInView: voiceBox.top >= 0 && voiceBox.bottom <= window.innerHeight,
+            lastVoiceReachable: lastBox.top >= listBox.top - 1 && lastBox.bottom <= listBox.bottom + 1,
+            voiceListScrolls: voices.scrollHeight > voices.clientHeight + 4,
+          };
+        });
+        assert.equal(measured.logScrolls, true, `${size.width} history did not scroll`);
+        assert.equal(measured.composeDoesNotScroll, true, `${size.width} composer still scrolls`);
+        assert.equal(measured.commandBelowHistory, true, `${size.width} command overlapped the history`);
+        assert.equal(measured.playInView, true, `${size.width} hid Play reply`);
+        assert.equal(measured.askInView, true, `${size.width} hid Ask`);
+        assert.equal(measured.voiceInView, true, `${size.width} hid Voice command`);
+        assert.equal(measured.voiceListScrolls, true, `${size.width} voice list did not scroll`);
+        assert.equal(measured.lastVoiceReachable, true, `${size.width} hid the last voice`);
       }
     } finally {
       await browser.close();

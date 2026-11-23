@@ -351,6 +351,50 @@ export function voiceAudible(results: ClipPlay[]) {
   return results.length > 0 && results.every(clipAudible);
 }
 
+export type SpokenDelivery =
+  | { type: "audio"; mime: string; audio: string }
+  | { type: "tts-error"; error: string };
+
+/**
+ * Speak every ready line before the caller finishes the response.
+ * A timeout must not drop audio that this function already produced.
+ */
+export async function deliverSpokenLines(
+  lines: string[],
+  speak: (line: string) => Promise<string>,
+  send: (event: SpokenDelivery) => void,
+) {
+  let sentAudio = false;
+  let reported = false;
+  for (const line of lines) {
+    const text = String(line || "").trim();
+    if (text.length < 2) continue;
+    try {
+      const audio = await speak(text);
+      if (!audio) continue;
+      sentAudio = true;
+      send({ type: "audio", mime: "audio/mpeg", audio });
+    } catch (error) {
+      reported = true;
+      const message = error instanceof Error ? error.message : "The voice could not be spoken.";
+      send({ type: "tts-error", error: message });
+    }
+  }
+  if (!sentAudio && !reported) send({ type: "tts-error", error: "No spoken audio came back. Press Play reply." });
+  return { sentAudio };
+}
+
+/** Non-secret status for a voice turn whose reply is on screen but was not heard. */
+export function voicePlaybackNote(input: { spoken: boolean; audible: boolean; clips: number; blocked: boolean; dropped: boolean; ttsError?: string }) {
+  if (!input.spoken || input.audible) return "";
+  const reported = String(input.ttsError || "").trim();
+  if (reported) return reported;
+  if (input.blocked) return "The browser blocked playback. Press Play reply.";
+  if (input.dropped) return "Playback was interrupted before it finished. Press Play reply.";
+  if (input.clips > 0) return "The spoken reply is ready. Press Play reply.";
+  return "No spoken audio came back. Press Play reply.";
+}
+
 export function repeatsRequest(heard: string, request: string) {
   const clean = (value: string) => String(value || "").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
   const left = clean(heard);

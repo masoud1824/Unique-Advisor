@@ -337,9 +337,10 @@
 }
 .ua-assist-talk {
   flex-direction: column;
-  height: min(72vh, 720px);
-  min-height: 360px;
+  height: auto;
+  min-height: 0;
   display: flex;
+  overflow: visible;
 }
 .ua-assist-head {
   border-bottom: 1px solid var(--ua-line);
@@ -360,10 +361,10 @@
   overscroll-behavior: contain;
   scroll-behavior: auto;
   flex-direction: column;
-  flex: auto;
+  flex: none;
   gap: 10px;
-  min-height: 0;
-  max-height: none;
+  min-height: 120px;
+  max-height: min(42vh, 420px);
   padding: 12px;
   display: flex;
   overflow: hidden auto;
@@ -417,14 +418,23 @@
 .ua-assist-compose {
   border-top: 1px solid var(--ua-line);
   background: #fff;
-  flex: 0 1 auto;
+  flex: none;
   gap: 10px;
-  min-height: 0;
-  max-height: 62%;
   padding: 12px;
   display: grid;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow: visible;
+}
+.ua-command-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.ua-playback-note {
+  margin: 0;
+  color: #8a3a12;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 .ua-voice-panel {
   min-width: 0;

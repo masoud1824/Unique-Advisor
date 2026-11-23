@@ -4,6 +4,7 @@ import { isBareRefusal, isNewsletterReorder, newsletterMoveTarget } from "./advi
 import {
   cancelExplanation,
   claimVoiceTurn,
+  deliverSpokenLines,
   deskTurnKey,
   isEcho,
   prepareDeskCommand,
@@ -15,8 +16,10 @@ import {
   transcriptHold,
   verifiedFarsiMoveNote,
   voiceAudible,
+  voicePlaybackNote,
   voiceTurnKey,
 } from "./voice-desk.ts";
+import { OUTBOUND_BLOCKED } from "./outbound-guard.ts";
 import { speechRequest, NEUTRAL_NORTH_AMERICAN_DELIVERY, OPENAI_TTS_MODEL } from "./openai-voices.ts";
 
 describe("voice and typing share one command", () => {
@@ -131,5 +134,38 @@ describe("spoken reply playback", () => {
     assert.equal(body.instructions, NEUTRAL_NORTH_AMERICAN_DELIVERY);
     assert.match(body.instructions, /neutral North American English/);
     assert.doesNotMatch(body.instructions, /alloy is British|ash is British|this voice has a British accent/i);
+  });
+
+  it("speaks a short hello and a blocked action, and keeps the clip when playback is not heard", async () => {
+    assert.match(spokenBrief("Hello.", "Hello. Please say hello back."), /^Hello/);
+    const blocked = spokenBrief(OUTBOUND_BLOCKED, "can you get a change of beneficiary form from Equitable Life form library");
+    assert.match(blocked, /Nothing was sent/);
+    assert.doesNotMatch(blocked, /^$/);
+    const events: Array<{ type: string; audio?: string; error?: string }> = [];
+    const hello = await deliverSpokenLines(["Hello."], async () => "aGVsbG8=", (event) => events.push(event));
+    assert.equal(hello.sentAudio, true);
+    assert.equal(events[0]?.type, "audio");
+    events.length = 0;
+    let released = false;
+    const slow = deliverSpokenLines(["Outbound mail is blocked. Nothing was sent."], async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      released = true;
+      return "YmxvY2tlZA==";
+    }, (event) => events.push(event));
+    assert.equal(released, false);
+    const done = await slow;
+    assert.equal(done.sentAudio, true);
+    assert.equal(events.some((event) => event.type === "audio" && event.audio === "YmxvY2tlZA=="), true);
+    events.length = 0;
+    const failed = await deliverSpokenLines(["Hello."], async () => {
+      throw new Error("No voice key.");
+    }, (event) => events.push(event));
+    assert.equal(failed.sentAudio, false);
+    assert.equal(events[0]?.type, "tts-error");
+    assert.equal(events[0]?.error, "No voice key.");
+    assert.equal(voicePlaybackNote({ spoken: true, audible: false, clips: 1, blocked: true, dropped: false }), "The browser blocked playback. Press Play reply.");
+    assert.equal(voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: false, dropped: false, ttsError: "No voice key." }), "No voice key.");
+    assert.equal(voicePlaybackNote({ spoken: true, audible: true, clips: 1, blocked: false, dropped: false }), "");
+    assert.equal(voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: false, dropped: false }), "No spoken audio came back. Press Play reply.");
   });
 });

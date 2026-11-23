@@ -243,11 +243,19 @@ export async function speakSentence(text: string, onChunk: (chunk: Buffer) => vo
   const started = Date.now();
   console.info(`[voice] tts-start chars=${text.length}`);
   const voice = await savedAdvisorVoice(advisorId);
-  const response = await fetch(`${OPENAI}/audio/speech`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: speechBody(text, voice)
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${OPENAI}/audio/speech`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: speechBody(text, voice),
+      signal: AbortSignal.timeout(20000),
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    if (name === "TimeoutError" || name === "AbortError") throw new Error("The spoken reply was not ready in time. Press Play reply.");
+    throw new Error("The warmer voice is not available.");
+  }
   if (!response.ok || !response.body) throw new Error("The warmer voice is not available.");
   await saveAssistantDiagnostic(null, "openai", [factsFromResponse(response)]).catch(() => void 0);
   const reader = response.body.getReader();
