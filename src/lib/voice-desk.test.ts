@@ -17,6 +17,7 @@ import {
   verifiedFarsiMoveNote,
   voiceAudible,
   voicePlaybackNote,
+  preferredBrowserVoice,
   voiceTurnKey,
 } from "./voice-desk.ts";
 import { OUTBOUND_BLOCKED } from "./outbound-guard.ts";
@@ -167,5 +168,15 @@ describe("spoken reply playback", () => {
     assert.equal(voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: false, dropped: false, ttsError: "No voice key." }), "No voice key.");
     assert.equal(voicePlaybackNote({ spoken: true, audible: true, clips: 1, blocked: false, dropped: false }), "");
     assert.equal(voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: false, dropped: false }), "No spoken audio came back. Press Play reply.");
+    const chosen = preferredBrowserVoice([
+      { lang: "fa-IR", name: "Persian" },
+      { lang: "en-GB", name: "Daniel" },
+      { lang: "en-CA", name: "Alex" },
+      { lang: "en-US", name: "Samantha" },
+    ]);
+    assert.equal(chosen?.lang, "en-US");
+    assert.equal(chosen?.name, "Samantha");
+    assert.equal(preferredBrowserVoice([{ lang: "en-GB", name: "Daniel" }, { lang: "en-CA", name: "Alex" }])?.name, "Alex");
+    assert.equal(preferredBrowserVoice([{ lang: "fa-IR", name: "Persian" }]), null);
   });
 });

@@ -142,6 +142,131 @@
     system-ui,
     sans-serif;
 }
+html:has(.ua-assistant-lock),
+body:has(.ua-assistant-lock) {
+  height: var(--ua-vvh, 100dvh);
+  max-height: var(--ua-vvh, 100dvh);
+  min-height: 0;
+  overflow: hidden;
+}
+.ua-practice-shell:has(.ua-assistant-lock) {
+  height: var(--ua-vvh, 100dvh);
+  max-height: var(--ua-vvh, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  container: ua-desk-shell / size;
+}
+.ua-practice-shell:has(.ua-assistant-lock),
+.ua-practice-shell:has(.ua-assistant-lock) * {
+  box-sizing: border-box;
+}
+.ua-practice-shell:has(.ua-assistant-lock) > [data-practice-banner] {
+  flex: none;
+}
+.ua-desk.ua-assistant-lock {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+}
+.ua-desk.ua-assistant-lock > main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  margin-left: 0;
+  overflow: hidden;
+  padding: 8px 12px;
+}
+.ua-desk.ua-assistant-lock .ua-desk-toolbar,
+.ua-desk.ua-assistant-lock .ua-desk-heading,
+.ua-desk.ua-assistant-lock .ua-ribbon-bar,
+.ua-desk.ua-assistant-lock .ua-assist-tools,
+.ua-desk.ua-assistant-lock > main > .ua-panel {
+  flex: none;
+}
+.ua-desk.ua-assistant-lock > main > .ua-panel {
+  max-height: 64px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.ua-desk.ua-assistant-lock .ua-desk-toolbar,
+.ua-desk.ua-assistant-lock .ua-desk-heading {
+  position: static;
+  margin-bottom: 8px;
+}
+.ua-desk.ua-assistant-lock h1,
+.ua-desk.ua-assistant-lock h2,
+.ua-desk.ua-assistant-lock p {
+  margin: 0;
+}
+.ua-desk.ua-assistant-lock h1,
+.ua-desk.ua-assistant-lock h2 {
+  font-size: 1.15rem;
+  line-height: 1.2;
+}
+.ua-assist-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ua-assist-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 10px 12px;
+}
+.ua-assist-tools,
+.ua-assist-note {
+  flex: none;
+}
+.ua-assist-rules {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+@media (width >= 768px) {
+  .ua-desk.ua-assistant-lock {
+    flex-direction: row;
+  }
+  .ua-desk.ua-assistant-lock > .ua-side {
+    position: relative;
+    inset: auto;
+    width: 220px;
+    flex: 0 0 220px;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+@media (width < 768px) {
+  .ua-desk.ua-assistant-lock > .ua-side {
+    flex: none;
+  }
+  .ua-desk.ua-assistant-lock > .ua-side .ua-logo {
+    display: none;
+  }
+  .ua-desk.ua-assistant-lock > .ua-side nav {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+  .ua-desk.ua-assistant-lock > .ua-side .ua-navbtn {
+    width: auto;
+    flex: none;
+    padding: 8px 12px;
+  }
+}
 .ua-desk button,
 .ua-desk input,
 .ua-desk select,
@@ -317,14 +442,27 @@
   font-size: 0.95rem;
 }
 .ua-assist {
-  align-items: start;
-  gap: 16px;
-  margin-top: 16px;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 12px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
   display: grid;
+  overflow: hidden;
 }
 @media (width>=860px) {
   .ua-assist {
-    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+@media (width<860px) {
+  .ua-assist {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .ua-assist-list {
+    max-height: 72px;
   }
 }
 .ua-assist-list,
@@ -333,14 +471,20 @@
   background: #fff;
   border-radius: 10px;
   min-width: 0;
+  min-height: 0;
+  max-height: 100%;
   overflow: hidden;
+}
+.ua-assist-list {
+  display: flex;
+  flex-direction: column;
 }
 .ua-assist-talk {
   flex-direction: column;
-  height: auto;
+  height: 100%;
   min-height: 0;
   display: flex;
-  overflow: visible;
+  overflow: hidden;
 }
 .ua-assist-head {
   border-bottom: 1px solid var(--ua-line);
@@ -354,23 +498,30 @@
 }
 .ua-assist-chats {
   overscroll-behavior: contain;
-  max-height: min(42vh, 480px);
-  overflow: hidden auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .ua-assist-log {
   overscroll-behavior: contain;
   scroll-behavior: auto;
   flex-direction: column;
-  flex: none;
+  flex: 1 1 auto;
   gap: 10px;
-  min-height: 120px;
-  max-height: min(42vh, 420px);
+  min-height: 0;
   padding: 12px;
   display: flex;
-  overflow: hidden auto;
+  overflow: auto;
 }
 .ua-assist-log > * {
   flex: none;
+}
+.ua-assist-tray,
+.ua-assist-drafts {
+  flex: none;
+  max-height: min(16dvh, 120px);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .ua-assist-row {
   text-align: left;
@@ -419,13 +570,20 @@
   border-top: 1px solid var(--ua-line);
   background: #fff;
   flex: none;
+  flex-direction: column;
   gap: 10px;
   padding: 12px;
-  display: grid;
+  display: flex;
   overflow: visible;
+}
+.ua-assist-compose textarea {
+  max-height: 4.8rem;
+  min-height: 2.6rem;
+  resize: vertical;
 }
 .ua-command-row {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
@@ -438,11 +596,15 @@
 }
 .ua-voice-panel {
   min-width: 0;
-  display: grid;
-  gap: 8px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .ua-voice-list {
-  max-height: min(30vh, 220px);
+  flex: none;
+  min-height: 0;
+  max-height: min(22dvh, 168px);
   overflow: auto;
   overscroll-behavior: contain;
   display: grid;
@@ -480,7 +642,7 @@
 .ua-voice-use { grid-area: use; }
 .ua-voice-row button { white-space: nowrap; }
 @media (width <= 720px) {
-  .ua-voice-list { max-height: min(26vh, 180px); }
+  .ua-voice-list { max-height: min(14dvh, 96px); }
   .ua-voice-row {
     grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
@@ -551,6 +713,34 @@
 .ua-ribbon-list a:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 2px;
+}
+@container ua-desk-shell (max-width: 859px) {
+  .ua-desk.ua-assistant-lock > main > .ua-panel,
+  .ua-desk.ua-assistant-lock .ua-desk-heading {
+    display: none;
+  }
+  .ua-assist-list { max-height: 48px; }
+  .ua-voice-list { max-height: 88px; }
+  .ua-assist-compose textarea { max-height: 3rem; }
+}
+@container ua-desk-shell (max-height: 760px) {
+  .ua-desk.ua-assistant-lock > main > .ua-panel {
+    max-height: 36px;
+  }
+  .ua-voice-list { max-height: 72px; }
+  .ua-assist-compose textarea { max-height: 2.8rem; }
+}
+@container ua-desk-shell (max-height: 560px) {
+  .ua-desk.ua-assistant-lock > main > .ua-panel,
+  .ua-desk.ua-assistant-lock .ua-desk-heading,
+  .ua-assist-list,
+  .ua-ribbon-bar {
+    display: none;
+  }
+  .ua-voice-list { max-height: 36px; }
+  .ua-assist-compose { padding: 6px; gap: 4px; }
+  .ua-assist-compose textarea { max-height: 2.2rem; min-height: 2rem; }
+  .ua-command-row { gap: 4px; }
 }
 @media (max-width: 720px) {
   .ua-ribbon { font-size: 14px; }

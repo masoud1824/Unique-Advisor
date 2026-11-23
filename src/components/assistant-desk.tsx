@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
-import { isEcho, prepareDeskCommand, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, voicePlaybackNote, type ClipPlay } from "@/lib/voice-desk";
+import { isEcho, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, voicePlaybackNote, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
@@ -198,6 +198,7 @@ let voiceStopping = false;
 let spokenAudio: HTMLAudioElement | null = null;
 let listenTimer = 0;
 let speakToken = 0;
+let browserSpeechGen = 0;
 let advisorSpeaking = false;
 let recognition: Heard | null = null;
 let recorder: MediaRecorder | null = null;
@@ -361,6 +362,7 @@ function haltVoice() {
   window.clearTimeout(voicePauseTimer);
   window.clearTimeout(listenTimer);
   speakToken += 1;
+  browserSpeechGen += 1;
   const current = recognition;
   try { current?.abort?.(); } catch { /* already stopped */ }
   try { current?.stop?.(); } catch { /* already stopped */ }
@@ -455,6 +457,64 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<Clip
   }));
   playQueue = run.then(() => undefined, () => undefined);
   return run;
+}
+
+/** Speak an on-screen reply without the language model. Success is playback start, not the text itself. */
+export function speakInBrowser(line: string): Promise<ClipPlay> {
+  const text = String(line || "").trim();
+  const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+  if (!text || !synth || typeof SpeechSynthesisUtterance === "undefined") {
+    return Promise.resolve({ started: false, dropped: false, blocked: true });
+  }
+  const generation = ++browserSpeechGen;
+  if (synth.speaking || synth.pending) synth.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = "en-US";
+  const chosen = preferredBrowserVoice(synth.getVoices().map((voice) => ({ lang: voice.lang, name: voice.name })));
+  if (chosen) {
+    const match = synth.getVoices().find((voice) => voice.lang === chosen.lang && voice.name === chosen.name);
+    if (match) utterance.voice = match;
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    let started = false;
+    const finish = (result: ClipPlay) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
+      resolve(result);
+    };
+    const startTimer = window.setTimeout(() => {
+      if (!started) finish({ started: false, dropped: generation !== browserSpeechGen, blocked: generation === browserSpeechGen });
+    }, 4000);
+    const endTimer = window.setTimeout(() => {
+      try { synth.cancel(); } catch { /* already stopped */ }
+      finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
+    }, 20000);
+    utterance.onstart = () => {
+      if (generation !== browserSpeechGen) {
+        finish({ started: false, dropped: true, blocked: false });
+        return;
+      }
+      started = true;
+      window.clearTimeout(startTimer);
+      markAdvisorSpeaking(true);
+    };
+    utterance.onend = () => {
+      if (started) markAdvisorSpeaking(false);
+      if (generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
+      else finish(started ? { started: true, dropped: false, blocked: false } : { started: false, dropped: false, blocked: true });
+    };
+    utterance.onerror = (event) => {
+      const reason = event.error;
+      if (started) markAdvisorSpeaking(false);
+      if (reason === "interrupted" || reason === "canceled" || generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
+      else finish({ started: false, dropped: false, blocked: true });
+    };
+    try { synth.resume(); } catch { /* already running */ }
+    synth.speak(utterance);
+  });
 }
 
 function interruptAdvisorSpeech() {
@@ -950,7 +1010,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     if (!assistFrom?.id) return;
     setPageCue(assistFrom.page);
     const frame = window.setTimeout(() => {
-      document.getElementById("ai-assistant-chat")?.scrollIntoView({ block: "start" });
       document.getElementById("ai-assistant-input")?.focus();
     }, 40);
     return () => window.clearTimeout(frame);
@@ -1022,7 +1081,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     }
     const line = lastSpokenLine;
     if (!line) return;
-    const outcome = await speak(line);
+    const outcome = await speakInBrowser(line);
     if (voiceAudible([outcome])) {
       setReplayReady(false);
       setPlaybackNote("");
@@ -1161,7 +1220,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setText(suggestion);
     const at = new Date().toISOString();
     setTurns((current) => [...current, { role: "user", content: original, at }, { role: "assistant", content: `${question}\nTranscript: ${original}\nNothing was sent.`, at }]);
-    void speak(question, original);
+    void speakInBrowser(question);
   }
 
   function hear(text: string) {
@@ -1241,7 +1300,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       if (spoken) setText("");
       const played = Boolean(streamed && "played" in streamed && streamed.played);
       const clips = streamed && "clips" in streamed && Array.isArray(streamed.clips) ? streamed.clips : [];
-      const offerSpeech = (line: string) => {
+      const offerSpeech = async (line: string) => {
         if (!spoken) return;
         const brief = spokenBrief(line, content);
         if (brief) lastSpokenLine = brief;
@@ -1258,6 +1317,23 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         setSpeaking(false);
         onVoice?.({ listening: false, speaking: false });
         emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+        if (clips.length === 0 && brief) {
+          const outcome = await speakInBrowser(brief);
+          if (voiceAudible([outcome])) {
+            setReplayReady(false);
+            setPlaybackNote("");
+            return;
+          }
+          setReplayReady(true);
+          setPlaybackNote(voicePlaybackNote({
+            spoken: true,
+            audible: false,
+            clips: 0,
+            blocked: outcome.blocked,
+            dropped: outcome.dropped,
+          }));
+          return;
+        }
         setReplayReady(true);
         const detail = streamed && typeof streamed === "object" ? streamed as { blocked?: boolean; dropped?: boolean; ttsError?: string } : {};
         setPlaybackNote(voicePlaybackNote({
@@ -1277,7 +1353,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           showNameChoices(content, names, failure || "Which contact?", hit.kind === "one" || hit.kind === "many" ? hit.start : content.length, hit.kind === "one" || hit.kind === "many" ? hit.end : content.length);
           setError("");
         } else failed(failure || "Sorry, something went wrong — please try again.");
-        offerSpeech(failure || String(result?.reply || ""));
+        await offerSpeech(failure || String(result?.reply || ""));
         resumeAdvisorListening();
       } else if (!result.reply?.trim()) {
         failed("Sorry, something went wrong — please try again.");
@@ -1311,7 +1387,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           setChoices([]);
           setChoiceNote("");
         }
-        offerSpeech(reply);
+        await offerSpeech(reply);
         await refresh(id);
         if (mine !== generation.current) return;
         setTurns((current) => current.some((turn) => turn.role === "assistant" && turn.content === reply) ? current : [...current, { role: "user" as const, content, at: new Date().toISOString() }, { role: "assistant" as const, content: reply, at: new Date().toISOString() }]);
@@ -1348,7 +1424,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   askRef.current = ask;
 
   function listen() {
-    if (hearing || listening || advisorVoiceOn()) {
+    if (hearing || listening || speaking || advisorVoiceOn()) {
       stopAdvisorSpeech();
       return;
     }
@@ -1527,9 +1603,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const linkedPreviewIds = new Set(turns.flatMap((turn) => (turn.previews || []).map((item) => item.id)));
   const trayActions = actions.filter((item) => trayOffers(item, linkedPreviewIds));
   return (
-    <div className="grid gap-4">
-      <section id="ai-assistant" className="ua-panel p-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="ua-assist-stage">
+      <section id="ai-assistant" className="ua-panel ua-assist-panel">
+        <div className="ua-assist-tools flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">AI assistant</h2>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={rulesOpen ? "ua-btn-line" : "ua-btn"} style={{ padding: "6px 12px" }} onClick={() => setRulesOpen(false)}>Chats</button>
@@ -1537,7 +1613,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           </div>
         </div>
         {rulesOpen ? (
-          <form onSubmit={(event) => void saveRules(event)} className="mt-4 grid gap-3 rounded-lg border p-4" style={{ borderColor: "#e1e8ef" }}>
+          <form onSubmit={(event) => void saveRules(event)} className="ua-assist-rules mt-4 grid gap-3 rounded-lg border p-4" style={{ borderColor: "#e1e8ef" }}>
             <h3 className="font-semibold">Secretary tasks</h3>
             <ClientDatabase code={code} desk={desk} />
             <p className="text-sm" style={{ color: "#5a6a7a" }}>Each task is a rule. Turn one off and the assistant will not do that job. Edit changes the wording. You can still add your own rule below.</p>
@@ -1695,10 +1771,29 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               {turns.length === 0 && <p className="text-sm" style={{ color: "#5a6a7a" }}>Ask who needs a call, whose yearly KYC is due, or where an upsell or cross-sell may exist.</p>}
             </div>
             {trayActions.length > 0 && (
-              <div className="grid gap-3 border-t p-3" style={{ borderColor: "#e1e8ef" }}>
+              <div className="ua-assist-tray grid gap-3 border-t p-3" style={{ borderColor: "#e1e8ef" }}>
                 {trayActions.map((action) => (
                   <MailPreview key={action.id} action={action} busy={busy} onApprove={(id) => void approveAction(id)} onDiscard={(id) => void discardAction(id)} />
                 ))}
+              </div>
+            )}
+            {drafts.length > 0 && (
+              <div className="ua-assist-drafts">
+                <h2 className="text-lg font-semibold">Drafts waiting for approval</h2>
+                <div className="mt-2 grid gap-3">
+                  {drafts.map((draft) => (
+                    <article key={draft.id} className="rounded-lg border p-3" style={{ borderColor: "#e1e8ef" }}>
+                      <p className="text-sm font-semibold">To {draft.name || draft.to}</p>
+                      <p className="text-sm" style={{ color: "#5a6a7a" }}>{draft.to}</p>
+                      <p className="mt-2 font-semibold">{draft.subject}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-sm">{draft.body}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button type="button" className="ua-btn" disabled={busy} onClick={() => void approve(draft.id)}>Approve and send</button>
+                        <button type="button" className="ua-btn-line" disabled={busy} onClick={() => void discard(draft.id)}>Discard</button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </div>
             )}
             <form onSubmit={(event) => {
@@ -1814,7 +1909,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               />
               <div className="ua-command-row">
                 {replayReady && <button type="button" className="ua-btn" data-play-reply style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => void replaySpoken()}>Play reply</button>}
-                <button type="button" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem", background: listening ? "#b42318" : "#0f4c81" }} onClick={() => listen()}>{listening ? "Stop" : "Voice command"}</button>
+                <button type="button" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem", background: listening || speaking ? "#b42318" : "#0f4c81" }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
                 <button type="submit" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy}>{busy ? "Working…" : "Ask"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => void newChat()}>New chat</button>
@@ -1823,7 +1918,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           </div>
         </div>
         )}
-        {error && <p className="mt-3 text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
+        {error && <p className="ua-assist-note mt-3 text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
         {connectionNeeded(`${error} ${[...turns].reverse().find((turn) => turn.role === "assistant")?.content || ""}`) && (
           <p className="mt-3 text-sm font-semibold">
             That account is not connected.{" "}
@@ -1831,25 +1926,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           </p>
         )}
       </section>
-      {drafts.length > 0 && (
-        <section className="ua-panel p-6">
-          <h2 className="text-lg font-semibold">Drafts waiting for approval</h2>
-          <div className="mt-4 grid gap-4">
-            {drafts.map((draft) => (
-              <article key={draft.id} className="rounded-lg border p-4" style={{ borderColor: "#e1e8ef" }}>
-                <p className="text-sm font-semibold">To {draft.name || draft.to}</p>
-                <p className="text-sm" style={{ color: "#5a6a7a" }}>{draft.to}</p>
-                <p className="mt-2 font-semibold">{draft.subject}</p>
-                <p className="mt-2 whitespace-pre-wrap text-sm">{draft.body}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className="ua-btn" disabled={busy} onClick={() => void approve(draft.id)}>Approve and send</button>
-                  <button type="button" className="ua-btn-line" disabled={busy} onClick={() => void discard(draft.id)}>Discard</button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

@@ -395,6 +395,15 @@ export function voicePlaybackNote(input: { spoken: boolean; audible: boolean; cl
   return "No spoken audio came back. Press Play reply.";
 }
 
+/** Pick a browser voice for English replies. This does not play audio. */
+export function preferredBrowserVoice(voices: Array<{ lang: string; name: string }>) {
+  const list = voices.filter((voice) => /^en(-|$)/i.test(voice.lang || ""));
+  return list.find((voice) => /^en-US/i.test(voice.lang))
+    || list.find((voice) => /^en-CA/i.test(voice.lang))
+    || list[0]
+    || null;
+}
+
 export function repeatsRequest(heard: string, request: string) {
   const clean = (value: string) => String(value || "").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
   const left = clean(heard);

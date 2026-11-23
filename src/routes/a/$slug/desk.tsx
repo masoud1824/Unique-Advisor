@@ -165,7 +165,7 @@ function DeskPage() {
 			children: [site.practiceName, " cannot open the desk until the operator turns it back on."]
 		})]
 	})] });
-	return /* @__PURE__ */ jsxs("div", { children: [banner, /* @__PURE__ */ jsx(DeskGate, {
+	return /* @__PURE__ */ jsxs("div", { className: "ua-practice-shell", children: [banner, /* @__PURE__ */ jsx(DeskGate, {
 		slug: site.slug,
 		practiceName: site.practiceName
 	})] });
@@ -380,14 +380,30 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 	function talk() {
 		setAssistFrom({ page: titles[tab] || "Desk", id: Date.now() });
 		setTab("assistant");
-		window.setTimeout(() => document.getElementById("ai-assistant-chat")?.scrollIntoView({ block: "start" }), 60);
 	}
 	function voiceCommand() {
 		setTab("assistant");
 		setVoiceCue(Date.now());
 	}
+	useEffect(() => {
+		if (tab !== "assistant") return;
+		const apply = () => {
+			const height = window.visualViewport?.height || window.innerHeight;
+			document.documentElement.style.setProperty("--ua-vvh", `${Math.round(height)}px`);
+		};
+		apply();
+		window.visualViewport?.addEventListener("resize", apply);
+		window.visualViewport?.addEventListener("scroll", apply);
+		window.addEventListener("resize", apply);
+		return () => {
+			document.documentElement.style.removeProperty("--ua-vvh");
+			window.visualViewport?.removeEventListener("resize", apply);
+			window.visualViewport?.removeEventListener("scroll", apply);
+			window.removeEventListener("resize", apply);
+		};
+	}, [tab]);
 	return /* @__PURE__ */ jsxs("div", {
-		className: "ua-desk md:flex",
+		className: `ua-desk md:flex${tab === "assistant" ? " ua-assistant-lock" : ""}`,
 		children: [
 			/* @__PURE__ */ jsxs("aside", {
 				className: "ua-side md:fixed md:inset-y-0 md:flex md:w-[260px] md:flex-col md:overflow-hidden",
@@ -423,7 +439,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 				className: "min-w-0 flex-1 px-5 py-6 md:ml-[260px] md:px-10 md:py-8",
 				children: [
 					/* @__PURE__ */ jsxs("div", {
-						className: "sticky top-0 z-20 -mx-5 mb-5 flex items-center gap-2 bg-[#f7f9fc] px-5 py-3 md:-mx-10 md:px-10",
+						className: "ua-desk-toolbar sticky top-0 z-20 -mx-5 mb-5 flex items-center gap-2 bg-[#f7f9fc] px-5 py-3 md:-mx-10 md:px-10",
 						children: [/* @__PURE__ */ jsx("button", {
 							type: "button",
 							className: "ua-btn",
@@ -437,10 +453,10 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 							type: "button",
 							className: "ua-btn",
 							style: {
-								background: talking ? "#b42318" : "#0f4c81"
+								background: talking || voicing ? "#b42318" : "#0f4c81"
 							},
 							onClick: voiceCommand,
-							children: talking ? "Stop voice" : "Voice command"
+							children: talking || voicing ? "Stop voice" : "Voice command"
 						}), /* @__PURE__ */ jsx("button", {
 							type: "button",
 							className: "ua-btn-line",
@@ -455,7 +471,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 					/* @__PURE__ */ jsx(DeskNotices, { code, slug: desk.slug }),
 					/* @__PURE__ */ jsx(SignatureNotices, { code, slug: desk.slug }),
 					/* @__PURE__ */ jsxs("div", {
-						className: "mb-7 flex flex-wrap items-center justify-between gap-3",
+						className: "ua-desk-heading mb-7 flex flex-wrap items-center justify-between gap-3",
 						children: [
 							/* @__PURE__ */ jsx("h1", {
 								className: "text-3xl font-bold",
