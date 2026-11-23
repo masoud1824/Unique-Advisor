@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
-import { isEcho, prepareDeskCommand, spokenBrief, transcriptHold } from "@/lib/voice-desk";
+import { isEcho, prepareDeskCommand, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
@@ -334,11 +334,7 @@ function recognitionError(code: string) {
 }
 
 function voiceLanguage() {
-  try {
-    return localStorage.getItem("ua-voice-lang") === "fa-IR" ? "fa-IR" : "en-CA";
-  } catch {
-    return "en-CA";
-  }
+  return "en-CA";
 }
 
 export function markAdvisorSpeaking(on: boolean) {
@@ -413,23 +409,19 @@ export function stopAdvisorSpeech() {
   haltVoice();
 }
 
-export function playVoiceClip(base64: string, mime = "audio/mpeg") {
-  if (dropAudio) return;
-  clipsPlaying += 1;
-  markAdvisorSpeaking(true);
-  playQueue = playQueue.then(() => new Promise<void>((resolve) => {
+export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<ClipPlay> {
+  const run = playQueue.then(() => new Promise<ClipPlay>((resolve) => {
     if (dropAudio) {
-      clipsPlaying = Math.max(0, clipsPlaying - 1);
-      resolve();
+      resolve({ started: false, dropped: true, blocked: false });
       return;
     }
     const audio = new Audio(`data:${mime};base64,${base64}`);
     spokenAudio = audio;
-    releasePlayback = () => {
-      releasePlayback = null;
-      resolve();
-    };
-    const finish = () => {
+    clipsPlaying += 1;
+    let settled = false;
+    const finish = (result: ClipPlay) => {
+      if (settled) return;
+      settled = true;
       releasePlayback = null;
       clipsPlaying = Math.max(0, clipsPlaying - 1);
       if (clipsPlaying === 0) {
@@ -437,29 +429,32 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg") {
         if (spokenAudio === audio) spokenAudio = null;
         if (keepListening) {
           emitVoice({ phase: "listening", error: "", listening: true, speaking: false });
-          restartListening?.();
-          voiceLog("resume-after-speech");
+          if (result.started) {
+            restartListening?.();
+            voiceLog("resume-after-speech");
+          }
         } else emitVoice({ phase: "off", error: "", listening: false, speaking: false });
       }
-      resolve();
+      resolve(result);
     };
-    audio.onended = finish;
-    audio.onerror = () => {
-      emitVoice({ phase: "error", error: "The spoken reply could not be played.", listening: false, speaking: false });
-      finish();
-    };
+    releasePlayback = () => finish({ started: false, dropped: true, blocked: false });
+    audio.onended = () => finish({ started: true, dropped: false, blocked: false });
+    audio.onerror = () => finish({ started: false, dropped: false, blocked: true });
     audio.play().then(() => {
       if (dropAudio || spokenAudio !== audio) {
         try { audio.pause(); } catch { /* interrupted */ }
-        finish();
+        finish({ started: false, dropped: true, blocked: false });
         return;
       }
+      markAdvisorSpeaking(true);
       voiceLog("playback-start");
     }).catch(() => {
-      emitVoice({ phase: "error", error: "The spoken reply could not be played.", listening: false, speaking: false });
-      finish();
+      try { audio.pause(); } catch { /* not playing */ }
+      finish({ started: false, dropped: false, blocked: true });
     });
   }));
+  playQueue = run.then(() => undefined, () => undefined);
+  return run;
 }
 
 function interruptAdvisorSpeech() {
@@ -574,7 +569,7 @@ export function startAdvisorSpeech(
         reader.readAsDataURL(blob);
       });
       const mime = blob.type.split(";")[0].trim() || (/iPhone|iPad|iPod/i.test(navigator.userAgent) ? "audio/mp4" : "audio/webm");
-      const result = await transcribeAssistant({ data: { slug: options.slug, code: options.code, audio, mime, names, language: voiceLanguage() === "fa-IR" ? "fa" : "en" } });
+      const result = await transcribeAssistant({ data: { slug: options.slug, code: options.code, audio, mime, names, language: "en" } });
       if (!result.ok) {
         voiceLog("stt-error", result.error);
         if (!sent) {
@@ -662,8 +657,8 @@ export function startAdvisorSpeech(
       if (generation !== speechGeneration || !keepListening || recognition !== heard) return;
       if (voiceDebugEnabled()) console.info("[voice-stt]", { session, pieces });
       const next = pushRecognition(turn, session, pieces);
-      if (advisorSpeaking && isEcho(next.text, lastSpokenLine)) return;
-      if (advisorSpeaking && next.text.trim().split(/\s+/).filter(Boolean).length >= 3) interruptAdvisorSpeech();
+      if (advisorSpeaking && (isEcho(next.text, lastSpokenLine) || repeatsRequest(next.text, lastSent))) return;
+      if (advisorSpeaking && shouldBargeIn(next.text, lastSpokenLine, lastSent)) interruptAdvisorSpeech();
       turn = next.state;
       if (next.text) {
         draft(next.text);
@@ -832,8 +827,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const transcriptChoice = useRef<{ suggestion: string } | null>(null);
   const pendingVoice = useRef<Array<{ text: string; confirmed?: boolean }>>([]);
   const activeNewsletterId = useRef(0);
-  const [voiceLang, setVoiceLang] = useState<"en-CA" | "fa-IR">("en-CA");
   const lastQuestion = useRef("");
+  const replayClips = useRef<Array<{ audio: string; mime: string }>>([]);
+  const [replayReady, setReplayReady] = useState(false);
   const generation = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -857,10 +853,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     };
     window.addEventListener("ua-active-draft", onDraft);
     return () => window.removeEventListener("ua-active-draft", onDraft);
-  }, []);
-
-  useEffect(() => {
-    setVoiceLang(voiceLanguage());
   }, []);
 
   useEffect(() => subscribeAdvisorDraft((said) => {
@@ -985,7 +977,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     line.rate = 0.96;
     line.pitch = 1.04;
     if (!persian) {
-      const warm = voice.getVoices().find((item) => /google uk english female|samantha|moira|karen|female/i.test(`${item.name} ${item.lang}`));
+      const voices = voice.getVoices();
+      const warm = voices.find((item) => /^en-CA/i.test(item.lang)) || voices.find((item) => /^en-US/i.test(item.lang));
       if (warm) line.voice = warm;
     }
     const done = () => {
@@ -1053,10 +1046,27 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     onVoice?.({ listening: false, speaking: false });
   }
 
+  async function replaySpoken() {
+    dropAudio = false;
+    const clips = replayClips.current;
+    if (clips.length) {
+      const outcomes: ClipPlay[] = [];
+      for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime));
+      if (voiceAudible(outcomes)) {
+        setReplayReady(false);
+        setError("");
+      }
+      return;
+    }
+    const line = lastSpokenLine;
+    if (line) await speak(line);
+  }
+
   async function askByVoice(content: string, id: number, mine: number, confirmed = false) {
     dropAudio = false;
     setTurns((current) => [...current, { role: "assistant", content: "", at: new Date().toISOString() }]);
-    let played = false;
+    const clips: Array<{ audio: string; mime: string }> = [];
+    const pending: Promise<ClipPlay>[] = [];
     let reply = "";
     let actions: Action[] = [];
     let finished = false;
@@ -1066,13 +1076,16 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: desk.slug, code, chatId: id, page: pageCue, content, transcriptConfirmed: confirmed, activeNewsletterId: activeNewsletterId.current }),
       });
-      if (!response.ok || !response.body) return { ok: false as const, error: "The assistant could not answer.", accepted: true as const, played: false, reply: "", actions: [] as Action[] };
+      if (!response.ok || !response.body) return { ok: false as const, error: "The assistant could not answer.", accepted: true as const, played: false, reply: "", actions: [] as Action[], clips };
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let raw = "";
       while (true) {
         const step = await reader.read();
-        if (mine !== generation.current) return { ok: true as const, reply, actions: [] as Action[], played: true, accepted: true as const };
+        if (mine !== generation.current) {
+          dropAudio = true;
+          return { ok: true as const, reply, actions: [] as Action[], played: true, accepted: true as const, clips };
+        }
         if (step.done) break;
         raw += decoder.decode(step.value, { stream: true });
         const lines = raw.split("\n");
@@ -1098,10 +1111,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           } else if (event.type === "speak" && event.text) {
             lastSpokenLine = event.text;
           } else if (event.type === "audio" && event.audio) {
-            played = true;
-            playVoiceClip(event.audio, event.mime || "audio/mpeg");
+            const clip = { audio: event.audio, mime: event.mime || "audio/mpeg" };
+            clips.push(clip);
+            pending.push(playVoiceClip(clip.audio, clip.mime));
           } else if (event.type === "error") {
-            return { ok: false as const, error: event.error || "The assistant could not answer.", played, accepted: true as const };
+            const outcomes = await Promise.all(pending);
+            return { ok: false as const, error: event.error || "The assistant could not answer.", played: voiceAudible(outcomes), accepted: true as const, clips };
           } else if (event.type === "tts-error") {
             setError(event.error || "The spoken reply could not be played.");
           } else if (event.type === "done") {
@@ -1118,9 +1133,11 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           }
         }
       }
+      const outcomes = await Promise.all(pending);
+      const played = voiceAudible(outcomes);
       return reply || finished
-        ? { ok: true as const, reply, actions, played, accepted: true as const }
-        : { ok: false as const, error: "The assistant did not answer.", reply, actions, played, accepted: true as const };
+        ? { ok: true as const, reply, actions, played, accepted: true as const, clips }
+        : { ok: false as const, error: "The assistant did not answer.", reply, actions, played, accepted: true as const, clips };
     } catch {
       return null;
     }
@@ -1235,6 +1252,20 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       if (mine !== generation.current) return;
       if (spoken) setText("");
       const played = Boolean(streamed && "played" in streamed && streamed.played);
+      const clips = streamed && "clips" in streamed && Array.isArray(streamed.clips) ? streamed.clips : [];
+      const offerSpeech = () => {
+        if (!spoken || played) {
+          if (played) {
+            replayClips.current = [];
+            setReplayReady(false);
+          }
+          return;
+        }
+        replayClips.current = clips;
+        setReplayReady(true);
+        if (clips.length) setError("The spoken reply is ready. Press Play reply.");
+        else void speak(String(result.reply || ""), content);
+      };
       if (!result?.ok) {
         const failure = result && "error" in result && typeof result.error === "string" ? result.error : "";
         const names = nameChoicesFrom(failure);
@@ -1264,12 +1295,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           lastQuestion.current = result.reply;
           setChoiceNote("");
           setChoices(["Yes", "Change time"]);
-          if (spoken && !played) void speak(result.reply, content);
+          offerSpeech();
         } else if (cardAsk) {
           lastQuestion.current = result.reply;
           setChoiceNote("");
           setChoices(["Yes", "No"]);
-          if (spoken && !played) void speak(result.reply, content);
+          offerSpeech();
         } else if (repeated) {
           setChoiceNote("That was not clear. Choose one:");
           setChoices(choiceList(result.reply));
@@ -1277,7 +1308,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           lastQuestion.current = result.reply;
           setChoices([]);
           setChoiceNote("");
-          if (spoken && !played) void speak(result.reply, content);
+          offerSpeech();
         }
         await refresh(id);
         if (mine !== generation.current) return;
@@ -1674,6 +1705,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               stopAdvisorSpeech();
               void ask();
             }} className="ua-assist-compose">
+              {replayReady && <button type="button" className="ua-btn" style={{ padding: "6px 12px" }} onClick={() => void replaySpoken()}>Play reply</button>}
               {voiceLabel(voicePhase, voiceError) && <p className="text-sm font-extrabold" style={{ color: voicePhase === "error" ? "#b42318" : "#0f4c81" }}>{voiceLabel(voicePhase, voiceError)}</p>}
               {choices.length > 0 && (
                 <div className="flex flex-wrap gap-2">
@@ -1780,12 +1812,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               />
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem", background: listening ? "#b42318" : "#0f4c81" }} onClick={() => listen()}>{listening ? "Stop" : "Voice command"}</button>
-                <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => {
-                  const next = voiceLang === "fa-IR" ? "en-CA" : "fa-IR";
-                  try { localStorage.setItem("ua-voice-lang", next); } catch { /* private mode */ }
-                  setVoiceLang(next);
-                  try { recognition?.abort?.(); } catch { /* the open session restarts in the chosen language */ }
-                }}>{voiceLang === "fa-IR" ? "فارسی" : "English"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
                 <button type="submit" className="ua-btn" style={{ padding: "6px 12px", fontSize: "0.85rem" }} disabled={busy}>{busy ? "Working…" : "Ask"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "6px 12px", fontSize: "0.85rem" }} onClick={() => void newChat()}>New chat</button>

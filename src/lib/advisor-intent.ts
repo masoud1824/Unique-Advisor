@@ -705,7 +705,10 @@ export function shouldIgnorePending(text: string, lastAssistant: string) {
 export function showUnclearChoice(userText: string, previousReply: string, nextReply: string) {
   const tidy = tidyHeard(userText);
   if (!previousReply || !nextReply) return false;
+  if (!realApproval(previousReply)) return false;
   if (isRevisionAsk(tidy) || isCancellation(tidy) || shouldIgnorePending(tidy, previousReply)) return false;
+  if (taskKind(tidy)) return false;
+  if (/\b(?:show|list|read|who|what|which|find|contacts?)\b/i.test(tidy) || /مخاطب|نشان بده|لیست/.test(tidy)) return false;
   if (!agreesToSendCard(tidy) && !declinesCard(tidy) && tidy.length > 40) return false;
   const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
   const left = norm(previousReply);

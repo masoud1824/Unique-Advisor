@@ -47,6 +47,37 @@ export function advisorRibbonLanguage(value: string): "en" | "fa" {
   return "en";
 }
 
+/**
+ * The desk, assistant, and ribbon are English-only for now.
+ * A stored Farsi preference is ignored, not deleted, so it can be restored later.
+ */
+export function displayedDeskLanguage(_stored?: string): "en" {
+  return "en";
+}
+
+export const RIBBON_PIXELS_PER_SECOND = 72;
+
+/** Start off the right edge of the viewport and finish off the left edge. */
+export function ribbonTravel(viewportWidth: number, trackWidth: number) {
+  const viewport = Math.max(0, Math.round(Number(viewportWidth) || 0));
+  const track = Math.max(1, Math.round(Number(trackWidth) || 0));
+  const distancePx = viewport + track;
+  return {
+    startPx: viewport,
+    end: "-100%" as const,
+    distancePx,
+    durationMs: Math.max(8000, Math.round((distancePx / RIBBON_PIXELS_PER_SECOND) * 1000)),
+  };
+}
+
+/** Configured http(s) or same-site path only. Never invents a destination. */
+export function newsHeadlineLink(value: string): { href: string; external: boolean; target: "_blank" | ""; rel: "noopener noreferrer" | "" } | null {
+  const href = cleanAnnouncementLink(value);
+  if (!href) return null;
+  if (/^https?:/i.test(href)) return { href, external: true, target: "_blank", rel: "noopener noreferrer" };
+  return { href, external: false, target: "", rel: "" };
+}
+
 export const RIBBON_LANGUAGE_FALLBACK =
   "If the desk language is empty or not English or Farsi, the ribbon uses English. English shows English items and items marked both. Farsi shows Farsi items and items marked both. Expired, draft, and archived items stay hidden.";
 

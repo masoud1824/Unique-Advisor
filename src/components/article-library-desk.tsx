@@ -5,14 +5,13 @@ import { copyLibraryIntoNewsletter, searchLibrary } from "@/lib/platform.functio
 export function ArticleLibraryDesk({ slug, code, ping }: { slug: string; code: string; ping: (text: string) => void }) {
   const [text, setText] = useState("");
   const [topic, setTopic] = useState("");
-  const [language, setLanguage] = useState("");
   const [rows, setRows] = useState<Array<{ id: number; title: string; bodyHtml: string; bodyText: string; topics: string; language: string; version: number }>>([]);
   const [picked, setPicked] = useState<number[]>([]);
   const [copyTitle, setCopyTitle] = useState("");
   const [copyHtml, setCopyHtml] = useState("");
   const [existingId, setExistingId] = useState("");
   async function search() {
-    const result = await searchLibrary({ data: { slug, code, text, topic, language } });
+    const result = await searchLibrary({ data: { slug, code, text, topic } });
     if (!result.ok) { ping(result.error); return; }
     setRows(result.articles);
   }
@@ -39,7 +38,6 @@ export function ArticleLibraryDesk({ slug, code, ping }: { slug: string; code: s
       <p>Published articles only. You can change the wording of one selected copy before saving. That does not change the library, does not add recipients, and does not email anyone.</p>
       <input value={text} onChange={(event) => setText(event.target.value)} placeholder="Search title or text" aria-label="Search articles" />
       <input value={topic} onChange={(event) => setTopic(event.target.value)} placeholder="Topic" aria-label="Topic" />
-      <input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language" aria-label="Language" />
       <button type="button" onClick={() => void search()}>Search</button>
       <ul>
         {rows.map((row) => (
@@ -54,7 +52,7 @@ export function ArticleLibraryDesk({ slug, code, ping }: { slug: string; code: s
                   setCopyHtml(chosen?.bodyHtml || "");
                 }
               }} />
-              {row.title} ({row.language}, v{row.version})
+              {row.title} (v{row.version})
             </label>
             <p>{row.bodyText}</p>
           </li>

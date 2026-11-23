@@ -339,3 +339,30 @@ export function isEcho(heard: string, spoken: string) {
   const shared = spokenWords.filter((word) => words.has(word)).length;
   return shared / Math.max(spokenWords.length, 1) > 0.72;
 }
+
+export type ClipPlay = { started: boolean; dropped: boolean; blocked: boolean };
+
+/** A received audio event is not playback. The clip counts only after play() is accepted. */
+export function clipAudible(result: ClipPlay) {
+  return result.started === true && result.dropped === false && result.blocked === false;
+}
+
+export function voiceAudible(results: ClipPlay[]) {
+  return results.length > 0 && results.every(clipAudible);
+}
+
+export function repeatsRequest(heard: string, request: string) {
+  const clean = (value: string) => String(value || "").replace(/[^\p{L}\p{N} ]/gu, " ").replace(/\s+/g, " ").trim().toLowerCase();
+  const left = clean(heard);
+  const right = clean(request);
+  if (left.length < 8 || right.length < 8) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
+/** Three new words can interrupt. The line just submitted, and an echo of the reply, cannot. */
+export function shouldBargeIn(heard: string, spoken: string, request: string) {
+  const words = String(heard || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 3) return false;
+  if (isEcho(heard, spoken) || isEcho(heard, request) || repeatsRequest(heard, request)) return false;
+  return true;
+}

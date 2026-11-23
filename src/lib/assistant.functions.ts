@@ -15,6 +15,7 @@ import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
 import { cleanProductIds, clientReport, productLabel, reportFromPeople } from "@/lib/contact-records";
 import { gateAdvisor, gateOperator, operatorIsDefault, enforcePreviewOperator, shownWebsite } from "@/lib/advisor-db";
+import { speechRequest } from "@/lib/openai-voices";
 import { dbSource } from "@/lib/db";
 import { websiteButtonHtml } from "@/lib/advisor-website";
 import { ASSISTANT_LOCK, assistantGate, decideAction, decideSend, parseAssistantSettings } from "@/lib/assistant-policy";
@@ -152,7 +153,7 @@ async function companyApiKey() {
   return saved || String(process.env.OPENAI_API_KEY || "").trim();
 }
 function speechBody(text: string, voice = "coral") {
-  return JSON.stringify({ model: OPENAI_TTS, input: text, voice: openAiVoice(voice), response_format: "mp3" });
+  return speechRequest(text, voice);
 }
 async function savedAdvisorVoice(advisorId: number) {
   await ensureAssistantTables();

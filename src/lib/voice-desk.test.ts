@@ -8,12 +8,16 @@ import {
   isEcho,
   prepareDeskCommand,
   releaseVoiceTurn,
+  repeatsRequest,
   resetVoiceTurns,
+  shouldBargeIn,
   spokenBrief,
   transcriptHold,
   verifiedFarsiMoveNote,
+  voiceAudible,
   voiceTurnKey,
 } from "./voice-desk.ts";
+import { speechRequest, NEUTRAL_NORTH_AMERICAN_DELIVERY, OPENAI_TTS_MODEL } from "./openai-voices.ts";
 
 describe("voice and typing share one command", () => {
   it("maps a short Farsi edit and leaves a long Farsi letter alone", () => {
@@ -110,5 +114,22 @@ describe("voice uses the same refusal and reorder rules as typing", () => {
     assert.equal(isNewsletterReorder("move it up"), true);
     assert.equal(newsletterMoveTarget("move it up").relative, -1);
     assert.equal(newsletterMoveTarget("Move “Time Value of Money” to position 2").relative, 0);
+  });
+});
+
+describe("spoken reply playback", () => {
+  it("counts a clip only after play is accepted and ignores a repeated read", () => {
+    assert.equal(voiceAudible([{ started: true, dropped: false, blocked: false }]), true);
+    assert.equal(voiceAudible([{ started: false, dropped: false, blocked: true }]), false);
+    assert.equal(voiceAudible([]), false);
+    assert.equal(repeatsRequest("Hello. Please say hello back.", "Hello. Please say hello back."), true);
+    assert.equal(shouldBargeIn("Hello. Please say hello back.", "", "Hello. Please say hello back."), false);
+    assert.equal(shouldBargeIn("Show the calendar for tomorrow morning", "The preview is on the screen.", "list my contacts"), true);
+    const body = JSON.parse(speechRequest("Hello.", "ash")) as { model: string; voice: string; instructions: string };
+    assert.equal(body.model, OPENAI_TTS_MODEL);
+    assert.equal(body.voice, "ash");
+    assert.equal(body.instructions, NEUTRAL_NORTH_AMERICAN_DELIVERY);
+    assert.match(body.instructions, /neutral North American English/);
+    assert.doesNotMatch(body.instructions, /alloy is British|ash is British|this voice has a British accent/i);
   });
 });

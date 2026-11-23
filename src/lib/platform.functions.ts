@@ -14,7 +14,7 @@ import {
 } from "@/lib/article-library";
 import { applyCopyEdits } from "@/lib/library-store";
 import { packNewsletter, unpackNewsletter, type NewsletterIssue } from "@/lib/newsletter";
-import { cleanAnnouncementLink, advisorRibbonLanguage, ribbonDirection, visibleAnnouncements, RIBBON_LANGUAGE_FALLBACK, type Announcement } from "@/lib/news-ribbon";
+import { cleanAnnouncementLink, advisorRibbonLanguage, displayedDeskLanguage, ribbonDirection, visibleAnnouncements, RIBBON_LANGUAGE_FALLBACK, type Announcement } from "@/lib/news-ribbon";
 import { planBirthdayRun, summarizeAdvisorNotice, type BirthdaySettings } from "@/lib/birthday-job";
 import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
@@ -187,7 +187,7 @@ export const listDeskAnnouncements = createServerFn({ method: "POST" }).validato
   } catch {
     stored = "";
   }
-  const language = body.language ? advisorRibbonLanguage(body.language) : advisorRibbonLanguage(stored);
+  const language = displayedDeskLanguage(body.language || stored);
   const rows = await sql`select * from desk_announcements order by priority, id`;
   const items = rows.map((row) => announcement(row as Record<string, unknown>));
   return {

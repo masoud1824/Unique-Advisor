@@ -1,65 +1,90 @@
-import { useEffect, useState } from "react";
-import { listDeskAnnouncements, setDeskLanguage } from "@/lib/platform.functions";
-import { ribbonDirection } from "@/lib/news-ribbon";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { listDeskAnnouncements } from "@/lib/platform.functions";
+import { newsHeadlineLink, ribbonTravel } from "@/lib/news-ribbon";
+
+type Item = { id: number; title: string; text: string; link: string; language: string };
+
+function Headline({ item }: { item: Item }) {
+  const link = newsHeadlineLink(item.link);
+  if (!link) return <span className="ua-ribbon-item" data-news-id={item.id}>{item.title}</span>;
+  return (
+    <a
+      className="ua-ribbon-item"
+      href={link.href}
+      data-news-id={item.id}
+      aria-label={item.text ? `${item.title}. ${item.text}` : item.title}
+      target={link.target || undefined}
+      rel={link.rel || undefined}
+    >
+      {item.title}
+    </a>
+  );
+}
 
 export function NewsRibbon({ slug, code }: { slug: string; code: string }) {
-  const [items, setItems] = useState<Array<{ id: number; title: string; text: string; link: string; language: string }>>([]);
-  const [language, setLanguage] = useState("en");
-  const [fallback, setFallback] = useState("");
+  const [items, setItems] = useState<Item[]>([]);
   const [paused, setPaused] = useState(false);
   const [open, setOpen] = useState(false);
-  async function load(next?: string) {
-    const result = await listDeskAnnouncements({ data: { slug, code, language: next } });
-    if (!result.ok) return;
-    setItems(result.items);
-    setLanguage(result.language);
-    setFallback(result.fallback);
-  }
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [motion, setMotion] = useState({ startPx: 0, durationMs: 0 });
+
   useEffect(() => {
-    void load().catch(() => undefined);
+    let alive = true;
+    void listDeskAnnouncements({ data: { slug, code, language: "en" } }).then((result) => {
+      if (!alive || !result.ok) return;
+      setItems(result.items);
+    }).catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, [slug, code]);
-  async function choose(next: "en" | "fa") {
-    const saved = await setDeskLanguage({ data: { slug, code, language: next } });
-    if (!saved.ok) return;
-    await load(saved.language);
-  }
-  if (items.length === 0 && !fallback) return null;
-  const dir = ribbonDirection(language === "fa" || items.some((item) => item.language === "fa") ? "fa" : language);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    const track = trackRef.current;
+    if (!viewport || !track) return;
+    const measure = () => {
+      const next = ribbonTravel(viewport.clientWidth, track.scrollWidth);
+      setMotion((current) => current.startPx === next.startPx && current.durationMs === next.durationMs ? current : { startPx: next.startPx, durationMs: next.durationMs });
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    observer.observe(track);
+    return () => observer.disconnect();
+  }, [items]);
+
+  if (items.length === 0) return null;
+  const style: CSSProperties | undefined = motion.startPx > 0
+    ? ({ animationDuration: `${motion.durationMs}ms`, "--ua-ribbon-start": `${motion.startPx}px` } as CSSProperties)
+    : undefined;
   return (
-    <section className="ua-ribbon" dir={dir} aria-label="Practice news" data-ribbon-language={language} style={{ background: "#14324f", color: "#f7f3ea" }}>
-      <style>{`
-        .ua-ribbon-track { display: flex; gap: 2rem; width: max-content; animation: ua-ribbon 28s linear infinite; }
-        .ua-ribbon.is-paused .ua-ribbon-track { animation-play-state: paused; }
-        @media (prefers-reduced-motion: reduce) { .ua-ribbon-track { animation: none; } }
-        @keyframes ua-ribbon { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-        @media (max-width: 720px) { .ua-ribbon { font-size: 14px; } }
-      `}</style>
-      <div className={paused ? "ua-ribbon is-paused" : "ua-ribbon"} style={{ display: "flex", alignItems: "center", gap: 12, overflow: "hidden", padding: "8px 12px" }}>
-        <div style={{ overflow: "hidden", flex: 1 }}>
-          <div className="ua-ribbon-track">
-            {[0, 1].map((copy) => (
-              <span key={copy} style={{ display: "inline-flex", gap: "2rem" }}>
-                {items.map((item) => (
-                  <span key={`${copy}-${item.id}`}>{item.link ? <a href={item.link} style={{ color: "#f7f3ea" }}>{item.title}</a> : item.title}</span>
-                ))}
-              </span>
-            ))}
+    <section className="ua-ribbon" dir="ltr" lang="en" aria-label="Practice news" data-ribbon-language="en">
+      <div className="ua-ribbon-bar">
+        <div className="ua-ribbon-viewport" ref={viewportRef} data-ticker-viewport>
+          <div ref={trackRef} className={paused ? "ua-ribbon-track is-paused" : "ua-ribbon-track"} data-ticker-track style={style}>
+            {items.map((item) => <Headline key={item.id} item={item} />)}
           </div>
         </div>
-        <button type="button" onClick={() => void choose("en")} style={{ background: "transparent", color: "#f7f3ea", border: "1px solid #f7f3ea" }}>English</button>
-        <button type="button" onClick={() => void choose("fa")} style={{ background: "transparent", color: "#f7f3ea", border: "1px solid #f7f3ea" }}>فارسی</button>
-        <button type="button" onClick={() => setPaused((value) => !value)} style={{ background: "transparent", color: "#f7f3ea", border: "1px solid #f7f3ea" }}>{paused ? "Run" : "Pause"}</button>
-        <button type="button" onClick={() => setOpen((value) => !value)} style={{ background: "transparent", color: "#f7f3ea", border: "1px solid #f7f3ea" }}>{open ? "Hide" : "List"}</button>
+        <div className="ua-ribbon-tools" role="toolbar" aria-label="News controls">
+          <button type="button" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>{paused ? "Run" : "Pause"}</button>
+          <button type="button" aria-expanded={open} onClick={() => setOpen((value) => !value)}>{open ? "Hide" : "List"}</button>
+        </div>
       </div>
       {open && (
-        <div style={{ margin: 0, padding: "8px 20px 12px", background: "#fff", color: "#14324f" }}>
-          <p>{fallback}</p>
-          <ul style={{ margin: 0, padding: "8px 20px 12px" }}>
-            {items.map((item) => (
-              <li key={item.id} dir={ribbonDirection(item.language)}><strong>{item.title}</strong> {item.text}</li>
-            ))}
-          </ul>
-        </div>
+        <ul className="ua-ribbon-list">
+          {items.map((item) => {
+            const link = newsHeadlineLink(item.link);
+            return (
+              <li key={item.id}>
+                {link ? <a href={link.href} target={link.target || undefined} rel={link.rel || undefined}><strong>{item.title}</strong></a> : <strong>{item.title}</strong>}
+                {item.text ? ` ${item.text}` : ""}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

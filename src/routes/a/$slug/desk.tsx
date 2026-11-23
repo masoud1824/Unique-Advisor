@@ -469,7 +469,7 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 								},
 								children: PLAN_LABELS[desk.plan]
 							}),
-							/* @__PURE__ */ jsx("button", {
+							tab !== "assistant" && /* @__PURE__ */ jsx("button", {
 								type: "button",
 								className: "ua-btn-line",
 								onClick: () => signOut(),

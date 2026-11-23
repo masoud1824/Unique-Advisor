@@ -22,7 +22,7 @@ import {
   type BirthdayPerson,
   type BirthdaySettings,
 } from "./birthday-job.ts";
-import { ribbonDirection, visibleAnnouncements, type Announcement } from "./news-ribbon.ts";
+import { ribbonDirection, displayedDeskLanguage, newsHeadlineLink, ribbonTravel, visibleAnnouncements, type Announcement } from "./news-ribbon.ts";
 import { ISOLATED_TEST_BANNER } from "./isolated-test-desk.ts";
 import { STAGING_BANNER, deskStatusBanner } from "./staging-banner.ts";
 import { MODEL_OFF, modelTransportOpen, outboundBlocked, OUTBOUND_BLOCKED } from "./outbound-guard.ts";
@@ -336,6 +336,29 @@ describe("news ribbon", () => {
     assert.deepEqual(shown.map((item) => item.id), [4, 1]);
     assert.equal(ribbonDirection("fa"), "rtl");
     assert.equal(visibleAnnouncements(items, new Date("2026-11-20T15:00:00.000Z"), "fa").every((item) => item.language === "fa"), true);
+  });
+
+  it("keeps stored Farsi data but displays English and travels the full ribbon", () => {
+    assert.equal(displayedDeskLanguage("fa-IR"), "en");
+    assert.equal(displayedDeskLanguage("fa"), "en");
+    assert.equal(displayedDeskLanguage(""), "en");
+    const linked = newsHeadlineLink("https://example.invalid/rates");
+    assert.equal(linked?.href, "https://example.invalid/rates");
+    assert.equal(linked?.target, "_blank");
+    assert.equal(linked?.rel, "noopener noreferrer");
+    const internal = newsHeadlineLink("/desk/news");
+    assert.equal(internal?.href, "/desk/news");
+    assert.equal(internal?.external, false);
+    assert.equal(internal?.target, "");
+    assert.equal(newsHeadlineLink("javascript:alert(1)"), null);
+    assert.equal(newsHeadlineLink(""), null);
+    for (const [viewport, track] of [[1280, 90], [1280, 2400], [390, 70], [390, 1800]] as const) {
+      const travel = ribbonTravel(viewport, track);
+      assert.equal(travel.startPx, viewport);
+      assert.equal(travel.end, "-100%");
+      assert.equal(travel.distancePx, viewport + track);
+      assert.ok(travel.distancePx > viewport * 0.9, `${viewport}x${track} stays in a small segment`);
+    }
   });
 });
 

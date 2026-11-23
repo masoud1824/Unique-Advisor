@@ -427,6 +427,10 @@ describe("misheard advisor commands", () => {
     assert.equal(shouldIgnorePending("yes", confirm), false);
     assert.equal(pendingQuestion(draft), "draft");
     assert.equal(yesApplies("yes", draft), false);
+    const contacts = "Casey Sample, Avery Sample, Jordan Example, Quinn Sample, Riley Sample, and Sam North.";
+    assert.equal(showUnclearChoice("show my contacts", contacts, contacts), false);
+    assert.equal(showUnclearChoice("list my contacts", contacts, contacts), false);
+    assert.equal(showUnclearChoice("yes", confirm, confirm), true);
   });
 
   it("revises a checklist through sections, a shorter draft, and Farsi", () => {

@@ -26,6 +26,7 @@ export const Route = createFileRoute("/api/assistant/voice")({
             const gate = await gateAdvisor(body?.slug || "", body?.code || "").catch(() => null);
             const advisorId = gate && "ok" in gate && gate.ok ? gate.row.id : 0;
             let chain = Promise.resolve();
+            let sentAudio = false;
             const queue = (sentence: string) => {
               const line = spokenReply(sentence).trim();
               if (line.length < 2) return;
@@ -33,7 +34,10 @@ export const Route = createFileRoute("/api/assistant/voice")({
                 const parts: Buffer[] = [];
                 await speakSentence(line, (chunk: Buffer) => parts.push(chunk), advisorId);
                 const audio = Buffer.concat(parts).toString("base64");
-                if (audio) send({ type: "audio", mime: "audio/mpeg", audio });
+                if (audio) {
+                  sentAudio = true;
+                  send({ type: "audio", mime: "audio/mpeg", audio });
+                }
               }).catch((error) => {
                 const message = error instanceof Error ? error.message : "The voice could not be spoken.";
                 console.info(`[voice] tts-error ${message}`);
@@ -55,7 +59,15 @@ export const Route = createFileRoute("/api/assistant/voice")({
                 send({ type: "speak", text: brief });
                 const pieces = takeSentences(`${brief.trim()} `).sentences;
                 (pieces.length ? pieces : [brief.trim()]).filter(Boolean).forEach((line) => queue(line));
-                await Promise.race([chain, new Promise((resolve) => setTimeout(resolve, 12000))]);
+                let timedOut = false;
+                await Promise.race([
+                  chain.then(() => undefined),
+                  new Promise((resolve) => setTimeout(() => {
+                    timedOut = true;
+                    resolve(undefined);
+                  }, 12000)),
+                ]);
+                if (timedOut && !sentAudio) send({ type: "tts-error", error: "The spoken reply was not ready in time. Press Play reply." });
                 send({ type: "done", reply: result.reply, drafts: result.drafts || [], actions: result.actions || [] });
               }
             } catch (error) {

@@ -17,12 +17,11 @@ function AdminArticles() {
   const [sourceNote, setSourceNote] = useState("");
   const [authorNote, setAuthorNote] = useState("");
   const [topics, setTopics] = useState("");
-  const [language, setLanguage] = useState("en");
   const [preview, setPreview] = useState("");
   const [message, setMessage] = useState("");
   const [rows, setRows] = useState<Array<{ id: number; title: string; status: string; language: string }>>([]);
   async function save(publish: boolean, archive = false) {
-    const result = await saveLibraryArticle({ data: { code, title, bodyHtml, imageUrl, imageAlt, sourceNote, authorNote, topics, language, publish, archive } });
+    const result = await saveLibraryArticle({ data: { code, title, bodyHtml, imageUrl, imageAlt, sourceNote, authorNote, topics, language: "en", publish, archive } });
     setMessage(result.ok ? `Saved ${result.status} version ${result.version}.` : result.error);
   }
   return (
@@ -37,14 +36,13 @@ function AdminArticles() {
       <input value={sourceNote} onChange={(event) => setSourceNote(event.target.value)} placeholder="Where this article came from" aria-label="Source" />
       <input value={authorNote} onChange={(event) => setAuthorNote(event.target.value)} placeholder="Author" aria-label="Author" />
       <input value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="Topics" aria-label="Topics" />
-      <input value={language} onChange={(event) => setLanguage(event.target.value)} placeholder="Language" aria-label="Language" />
       <button type="button" onClick={() => setPreview(sanitizeArticleHtml(bodyHtml))}>Preview the cleaned article</button>
       <button type="button" onClick={() => void save(false)}>Save draft</button>
       <button type="button" onClick={() => void save(true)}>Publish internally</button>
       <button type="button" onClick={() => void searchLibrary({ data: { code, superadmin: true, text: title } }).then((result) => result.ok && setRows(result.articles))}>Search</button>
       {preview && <article dangerouslySetInnerHTML={{ __html: preview }} />}
       {message && <p>{message}</p>}
-      <ul>{rows.map((row) => <li key={row.id}>{row.title} — {row.status} — {row.language}</li>)}</ul>
+      <ul>{rows.map((row) => <li key={row.id}>{row.title} — {row.status}</li>)}</ul>
     </main>
   );
 }

@@ -3,7 +3,7 @@ import { after, describe, it } from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { advisorRibbonLanguage, RIBBON_LANGUAGE_FALLBACK, visibleAnnouncements } from "./news-ribbon.ts";
+import { advisorRibbonLanguage, displayedDeskLanguage, RIBBON_LANGUAGE_FALLBACK, visibleAnnouncements } from "./news-ribbon.ts";
 import {
   BIRTHDAY_AUTOMATION_OFF,
   confirmBirthdayCard,
@@ -114,6 +114,7 @@ describe("desk ribbon language", () => {
     assert.equal(advisorRibbonLanguage(""), "en");
     assert.equal(advisorRibbonLanguage("fr"), "en");
     assert.equal(advisorRibbonLanguage("fa-IR"), "fa");
+    assert.equal(displayedDeskLanguage("fa-IR"), "en");
     assert.match(RIBBON_LANGUAGE_FALLBACK, /English/);
     const now = new Date("2026-11-20T15:00:00.000Z");
     const items = visibleAnnouncements([

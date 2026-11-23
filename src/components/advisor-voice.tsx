@@ -87,12 +87,15 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
         Voice: {current}
       </button>
       {open && (
-        <div className="mt-2 grid gap-2 rounded-lg border p-3" style={{ borderColor: "#e1e8ef", background: "#fff" }}>
-          <p className="text-sm" style={{ color: "#5a6a7a" }}>Press Preview to hear that voice. The assistant keeps the voice marked In use.</p>
+        <div className="ua-voice-panel mt-2 rounded-lg border p-3" style={{ borderColor: "#e1e8ef", background: "#fff" }}>
+          <p className="text-sm" style={{ color: "#5a6a7a" }}>Press Preview to hear a voice. The voice marked In use is saved for this advisor. gpt-4o-mini-tts accepts alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse, marin, and cedar. OpenAI says these voices are optimized for English and recommends marin or cedar for quality. This desk does not label an accent for any voice. English speech asks the model for a neutral North American English delivery.</p>
+          <div className="ua-voice-list">
           {OPENAI_VOICES.map((voice) => (
-            <div key={voice} className="flex flex-wrap items-center gap-2">
-              <strong className="w-20 text-sm">{voice}</strong>
-              {voice === current && <span className="text-xs font-semibold" style={{ color: "#0d7a4f" }}>In use</span>}
+            <div key={voice} className="ua-voice-row" data-voice={voice}>
+              <span className="ua-voice-name">
+                <strong className="text-sm">{voice}</strong>
+                {voice === current && <span className="ua-voice-used">In use</span>}
+              </span>
               <audio
                 controls
                 preload="none"
@@ -104,12 +107,13 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
                   setNote(`The browser rejected the ${voice} sample${player.error ? ` (code ${player.error.code})` : ""}.`);
                 }}
               />
-              <button type="button" className="ua-btn-line" style={{ padding: "4px 10px", fontSize: "0.8rem" }} disabled={busy === voice} onClick={() => void preview(voice)}>
+              <button type="button" className="ua-btn-line ua-voice-preview" style={{ padding: "4px 10px", fontSize: "0.8rem" }} disabled={busy === voice} onClick={() => void preview(voice)}>
                 {busy === voice ? "Loading…" : "Preview"}
               </button>
               <button
                 type="button"
-                className="ua-btn"
+                className="ua-btn ua-voice-use"
+                data-action="use"
                 style={{ padding: "4px 10px", fontSize: "0.8rem" }}
                 onClick={() => {
                   void saveAdvisorVoice({ data: { slug, code, voice } }).then((result) => {
@@ -126,6 +130,7 @@ export function AdvisorVoiceChooser({ slug, code }: { slug: string; code: string
               </button>
             </div>
           ))}
+          </div>
           {note && <p className="text-sm font-semibold" style={{ color: "#b42318" }}>{note}</p>}
         </div>
       )}
