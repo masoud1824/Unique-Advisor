@@ -35,7 +35,7 @@ describe("english desk and news ribbon source", () => {
     assert.match(desk, /ua-assistant-lock/);
     assert.match(read("src/lib/voice-desk.ts"), /export function preferredBrowserVoice/);
     assert.match(read("src/lib/voice-desk.ts"), /BROWSER_VOICE_FALLBACK/);
-    assert.match(assistant, /BROWSER_VOICE_FALLBACK/);
+    assert.match(assistant, /playStoredReply/);
     assert.doesNotMatch(ribbon, /List/);
     const nav = desk.slice(desk.indexOf("const nav = ["), desk.indexOf("];", desk.indexOf("const nav = [")));
     assert.doesNotMatch(nav, /Birthdays|Article library/);
@@ -52,10 +52,15 @@ describe("english desk and news ribbon source", () => {
     assert.doesNotMatch(read("src/components/newsletter-desk.tsx"), /Market Update|Financial Tips|Seasonal Greeting/);
     assert.match(read("src/lib/newsletter.ts"), /export function blankIssue/);
     assert.match(read("src/styles.css"), /\.ua-design-grid \{[\s\S]*repeat\(4, minmax\(0, 1fr\)\)/);
-    assert.match(read("src/lib/form-lookup.ts"), /It was not found in Useful Links\. Do you want me to search the web\?/);
+    assert.match(read("src/lib/form-lookup.ts"), /I could not find this form in Useful Links\. Would you like me to search online\?/);
     const replay = assistant.slice(assistant.indexOf("async function replaySpoken"), assistant.indexOf("async function askByVoice"));
+    assert.match(replay, /playStoredReply/);
     assert.match(replay, /speakInBrowser\(line\)/);
     assert.doesNotMatch(replay, /await speak\(line\)/);
+    assert.doesNotMatch(replay, /ask\(/);
+    assert.match(assistant, /data-mic-test/);
+    assert.match(assistant, /microphoneTestReport/);
+    assert.match(assistant, /decideTranscript/);
     assert.doesNotMatch(read("src/routes/api/assistant/voice.ts"), /12000|Promise\.race/);
     assert.match(read("src/routes/api/assistant/voice.ts"), /await speakVisible/);
     assert.match(desk, /ua-assistant-main/);

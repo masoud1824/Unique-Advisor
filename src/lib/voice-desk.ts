@@ -422,3 +422,33 @@ export function shouldBargeIn(heard: string, spoken: string, request: string) {
   if (isEcho(heard, spoken) || isEcho(heard, request) || repeatsRequest(heard, request)) return false;
   return true;
 }
+
+/** Every nonempty assistant reply can be played. Typed replies are included. This does not run the command. */
+export function playableReplyLine(reply: string, request = "") {
+  const brief = spokenBrief(reply, request).replace(/\s+/g, " ").trim();
+  if (brief) return brief;
+  return String(reply || "").replace(/\s+/g, " ").trim().slice(0, 500);
+}
+
+/** Play the reply that is already on screen. This never runs the command that produced it. */
+export async function playStoredReply(input: {
+  line: string;
+  speakServer: (line: string) => Promise<ClipPlay & { error?: string }>;
+  speakBrowser: (line: string) => Promise<ClipPlay>;
+}) {
+  const line = String(input.line || "").replace(/\s+/g, " ").trim();
+  if (!line) return { visible: true as const, reranCommand: false as const, usedBrowser: false, note: "There is no reply to play.", spoke: false };
+  const server = await input.speakServer(line);
+  if (clipAudible(server)) return { visible: true as const, reranCommand: false as const, usedBrowser: false, note: "", spoke: true };
+  const browser = await input.speakBrowser(line);
+  const heard = clipAudible(browser);
+  const problem = String(server.error || "").trim() || voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: browser.blocked, dropped: browser.dropped });
+  const note = heard ? BROWSER_VOICE_FALLBACK : `${BROWSER_VOICE_FALLBACK} ${problem}`.trim();
+  return {
+    visible: true as const,
+    reranCommand: false as const,
+    usedBrowser: true,
+    note: heard || /press play reply/i.test(note) ? note : `${note} Press Play reply.`,
+    spoke: heard,
+  };
+}

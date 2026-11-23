@@ -18,6 +18,8 @@ import {
   voiceAudible,
   voicePlaybackNote,
   preferredBrowserVoice,
+  playStoredReply,
+  playableReplyLine,
   voiceTurnKey,
 } from "./voice-desk.ts";
 import { OUTBOUND_BLOCKED } from "./outbound-guard.ts";
@@ -178,5 +180,32 @@ describe("spoken reply playback", () => {
     assert.equal(chosen?.name, "Samantha");
     assert.equal(preferredBrowserVoice([{ lang: "en-GB", name: "Daniel" }, { lang: "en-CA", name: "Alex" }])?.name, "Alex");
     assert.equal(preferredBrowserVoice([{ lang: "fa-IR", name: "Persian" }]), null);
+  });
+
+  it("keeps Play reply on the stored line and does not rerun the command", async () => {
+    const line = playableReplyLine(`${OUTBOUND_BLOCKED} The page was not opened.`, "get the equitable form");
+    assert.match(line, /Nothing was sent|blocked|page was not opened/i);
+    let commands = 0;
+    const played = await playStoredReply({
+      line,
+      speakServer: async () => {
+        commands += 1;
+        return { started: false, dropped: false, blocked: true, error: "No spoken audio came back." };
+      },
+      speakBrowser: async () => ({ started: true, dropped: false, blocked: false }),
+    });
+    assert.equal(commands, 1);
+    assert.equal(played.reranCommand, false);
+    assert.equal(played.visible, true);
+    assert.equal(played.usedBrowser, true);
+    assert.equal(played.spoke, true);
+    assert.match(played.note, /browser's English voice/);
+    const rejected = await playStoredReply({
+      line,
+      speakServer: async () => ({ started: false, dropped: false, blocked: true, error: "No spoken audio came back." }),
+      speakBrowser: async () => ({ started: false, dropped: false, blocked: true }),
+    });
+    assert.equal(rejected.spoke, false);
+    assert.match(rejected.note, /Press Play reply/);
   });
 });

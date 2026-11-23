@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
-import { BROWSER_VOICE_FALLBACK, isEcho, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, voicePlaybackNote, type ClipPlay } from "@/lib/voice-desk";
+import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
-import { keepUtterance } from "@/lib/speech-utterance";
+import { decideTranscript, micFailureMessage, microphoneTestReport, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { AdvisorVoiceChooser } from "@/components/advisor-voice";
 import { emptyTurn, pushRecognition, readVoiceAutoSend, shouldAutoSend, turnText, voiceDebugEnabled, type TurnState } from "@/lib/voice-turn";
 import { appendVoiceLog } from "@/lib/voice-log.functions";
@@ -320,18 +320,11 @@ async function ensureMic() {
 
 function micError(error: unknown) {
   const name = error instanceof DOMException ? error.name : "";
-  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") return "Microphone permission was denied.";
-  if (name === "NotFoundError" || name === "DevicesNotFoundError") return "No microphone was found.";
-  if (name === "NotReadableError") return "The microphone is in use by another app.";
-  return "The microphone could not be started.";
+  return micFailureMessage(name) || "The microphone could not be started. Check the site permission and the selected input, then try again.";
 }
 
 function recognitionError(code: string) {
-  if (code === "not-allowed" || code === "service-not-allowed") return "Microphone permission was denied.";
-  if (code === "audio-capture") return "No microphone was found.";
-  if (code === "network") return "The speech recognizer lost the network. Still listening.";
-  if (code === "no-speech") return "";
-  return "Speech recognition stopped. Still listening.";
+  return micFailureMessage(code) || (code === "network" ? "The speech recognizer lost the network. Still listening." : code === "no-speech" ? "" : "Speech recognition stopped. Still listening.");
 }
 
 function voiceLanguage() {
@@ -466,55 +459,72 @@ export function speakInBrowser(line: string): Promise<ClipPlay> {
   if (!text || !synth || typeof SpeechSynthesisUtterance === "undefined") {
     return Promise.resolve({ started: false, dropped: false, blocked: true });
   }
+  const speech = synth;
   const generation = ++browserSpeechGen;
-  if (synth.speaking || synth.pending) synth.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = "en-US";
-  const chosen = preferredBrowserVoice(synth.getVoices().map((voice) => ({ lang: voice.lang, name: voice.name })));
-  if (chosen) {
-    const match = synth.getVoices().find((voice) => voice.lang === chosen.lang && voice.name === chosen.name);
-    if (match) utterance.voice = match;
-  }
-  return new Promise((resolve) => {
-    let settled = false;
-    let started = false;
-    const finish = (result: ClipPlay) => {
-      if (settled) return;
-      settled = true;
-      window.clearTimeout(startTimer);
-      window.clearTimeout(endTimer);
-      resolve(result);
-    };
-    const startTimer = window.setTimeout(() => {
-      if (!started) finish({ started: false, dropped: generation !== browserSpeechGen, blocked: generation === browserSpeechGen });
-    }, 4000);
-    const endTimer = window.setTimeout(() => {
-      try { synth.cancel(); } catch { /* already stopped */ }
-      finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
-    }, 20000);
-    utterance.onstart = () => {
-      if (generation !== browserSpeechGen) {
-        finish({ started: false, dropped: true, blocked: false });
-        return;
-      }
-      started = true;
-      window.clearTimeout(startTimer);
-      markAdvisorSpeaking(true);
-    };
-    utterance.onend = () => {
-      if (started) markAdvisorSpeaking(false);
-      if (generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
-      else finish(started ? { started: true, dropped: false, blocked: false } : { started: false, dropped: false, blocked: true });
-    };
-    utterance.onerror = (event) => {
-      const reason = event.error;
-      if (started) markAdvisorSpeaking(false);
-      if (reason === "interrupted" || reason === "canceled" || generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
-      else finish({ started: false, dropped: false, blocked: true });
-    };
-    try { synth.resume(); } catch { /* already running */ }
-    synth.speak(utterance);
-  });
+  return (async () => {
+    let voices = speech.getVoices();
+    if (!voices.length) {
+      await new Promise<void>((resolve) => {
+        const timer = window.setTimeout(done, 800);
+        function done() {
+          window.clearTimeout(timer);
+          speech.removeEventListener("voiceschanged", done);
+          resolve();
+        }
+        speech.addEventListener("voiceschanged", done);
+      });
+      voices = speech.getVoices();
+    }
+    if (generation !== browserSpeechGen) return { started: false, dropped: true, blocked: false };
+    if (speech.speaking || speech.pending) speech.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    const chosen = preferredBrowserVoice(voices.map((voice) => ({ lang: voice.lang, name: voice.name })));
+    if (chosen) {
+      const match = voices.find((voice) => voice.lang === chosen.lang && voice.name === chosen.name);
+      if (match) utterance.voice = match;
+    }
+    return new Promise<ClipPlay>((resolve) => {
+      let settled = false;
+      let started = false;
+      const finish = (result: ClipPlay) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(startTimer);
+        window.clearTimeout(endTimer);
+        resolve(result);
+      };
+      const startTimer = window.setTimeout(() => {
+        if (!started) finish({ started: false, dropped: generation !== browserSpeechGen, blocked: generation === browserSpeechGen });
+      }, 4000);
+      const endTimer = window.setTimeout(() => {
+        try { speech.cancel(); } catch { /* already stopped */ }
+        finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
+      }, 20000);
+      utterance.onstart = () => {
+        if (generation !== browserSpeechGen) {
+          finish({ started: false, dropped: true, blocked: false });
+          return;
+        }
+        started = true;
+        window.clearTimeout(startTimer);
+        markAdvisorSpeaking(true);
+      };
+      utterance.onend = () => {
+        if (started) markAdvisorSpeaking(false);
+        if (generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
+        else finish(started ? { started: true, dropped: false, blocked: false } : { started: false, dropped: false, blocked: true });
+      };
+      utterance.onerror = (event) => {
+        const reason = event.error;
+        if (started) markAdvisorSpeaking(false);
+        if (reason === "interrupted" || reason === "canceled" || generation !== browserSpeechGen) finish({ started, dropped: true, blocked: false });
+        else finish({ started: false, dropped: false, blocked: true });
+      };
+      try { speech.resume(); } catch { /* already running */ }
+      speech.speak(utterance);
+    });
+  })();
 }
 
 function interruptAdvisorSpeech() {
@@ -573,6 +583,7 @@ export function startAdvisorSpeech(
   let session = 0;
   const autoSend = readVoiceAutoSend();
   const names = (options.names || []).map((name) => name.trim()).filter(Boolean).slice(0, 100);
+  const prompt = transcriptionPrompt(names);
 
   const draft = (text: string) => {
     emitDraft(text);
@@ -586,11 +597,30 @@ export function startAdvisorSpeech(
     if (recover && keepListening && !voiceStopping) listenTimer = window.setTimeout(() => restartListening?.(), 500);
   };
 
+  const releaseCapture = (message: string) => {
+    voiceSending = false;
+    keepListening = false;
+    finishSpeech = null;
+    draft("");
+    if (message) fail(message, false);
+    else {
+      emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+      onStatus({ listening: false, error: "", phase: "off" });
+    }
+  };
+
   const sendFinal = (text: string) => {
     window.clearTimeout(voicePauseTimer);
     const said = text.replace(/\s+/g, " ").trim();
     const key = said.toLowerCase();
-    if (!said || (key === lastSent && Date.now() - lastAt < 4000)) return;
+    if (!said || transcriptEchoesPrompt(said, prompt, names)) {
+      releaseCapture(said ? "Nothing was heard. Tap Voice command, speak, then tap Stop." : "");
+      return;
+    }
+    if (key === lastSent && Date.now() - lastAt < 4000) {
+      releaseCapture("");
+      return;
+    }
     lastSent = key;
     lastAt = Date.now();
     turn = emptyTurn();
@@ -608,18 +638,24 @@ export function startAdvisorSpeech(
   };
 
   const correct = async (fallback: string, blob: Blob | null) => {
-    if (!blob || blob.size < 200) {
-      if (fallback) sendFinal(fallback);
-      else fail("Nothing was heard. Tap Talk, speak, then tap Stop.", false);
+    const capture = generation;
+    const heard = transcriptEchoesPrompt(fallback, prompt, names) ? "" : fallback.replace(/\s+/g, " ").trim();
+    const bytes = blob?.size || 0;
+    if (capture !== speechGeneration) return;
+    if (!blob || bytes < 200) {
+      const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
+      if (!decision.post) releaseCapture(decision.message || "Nothing was heard. Tap Voice command, speak, then tap Stop.");
+      else sendFinal(decision.text);
       return;
     }
-    let sent = false;
+    let settled = false;
     const timer = window.setTimeout(() => {
-      if (sent) return;
-      sent = true;
+      if (settled || capture !== speechGeneration) return;
+      settled = true;
       voiceLog("send-browser");
-      if (fallback) sendFinal(fallback);
-      else fail("The recording could not be transcribed. Try again.", false);
+      const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
+      if (!decision.post) releaseCapture(decision.message || "The recording could not be transcribed. Try again.");
+      else sendFinal(decision.text);
     }, 8000);
     try {
       const audio = await new Promise<string>((resolve, reject) => {
@@ -628,34 +664,34 @@ export function startAdvisorSpeech(
         reader.onerror = () => reject(new Error("The recording could not be read."));
         reader.readAsDataURL(blob);
       });
+      if (capture !== speechGeneration) return;
       const mime = blob.type.split(";")[0].trim() || (/iPhone|iPad|iPod/i.test(navigator.userAgent) ? "audio/mp4" : "audio/webm");
       const result = await transcribeAssistant({ data: { slug: options.slug, code: options.code, audio, mime, names, language: "en" } });
-      if (!result.ok) {
-        voiceLog("stt-error", result.error);
-        if (!sent) {
-          sent = true;
-          window.clearTimeout(timer);
-          if (fallback) sendFinal(fallback);
-          else fail(result.error || "The recording could not be transcribed.", false);
-        }
-        return;
-      }
-      const combined = keepUtterance(fallback, result.text);
-      voiceLog("server-correct", combined.slice(0, 80));
-      draft(combined);
-      if (!sent) {
-        sent = true;
-        window.clearTimeout(timer);
-        sendFinal(combined);
-      }
+      if (settled || capture !== speechGeneration) return;
+      settled = true;
+      window.clearTimeout(timer);
+      const serverText = result.ok ? result.text : "";
+      const serverError = result.ok ? "" : result.error;
+      const decision = decideTranscript({
+        audioBytes: bytes,
+        prompt,
+        names,
+        browserText: heard,
+        serverText,
+        serverOk: result.ok,
+      });
+      voiceLog(result.ok ? "server-correct" : "stt-error", (serverText || serverError).slice(0, 80));
+      if (!decision.post) releaseCapture(decision.message || serverError || "The recording could not be transcribed. Try again.");
+      else sendFinal(decision.text);
     } catch (error) {
       const message = error instanceof Error ? error.message : "The recording could not be transcribed.";
       voiceLog("stt-error", message);
-      if (!sent) {
-        sent = true;
+      if (!settled && capture === speechGeneration) {
+        settled = true;
         window.clearTimeout(timer);
-        if (fallback) sendFinal(fallback);
-        else fail(message, false);
+        const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
+        if (!decision.post) releaseCapture(decision.message || message);
+        else sendFinal(decision.text);
       }
     }
   };
@@ -729,7 +765,8 @@ export function startAdvisorSpeech(
       voicePauseTimer = window.setTimeout(() => {
         if (!keepListening || advisorSpeaking || voiceSending) return;
         if (!shouldAutoSend(true, 3000)) return;
-        const line = turnText(turn).trim();
+        const raw = turnText(turn).trim();
+        const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
         if (line) {
           const said = line;
           void takeRecording().then((blob) => correct(said, blob));
@@ -774,7 +811,8 @@ export function startAdvisorSpeech(
   };
   finishSpeech = () => {
     window.clearTimeout(voicePauseTimer);
-    const line = turnText(turn).trim();
+    const raw = turnText(turn).trim();
+    const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
     keepListening = false;
     voiceStopping = true;
     finishSpeech = null;
@@ -810,7 +848,7 @@ export function startAdvisorSpeech(
       const speech = window as unknown as { SpeechRecognition?: new () => Heard; webkitSpeechRecognition?: new () => Heard };
       liveWords = Boolean(speech.SpeechRecognition || speech.webkitSpeechRecognition);
       if (!liveWords && typeof MediaRecorder === "undefined") {
-        fail("This browser cannot record speech. Use Safari or Chrome, then tap Talk again.", false);
+        fail("This browser cannot record speech. Use Chrome or Safari, then tap Voice command again.", false);
         return;
       }
       if (liveWords) armRecognition();
@@ -893,6 +931,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const lastQuestion = useRef("");
   const replayClips = useRef<Array<{ audio: string; mime: string }>>([]);
   const [replayReady, setReplayReady] = useState(false);
+  const [playableLine, setPlayableLine] = useState("");
+  const [playingReply, setPlayingReply] = useState(false);
+  const [micTest, setMicTest] = useState("");
   const [playbackNote, setPlaybackNote] = useState("");
   const generation = useRef(0);
   const logRef = useRef<HTMLDivElement>(null);
@@ -1005,6 +1046,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       setSavedRules(asRules(history.rules.rules));
       setShowBirthday(history.rules.showBirthday !== false);
       setShowNewsletter(history.rules.showNewsletter !== false);
+      const lastAssistant = [...history.messages].reverse().find((turn) => turn.role === "assistant" && String(turn.content || "").trim());
+      const restored = lastAssistant ? playableReplyLine(lastAssistant.content) : "";
+      if (restored) setPlayableLine(restored);
       const lastLine = [...history.messages].reverse().find((turn) => turn.role === "assistant")?.content || "";
       if (!/just to confirm:/i.test(lastLine)) {
         const morning = await runMorningCheck({ data: { slug: desk.slug, code, chatId: history.chatId } });
@@ -1043,22 +1087,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     hear(spoken.text);
   }, [spoken]);
 
-  async function speak(message: string, request = ""): Promise<ClipPlay> {
-    const line = spokenBrief(message, request);
-    if (!line) return { started: false, dropped: false, blocked: true };
-    lastSpokenLine = line;
-    dropAudio = false;
-    const token = ++speakToken;
-    const result = await speakAssistant({ data: { slug: desk.slug, code, text: line } }).catch(() => null);
-    if (token !== speakToken || dropAudio) return { started: false, dropped: true, blocked: false };
-    if (result?.ok && result.audio) {
-      const clip = { audio: result.audio, mime: result.mime || "audio/mpeg" };
-      replayClips.current = [clip];
-      return playVoiceClip(clip.audio, clip.mime);
-    }
-    return { started: false, dropped: false, blocked: true };
-  }
-
   function choiceList(message: string) {
     const quoted = [...message.matchAll(/"([^"]{2,48})"|'([^']{2,48})'/g)].map((hit) => (hit[1] || hit[2] || "").trim()).filter(Boolean);
     if (quoted.length >= 2) return quoted.slice(0, 3);
@@ -1079,41 +1107,34 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   }
 
   async function replaySpoken() {
-    dropAudio = false;
-    const clips = replayClips.current;
-    if (clips.length) {
-      const outcomes: ClipPlay[] = [];
-      for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime));
-      if (voiceAudible(outcomes)) {
-        setReplayReady(false);
-        setPlaybackNote("");
-        setError("");
-        return;
-      }
-      setReplayReady(true);
-      setPlaybackNote(voicePlaybackNote({
-        spoken: true,
-        audible: false,
-        clips: clips.length,
-        blocked: outcomes.some((item) => item.blocked),
-        dropped: outcomes.some((item) => item.dropped),
-      }));
-      return;
-    }
-    const line = lastSpokenLine;
-    if (!line) return;
-    const outcome = await speakInBrowser(line);
+    const line = playableLine || lastSpokenLine;
+    if (!line || playingReply) return;
+    setPlayingReply(true);
+    setPlaybackNote("Playing the reply…");
+    setError("");
+    const result = await playStoredReply({
+      line,
+      speakServer: async (text) => {
+        dropAudio = false;
+        const spoken = await speakAssistant({ data: { slug: desk.slug, code, text } }).catch((error: unknown) => ({
+          ok: false as const,
+          error: error instanceof Error ? error.message : "No spoken audio came back. Press Play reply.",
+        }));
+        if (spoken && "audio" in spoken && spoken.ok && spoken.audio) {
+          const clip = { audio: spoken.audio, mime: spoken.mime || "audio/mpeg" };
+          replayClips.current = [clip];
+          return playVoiceClip(clip.audio, clip.mime);
+        }
+        const error = spoken && "error" in spoken ? String(spoken.error || "") : "No spoken audio came back. Press Play reply.";
+        return { started: false, dropped: false, blocked: true, error };
+      },
+      speakBrowser: (line) => speakInBrowser(line),
+    });
+    setPlayableLine(line);
     setReplayReady(true);
-    setPlaybackNote(voiceAudible([outcome])
-      ? BROWSER_VOICE_FALLBACK
-      : `${BROWSER_VOICE_FALLBACK} ${voicePlaybackNote({
-        spoken: true,
-        audible: false,
-        clips: 0,
-        blocked: outcome.blocked,
-        dropped: outcome.dropped,
-      })}`);
-    if (voiceAudible([outcome])) setError("");
+    setPlayingReply(false);
+    setPlaybackNote(result.spoke && !result.usedBrowser ? "" : result.note || "Press Play reply to try again.");
+    if (result.spoke) setError("");
   }
 
   async function askByVoice(content: string, id: number, mine: number, confirmed = false) {
@@ -1242,6 +1263,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   }
 
   function hear(text: string) {
+    voiceSending = false;
+    keepListening = false;
+    setListening(false);
+    setSpeaking(false);
+    onVoice?.({ listening: false, speaking: false });
+    emitVoice({ phase: "off", error: "", listening: false, speaking: false });
     if (isOnboardingDemo(text) || refersToAppointment(text)) {
       nameChoice.current = null;
       transcriptChoice.current = null;
@@ -1309,6 +1336,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       const line = message || "Sorry, something went wrong — please try again.";
       setError(line);
       setTurns((current) => [...current, { role: "assistant", content: line, at: new Date().toISOString() }]);
+      const playable = playableReplyLine(line);
+      if (playable) setPlayableLine(playable);
     };
     try {
       setChats((current) => current.map((chat) => chat.id === id && (chat.title === "New chat" || !chat.title.trim()) ? { ...chat, title: content.replace(/\s+/g, " ").slice(0, 42), at: new Date().toISOString() } : chat));
@@ -1318,47 +1347,43 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       if (spoken) setText("");
       const played = Boolean(streamed && "played" in streamed && streamed.played);
       const clips = streamed && "clips" in streamed && Array.isArray(streamed.clips) ? streamed.clips : [];
-      const offerSpeech = async (line: string) => {
-        if (!spoken) return;
-        const brief = spokenBrief(line, content);
-        if (brief) lastSpokenLine = brief;
-        if (played) {
-          replayClips.current = [];
-          setReplayReady(false);
-          setPlaybackNote("");
-          return;
+      const showReply = (line: string) => {
+        const playable = playableReplyLine(line, content);
+        if (playable) {
+          lastSpokenLine = playable;
+          setPlayableLine(playable);
+          setReplayReady(true);
         }
-        replayClips.current = clips;
+      };
+      const offerSpeech = async (line: string) => {
+        showReply(line);
         voiceSending = false;
         keepListening = false;
         setListening(false);
         setSpeaking(false);
         onVoice?.({ listening: false, speaking: false });
         emitVoice({ phase: "off", error: "", listening: false, speaking: false });
-        if (clips.length === 0 && brief) {
-          const outcome = await speakInBrowser(brief);
-          setReplayReady(true);
-          setPlaybackNote(voiceAudible([outcome])
-            ? BROWSER_VOICE_FALLBACK
-            : `${BROWSER_VOICE_FALLBACK} ${voicePlaybackNote({
-              spoken: true,
-              audible: false,
-              clips: 0,
-              blocked: outcome.blocked,
-              dropped: outcome.dropped,
-            })}`);
+        if (!spoken || !playableReplyLine(line, content)) return;
+        if (played) {
+          setPlaybackNote("");
           return;
         }
-        setReplayReady(true);
-        const detail = streamed && typeof streamed === "object" ? streamed as { blocked?: boolean; dropped?: boolean; ttsError?: string } : {};
-        setPlaybackNote(voicePlaybackNote({
-          spoken: true,
-          audible: false,
-          clips: clips.length,
-          blocked: Boolean(detail.blocked),
-          dropped: Boolean(detail.dropped),
-          ttsError: typeof detail.ttsError === "string" ? detail.ttsError : "",
-        }));
+        setPlaybackNote("Playing the reply…");
+        const outcome = await playStoredReply({
+          line: playableReplyLine(line, content),
+          speakServer: async () => {
+            if (clips.length) {
+              const outcomes: ClipPlay[] = [];
+              for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime));
+              if (voiceAudible(outcomes)) return outcomes[0];
+              const detail = streamed && typeof streamed === "object" ? streamed as { ttsError?: string } : {};
+              return { started: false, dropped: outcomes.some((item) => item.dropped), blocked: outcomes.some((item) => item.blocked), error: detail.ttsError || "" };
+            }
+            return { started: false, dropped: false, blocked: true, error: "No spoken audio came back. Press Play reply." };
+          },
+          speakBrowser: (text) => speakInBrowser(text),
+        });
+        setPlaybackNote(outcome.spoke && !outcome.usedBrowser ? "" : outcome.note);
       };
       if (!result?.ok) {
         const failure = result && "error" in result && typeof result.error === "string" ? result.error : "";
@@ -1443,14 +1468,80 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       stopAdvisorSpeech();
       return;
     }
+    setMicTest("");
     startAdvisorSpeech(
       (said) => hear(said),
       (status) => {
         setListening(status.phase === "listening" || status.phase === "processing");
         if (status.error) setError(status.error);
+        if (status.phase === "error" || status.phase === "off") setListening(false);
       },
       { slug: desk.slug, code, names: (desk.contacts || []).map((contact) => contact.fullName) },
     );
+  }
+
+  async function runMicTest() {
+    setError("");
+    setMicTest("Checking the microphone…");
+    const recognition = typeof window !== "undefined" && Boolean((window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition || (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition);
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setMicTest(microphoneTestReport({ errorName: "unsupported", recognition }).message);
+      return;
+    }
+    let stream: MediaStream | null = null;
+    try {
+      let permission = "unknown";
+      try {
+        const status = await navigator.permissions?.query({ name: "microphone" as PermissionName });
+        permission = status?.state || "unknown";
+      } catch { /* this browser does not report microphone permission */ }
+      if (permission === "denied") {
+        setMicTest(microphoneTestReport({ permission, recognition }).message);
+        return;
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      const track = stream.getAudioTracks()[0];
+      const deviceLabel = track?.label || "";
+      const trackState = track?.readyState || "";
+      let level: number | null = null;
+      const audioContext = typeof AudioContext !== "undefined" ? new AudioContext() : null;
+      if (audioContext && track) {
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        const samples = new Uint8Array(analyser.fftSize);
+        const started = performance.now();
+        while (performance.now() - started < 700) {
+          analyser.getByteTimeDomainData(samples);
+          let peak = 0;
+          for (const sample of samples) peak = Math.max(peak, Math.abs(sample - 128) / 128);
+          level = Math.max(level || 0, peak);
+          await new Promise((resolve) => window.setTimeout(resolve, 50));
+        }
+        await audioContext.close().catch(() => undefined);
+      }
+      let bytes = 0;
+      let mime = "";
+      if (typeof MediaRecorder !== "undefined" && trackState === "live") {
+        const recorded = await new Promise<Blob>((resolve) => {
+          const rec = new MediaRecorder(stream as MediaStream);
+          const parts: Blob[] = [];
+          rec.ondataavailable = (event) => { if (event.data.size) parts.push(event.data); };
+          rec.onstop = () => resolve(new Blob(parts, { type: rec.mimeType || "audio/webm" }));
+          rec.start();
+          window.setTimeout(() => { try { rec.stop(); } catch { resolve(new Blob()); } }, 500);
+        });
+        bytes = recorded.size;
+        mime = recorded.type || "audio/webm";
+      }
+      setMicTest(microphoneTestReport({ permission, deviceLabel, trackState, bytes, mime, level, recognition }).message);
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : "";
+      setMicTest(microphoneTestReport({ errorName: name || "NotFoundError", recognition }).message);
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop());
+    }
   }
 
   const voiceSeen = useRef(0);
@@ -1944,9 +2035,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                 className="ua-field font-normal"
               />
               {error && <p className="ua-assist-note text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
+              {micTest && <p className="ua-playback-note" data-mic-test-result>{micTest}</p>}
+              {playbackNote && <p className="ua-playback-note" data-playback-note>{playbackNote}</p>}
               <div className="ua-command-row">
-                {replayReady && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => void replaySpoken()}>Play reply</button>}
+                {playableLine && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => void replaySpoken()}>{playingReply ? "Playing…" : "Play reply"}</button>}
                 <button type="button" className="ua-btn ua-voice-command" data-voice-command style={{ background: listening || speaking ? "#b42318" : undefined }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
+                <button type="button" className="ua-btn-line" data-mic-test style={{ padding: "8px 12px" }} onClick={() => void runMicTest()}>Test mic</button>
                 <button type="submit" className="ua-btn ua-ask" data-ask disabled={busy}>{busy ? "Thinking…" : "Ask"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "8px 12px" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
               </div>

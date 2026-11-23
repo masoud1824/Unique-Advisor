@@ -33,7 +33,8 @@ import { taskOn, taskPaused } from "@/lib/secretary-rules";
 import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
-import { blockedReadNote, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, pendingFormRequest, readPublicHttps, searchPublicFormPages } from "@/lib/form-lookup";
+import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readPublicHttps, searchPublicFormPages } from "@/lib/form-lookup";
+import { decideTranscript, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
 import { DOCUMENT_MAIL, REVIEWED_ATTACHMENT, documentMailPreview } from "@/lib/document-mail";
@@ -291,12 +292,14 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   const mime = String(data.mime || "audio/webm").split(";")[0] || "audio/webm";
   const started = Date.now();
   const names = (Array.isArray(data.names) ? data.names : []).map((name) => String(name || "").trim().slice(0, 50)).filter(Boolean).slice(0, 40);
+  const prompt = transcriptionPrompt(names);
+  const retry = "Nothing was heard. Tap Voice command, speak, then tap Stop.";
+  if (bytes.length < 200) return { ok: false as const, error: "No speech was captured." };
   const send = async (model: string) => {
     const form = new FormData();
     form.append("model", model);
-    if (names.length) form.append("prompt", `Financial advisor. Contact names: ${names.join(", ")}. English and Farsi are both expected.`.slice(0, 800));
-    const language = data.language === "fa" || data.language === "en" ? data.language : "";
-    if (language) form.append("language", language);
+    if (prompt) form.append("prompt", prompt);
+    form.append("language", "en");
     form.append("file", new Blob([bytes], { type: mime }), mime.includes("mp4") ? "speech.m4a" : "speech.webm");
     return fetch(`${OPENAI}/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form });
   };
@@ -307,8 +310,9 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response, body)]).catch(() => void 0);
   const text = String(body.text || "").replace(/\s+/g, " ").trim();
   console.info(`[voice] server-stt ${Date.now() - started}ms chars=${text.length}`);
-  if (!text) return { ok: false as const, error: "Nothing was heard." };
-  return { ok: true as const, text };
+  const decision = decideTranscript({ audioBytes: bytes.length, prompt, names, serverText: text, serverOk: Boolean(text), browserText: "" });
+  if (!decision.post || transcriptEchoesPrompt(text, prompt, names)) return { ok: false as const, error: retry };
+  return { ok: true as const, text: decision.text };
 });
 async function latestChat(advisorId: number) {
   await ensureAssistantTables();
@@ -2261,23 +2265,21 @@ async function formBrief(advisorId: number, text: string) {
   } catch {
     return "Useful Links could not be read. That is an access failure, not a missing form. I did not search the web.";
   }
-  const matched = insurerNamed(text) ? chooseSavedLink(links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })), text) : linksForFormRequest(links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })), text);
-  if (!matched.length) return formWebPrompt(text);
-  if (matched.length > 1) return `Which saved page?\n${matched.map((link) => `- ${link.label}`).join("\n")}\nNothing was sent.`;
+  const saved = links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") }));
+  const matched = matchSavedFormLinks(saved, text);
+  if (!matched.length || matched.length > 1) return explainFormLookup({ links: saved, request: text });
   const pageUrl = matched[0].url;
-  const safePage = /^https:\/\//i.test(pageUrl);
-  if (!safePage) return "That Useful Link is not a secure page. I did not open it, and I did not call the form missing.";
   let forms: FormChoice[] = [];
   let simulated = false;
   const fixture = acceptanceFormFallback(matched[0].label);
   if (fixture.length && isAcceptanceFixture(matched[0].label)) {
     forms = fixture;
     simulated = true;
-  } else if (/\.pdf(?:$|\?)/i.test(pageUrl)) {
-    return foundFormNote(matched[0].label, pageUrl, matched[0].label);
   } else {
+    const preview = explainFormLookup({ links: [matched[0]], request: text });
+    if (preview) return preview;
     const read = await readPublicHttps(pageUrl);
-    if (!read.ok) return read.blocked ? blockedReadNote() : read.access;
+    if (!read.ok) return explainFormLookup({ links: [matched[0]], request: text, page: { ok: false, blocked: read.blocked, access: "access" in read ? read.access : "" } });
     forms = formsOnSavedPage(read.text, read.finalUrl, text);
     if (!forms.length) forms = formsFromPage(read.text, read.finalUrl);
   }

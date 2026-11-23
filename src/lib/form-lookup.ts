@@ -2,7 +2,7 @@ import { OUTBOUND_BLOCKED, outboundBlocked } from "./outbound-guard.ts";
 import type { FormChoice, SavedLink } from "./desk-workflows.ts";
 import { chooseSavedLink, formsFromPage } from "./desk-workflows.ts";
 
-export const FORM_WEB_ASK = "It was not found in Useful Links. Do you want me to search the web?";
+export const FORM_WEB_ASK = "I could not find this form in Useful Links. Would you like me to search online?";
 
 const STOP = new Set(["form", "forms", "application", "applications", "find", "search", "please", "from", "with", "that", "this", "your", "useful", "link", "links", "library"]);
 
@@ -19,7 +19,7 @@ export function pendingFormRequest(lastAssistant: string) {
 
 export function isFormWebAgreement(text: string, lastAssistant: string) {
   if (!pendingFormRequest(lastAssistant)) return false;
-  return /^(?:yes|yeah|yep|ok|okay|please do|search the web|yes, search the web)\.?$/i.test(String(text || "").trim());
+  return /^(?:yes|yeah|yep|ok|okay|please do|search the web|search online|yes, search the web|yes, search online)\.?$/i.test(String(text || "").trim());
 }
 
 export function linksForFormRequest(links: SavedLink[], request: string) {
@@ -127,6 +127,39 @@ export function publicResultLinks(html: string) {
 
 export function usefulLinkMiss(request: string) {
   return formWebPrompt(request);
+}
+
+export function savedLinkBlockedNote(label: string, href: string) {
+  return [
+    `Saved Useful Link: ${label}`,
+    href,
+    "The linked form library was not opened because outbound reads are blocked in this environment. That is an access limit, not a missing form. I did not search online. Nothing was filled, saved, or uploaded.",
+  ].join("\n");
+}
+
+export function matchSavedFormLinks(links: SavedLink[], request: string) {
+  const named = /\b(?:canada life|manulife|sun life|assumption|empire life|industrial alliance|rbc insurance|desjardins|ivari|equitable)\b/i.test(request);
+  return named ? chooseSavedLink(links, request) : linksForFormRequest(links, request);
+}
+
+/** Lookup result before any fill, save, or upload. A blocked page read is not a miss. */
+export function explainFormLookup(input: {
+  links: SavedLink[];
+  request: string;
+  page?: { ok: true } | { ok: false; blocked: boolean; access?: string };
+}) {
+  const matched = matchSavedFormLinks(input.links, input.request);
+  if (!matched.length) return formWebPrompt(input.request);
+  if (matched.length > 1) return `Which saved page?\n${matched.map((link) => `- ${link.label}`).join("\n")}\nNothing was sent.`;
+  const link = matched[0];
+  if (!/^https:\/\//i.test(link.url)) return "That Useful Link is not a secure page. I did not open it, and I did not call the form missing.";
+  if (/\.pdf(?:$|\?)/i.test(link.url)) return foundFormNote(link.label, link.url, link.label);
+  if (!input.page) return "";
+  if (!input.page.ok) {
+    if (input.page.blocked) return savedLinkBlockedNote(link.label, link.url);
+    return `Saved Useful Link: ${link.label}\n${link.url}\n${input.page.access || "The page did not open."} That is an access failure, not a missing form. I did not search online. Nothing was filled or uploaded.`;
+  }
+  return "";
 }
 
 export function blockedReadNote() {

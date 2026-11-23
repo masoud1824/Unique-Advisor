@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   FORM_WEB_ASK,
   blockedReadNote,
+  explainFormLookup,
   formWebPrompt,
   isFormWebAgreement,
   linksForFormRequest,
@@ -10,9 +11,12 @@ import {
   publicHttpsTarget,
   publicResultLinks,
   readPublicHttps,
+  savedLinkBlockedNote,
   searchPublicFormPages,
   webSearchBlockedNote,
 } from "./form-lookup.ts";
+import { isFormAsk } from "./advisor-intent.ts";
+import { contentHoldKind } from "./workspace-policy.ts";
 
 describe("useful links before the web", () => {
   it("asks to search the web only after a real miss and keeps the form on that question", () => {
@@ -20,6 +24,7 @@ describe("useful links before the web", () => {
     assert.match(prompt, new RegExp(FORM_WEB_ASK.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.equal(pendingFormRequest(prompt), "find the change of beneficiary form");
     assert.equal(isFormWebAgreement("yes", prompt), true);
+    assert.equal(isFormWebAgreement("search online", prompt), true);
     assert.equal(isFormWebAgreement("yes send the email", prompt), false);
     assert.equal(isFormWebAgreement("yes", "Just to confirm: send the card?"), false);
   });
@@ -32,6 +37,21 @@ describe("useful links before the web", () => {
     assert.equal(linksForFormRequest(links, "find the equitable beneficiary form").length, 1);
     assert.match(blockedReadNote(), /not treated as not found/);
     assert.match(webSearchBlockedNote(), /was not searched/);
+    const blocked = explainFormLookup({
+      links,
+      request: "get an Equitable Life beneficiary form and save it in Dropbox",
+      page: { ok: false, blocked: true },
+    });
+    assert.match(blocked, /Equitable forms/);
+    assert.match(blocked, /https:\/\/example\.test\/equitable/);
+    assert.match(blocked, /access limit/);
+    assert.doesNotMatch(blocked, /could not find this form/);
+    const miss = explainFormLookup({ links: [{ label: "Notes", url: "https://example.test/notes" }], request: "find the equitable beneficiary form" });
+    assert.match(miss, /Would you like me to search online/);
+    assert.match(savedLinkBlockedNote("Equitable forms", "https://example.test/equitable"), /not a missing form/);
+    const ask = "get an Equitable Life beneficiary form, fill with fictional Avery Example info and save in Dropbox";
+    assert.equal(isFormAsk(ask), true);
+    assert.equal(contentHoldKind(ask), "form");
   });
 
   it("rejects private and non-https addresses and does not fetch while outbound is blocked", async () => {

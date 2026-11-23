@@ -1661,7 +1661,7 @@ export function batchAwaitingYes(messages: Array<{ role: string; content: string
 export function isFormAsk(text: string) {
   const tidy = tidyHeard(text);
   if (ordinaryBlocked(tidy) || isCalendarAsk(tidy)) return false;
-  if (/\b(?:e-?mail|upload|signature|book)\b/i.test(tidy)) return false;
+  if (/\b(?:e-?mail|upload|signature|book)\b/i.test(tidy) && !/\b(?:find|search|get|open|look|need)\b/i.test(tidy)) return false;
   if (!/\b(?:forms?|applications?)\b/i.test(tidy)) return false;
   if (/\b(?:send|email)\b/i.test(tidy) && !/\b(?:find|search|get|open|look)\b/i.test(tidy)) return false;
   return /\b(?:find|search|get|open|look|need|where)\b/i.test(tidy)
