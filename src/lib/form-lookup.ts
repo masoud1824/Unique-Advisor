@@ -149,6 +149,47 @@ export async function readApprovedUsefulLink(value: string, fetchImpl: typeof fe
   return { ok: false, blocked: false, access: "The page redirected too many times. That is an access failure, not a missing form." };
 }
 
+const PDF_LIMIT = 2_000_000;
+
+/** Download one approved public PDF. Mail, uploads, and other hosts stay closed. */
+export async function readApprovedPdfBytes(value: string, fetchImpl: typeof fetch = fetch, lookupHost: HostLookup = resolvePublicAddresses): Promise<{ ok: true; bytes: Uint8Array; finalUrl: string } | { ok: false; access: string }> {
+  let current = publicHttpsTarget(value);
+  if (!current.ok) return { ok: false, access: current.reason };
+  for (let hop = 0; hop < 3; hop += 1) {
+    const host = new URL(current.href).hostname.toLowerCase();
+    const blockedHost = await hostIsPublic(host, lookupHost);
+    if (blockedHost) return { ok: false, access: blockedHost };
+    let response: Response;
+    try {
+      response = await fetchImpl(current.href, {
+        method: "GET",
+        redirect: "manual",
+        headers: { Accept: "application/pdf", "User-Agent": "UniqueAdvisorFormLookup/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch {
+      return { ok: false, access: "The form file did not open. That is an access failure, not a missing form." };
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location") || "";
+      if (!location) return { ok: false, access: "The form file redirect had no destination. That is an access failure, not a missing form." };
+      const next = publicHttpsTarget(new URL(location, current.href).href);
+      if (!next.ok) return { ok: false, access: next.reason };
+      current = next;
+      continue;
+    }
+    if (!response.ok) return { ok: false, access: `The form file did not open (${response.status}). That is an access failure, not a missing form.` };
+    const type = contentTypeOf(response);
+    if (type !== "application/pdf") return { ok: false, access: `The form file type ${type || "unknown"} was not accepted. That is an access failure, not a missing form.` };
+    const declared = Number(response.headers.get("content-length") || "0");
+    if (declared > PDF_LIMIT) return { ok: false, access: "The form file was larger than the read limit. That is an access failure, not a missing form." };
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > PDF_LIMIT) return { ok: false, access: "The form file was larger than the read limit. That is an access failure, not a missing form." };
+    return { ok: true, bytes, finalUrl: current.href };
+  }
+  return { ok: false, access: "The form file redirected too many times. That is an access failure, not a missing form." };
+}
+
 export async function verifySavedDocument(value: string, fetchImpl: typeof fetch = fetch, lookupHost: HostLookup = resolvePublicAddresses): Promise<{ ok: true; href: string; contentType: string } | { ok: false; access: string }> {
   let current = publicHttpsTarget(value);
   if (!current.ok) return { ok: false, access: current.reason };

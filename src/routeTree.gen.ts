@@ -23,9 +23,14 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiPreviewOperatorRouteImport } from './routes/api/preview-operator'
 import { Route as NTokenRouteImport } from './routes/n/$token'
 import { Route as ASlugIndexRouteImport } from './routes/a/$slug/index'
+import { Route as ASlugAgentRouteImport } from './routes/a/$slug/agent'
 import { Route as ASlugDeskRouteImport } from './routes/a/$slug/desk'
 import { Route as ASlugSiteRouteImport } from './routes/a/$slug/site'
 import { Route as ASlugStudioRouteImport } from './routes/a/$slug/studio'
+import { Route as ApiAgentDecideRouteImport } from './routes/api/agent/decide'
+import { Route as ApiAgentDraftRouteImport } from './routes/api/agent/draft'
+import { Route as ApiAgentSpeakRouteImport } from './routes/api/agent/speak'
+import { Route as ApiAgentTurnRouteImport } from './routes/api/agent/turn'
 import { Route as ApiAssistantVoiceRouteImport } from './routes/api/assistant/voice'
 import { Route as ApiAssistantVoiceSampleRouteImport } from './routes/api/assistant/voice-sample'
 import { Route as ApiBookTokenRouteImport } from './routes/api/book/$token'
@@ -115,6 +120,11 @@ const ASlugIndexRoute = ASlugIndexRouteImport.update({
   path: '/a/$slug/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ASlugAgentRoute = ASlugAgentRouteImport.update({
+  id: '/a/$slug/agent',
+  path: '/a/$slug/agent',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ASlugDeskRoute = ASlugDeskRouteImport.update({
   id: '/a/$slug/desk',
   path: '/a/$slug/desk',
@@ -128,6 +138,26 @@ const ASlugSiteRoute = ASlugSiteRouteImport.update({
 const ASlugStudioRoute = ASlugStudioRouteImport.update({
   id: '/a/$slug/studio',
   path: '/a/$slug/studio',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentDecideRoute = ApiAgentDecideRouteImport.update({
+  id: '/api/agent/decide',
+  path: '/api/agent/decide',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentDraftRoute = ApiAgentDraftRouteImport.update({
+  id: '/api/agent/draft',
+  path: '/api/agent/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentSpeakRoute = ApiAgentSpeakRouteImport.update({
+  id: '/api/agent/speak',
+  path: '/api/agent/speak',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAgentTurnRoute = ApiAgentTurnRouteImport.update({
+  id: '/api/agent/turn',
+  path: '/api/agent/turn',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAssistantVoiceRoute = ApiAssistantVoiceRouteImport.update({
@@ -235,9 +265,14 @@ export interface FileRoutesByFullPath {
   '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
+  '/a/$slug/agent': typeof ASlugAgentRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
   '/a/$slug/site': typeof ASlugSiteRoute
   '/a/$slug/studio': typeof ASlugStudioRoute
+  '/api/agent/decide': typeof ApiAgentDecideRoute
+  '/api/agent/draft': typeof ApiAgentDraftRoute
+  '/api/agent/speak': typeof ApiAgentSpeakRoute
+  '/api/agent/turn': typeof ApiAgentTurnRoute
   '/api/assistant/voice': typeof ApiAssistantVoiceRoute
   '/api/assistant/voice-sample': typeof ApiAssistantVoiceSampleRoute
   '/api/book/$token': typeof ApiBookTokenRoute
@@ -272,9 +307,14 @@ export interface FileRoutesByTo {
   '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
+  '/a/$slug/agent': typeof ASlugAgentRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
   '/a/$slug/site': typeof ASlugSiteRoute
   '/a/$slug/studio': typeof ASlugStudioRoute
+  '/api/agent/decide': typeof ApiAgentDecideRoute
+  '/api/agent/draft': typeof ApiAgentDraftRoute
+  '/api/agent/speak': typeof ApiAgentSpeakRoute
+  '/api/agent/turn': typeof ApiAgentTurnRoute
   '/api/assistant/voice': typeof ApiAssistantVoiceRoute
   '/api/assistant/voice-sample': typeof ApiAssistantVoiceSampleRoute
   '/api/book/$token': typeof ApiBookTokenRoute
@@ -310,9 +350,14 @@ export interface FileRoutesById {
   '/api/health': typeof ApiHealthRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
+  '/a/$slug/agent': typeof ASlugAgentRoute
   '/a/$slug/desk': typeof ASlugDeskRoute
   '/a/$slug/site': typeof ASlugSiteRoute
   '/a/$slug/studio': typeof ASlugStudioRoute
+  '/api/agent/decide': typeof ApiAgentDecideRoute
+  '/api/agent/draft': typeof ApiAgentDraftRoute
+  '/api/agent/speak': typeof ApiAgentSpeakRoute
+  '/api/agent/turn': typeof ApiAgentTurnRoute
   '/api/assistant/voice': typeof ApiAssistantVoiceRoute
   '/api/assistant/voice-sample': typeof ApiAssistantVoiceSampleRoute
   '/api/book/$token': typeof ApiBookTokenRoute
@@ -349,9 +394,14 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
+    | '/a/$slug/agent'
     | '/a/$slug/desk'
     | '/a/$slug/site'
     | '/a/$slug/studio'
+    | '/api/agent/decide'
+    | '/api/agent/draft'
+    | '/api/agent/speak'
+    | '/api/agent/turn'
     | '/api/assistant/voice'
     | '/api/assistant/voice-sample'
     | '/api/book/$token'
@@ -386,9 +436,14 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
+    | '/a/$slug/agent'
     | '/a/$slug/desk'
     | '/a/$slug/site'
     | '/a/$slug/studio'
+    | '/api/agent/decide'
+    | '/api/agent/draft'
+    | '/api/agent/speak'
+    | '/api/agent/turn'
     | '/api/assistant/voice'
     | '/api/assistant/voice-sample'
     | '/api/book/$token'
@@ -423,9 +478,14 @@ export interface FileRouteTypes {
     | '/api/health'
     | '/api/preview-operator'
     | '/n/$token'
+    | '/a/$slug/agent'
     | '/a/$slug/desk'
     | '/a/$slug/site'
     | '/a/$slug/studio'
+    | '/api/agent/decide'
+    | '/api/agent/draft'
+    | '/api/agent/speak'
+    | '/api/agent/turn'
     | '/api/assistant/voice'
     | '/api/assistant/voice-sample'
     | '/api/book/$token'
@@ -461,9 +521,14 @@ export interface RootRouteChildren {
   ApiHealthRoute: typeof ApiHealthRoute
   ApiPreviewOperatorRoute: typeof ApiPreviewOperatorRoute
   NTokenRoute: typeof NTokenRoute
+  ASlugAgentRoute: typeof ASlugAgentRoute
   ASlugDeskRoute: typeof ASlugDeskRoute
   ASlugSiteRoute: typeof ASlugSiteRoute
   ASlugStudioRoute: typeof ASlugStudioRoute
+  ApiAgentDecideRoute: typeof ApiAgentDecideRoute
+  ApiAgentDraftRoute: typeof ApiAgentDraftRoute
+  ApiAgentSpeakRoute: typeof ApiAgentSpeakRoute
+  ApiAgentTurnRoute: typeof ApiAgentTurnRoute
   ApiAssistantVoiceRoute: typeof ApiAssistantVoiceRoute
   ApiAssistantVoiceSampleRoute: typeof ApiAssistantVoiceSampleRoute
   ApiBookTokenRoute: typeof ApiBookTokenRoute
@@ -585,6 +650,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ASlugIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/a/$slug/agent': {
+      id: '/a/$slug/agent'
+      path: '/a/$slug/agent'
+      fullPath: '/a/$slug/agent'
+      preLoaderRoute: typeof ASlugAgentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/a/$slug/desk': {
       id: '/a/$slug/desk'
       path: '/a/$slug/desk'
@@ -604,6 +676,34 @@ declare module '@tanstack/react-router' {
       path: '/a/$slug/studio'
       fullPath: '/a/$slug/studio'
       preLoaderRoute: typeof ASlugStudioRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/decide': {
+      id: '/api/agent/decide'
+      path: '/api/agent/decide'
+      fullPath: '/api/agent/decide'
+      preLoaderRoute: typeof ApiAgentDecideRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/draft': {
+      id: '/api/agent/draft'
+      path: '/api/agent/draft'
+      fullPath: '/api/agent/draft'
+      preLoaderRoute: typeof ApiAgentDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/speak': {
+      id: '/api/agent/speak'
+      path: '/api/agent/speak'
+      fullPath: '/api/agent/speak'
+      preLoaderRoute: typeof ApiAgentSpeakRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/agent/turn': {
+      id: '/api/agent/turn'
+      path: '/api/agent/turn'
+      fullPath: '/api/agent/turn'
+      preLoaderRoute: typeof ApiAgentTurnRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/assistant/voice': {
@@ -749,9 +849,14 @@ const rootRouteChildren: RootRouteChildren = {
   ApiHealthRoute: ApiHealthRoute,
   ApiPreviewOperatorRoute: ApiPreviewOperatorRoute,
   NTokenRoute: NTokenRoute,
+  ASlugAgentRoute: ASlugAgentRoute,
   ASlugDeskRoute: ASlugDeskRoute,
   ASlugSiteRoute: ASlugSiteRoute,
   ASlugStudioRoute: ASlugStudioRoute,
+  ApiAgentDecideRoute: ApiAgentDecideRoute,
+  ApiAgentDraftRoute: ApiAgentDraftRoute,
+  ApiAgentSpeakRoute: ApiAgentSpeakRoute,
+  ApiAgentTurnRoute: ApiAgentTurnRoute,
   ApiAssistantVoiceRoute: ApiAssistantVoiceRoute,
   ApiAssistantVoiceSampleRoute: ApiAssistantVoiceSampleRoute,
   ApiBookTokenRoute: ApiBookTokenRoute,
