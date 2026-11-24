@@ -6,7 +6,7 @@ import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMa
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
-import { decideTranscript, micFailureMessage, microphoneTestReport, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
+import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { AdvisorVoiceChooser } from "@/components/advisor-voice";
 import { emptyTurn, pushRecognition, readVoiceAutoSend, shouldAutoSend, turnText, voiceDebugEnabled, type TurnState } from "@/lib/voice-turn";
 import { appendVoiceLog } from "@/lib/voice-log.functions";
@@ -391,6 +391,7 @@ function takeRecording() {
     current.addEventListener("stop", () => {
       window.setTimeout(done, 200);
     }, { once: true });
+    try { current.requestData(); } catch { /* this browser flushes on stop */ }
     try { current.stop(); } catch { done(); }
   });
 }
@@ -404,7 +405,7 @@ export function stopAdvisorSpeech() {
   haltVoice();
 }
 
-export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<ClipPlay> {
+export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () => void): Promise<ClipPlay> {
   const run = playQueue.then(() => new Promise<ClipPlay>((resolve) => {
     if (dropAudio) {
       resolve({ started: false, dropped: true, blocked: false });
@@ -414,9 +415,12 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<Clip
     spokenAudio = audio;
     clipsPlaying += 1;
     let settled = false;
+    let started = false;
     const finish = (result: ClipPlay) => {
       if (settled) return;
       settled = true;
+      window.clearTimeout(startTimer);
+      window.clearTimeout(endTimer);
       releasePlayback = null;
       clipsPlaying = Math.max(0, clipsPlaying - 1);
       if (clipsPlaying === 0) {
@@ -432,7 +436,14 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<Clip
       }
       resolve(result);
     };
-    releasePlayback = () => finish({ started: false, dropped: true, blocked: false });
+    const startTimer = window.setTimeout(() => {
+      if (!started) finish({ started: false, dropped: false, blocked: true });
+    }, 6000);
+    const endTimer = window.setTimeout(() => {
+      try { audio.pause(); } catch { /* already stopped */ }
+      finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
+    }, 25000);
+    releasePlayback = () => finish({ started, dropped: true, blocked: false });
     audio.onended = () => finish({ started: true, dropped: false, blocked: false });
     audio.onerror = () => finish({ started: false, dropped: false, blocked: true });
     audio.play().then(() => {
@@ -441,6 +452,9 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<Clip
         finish({ started: false, dropped: true, blocked: false });
         return;
       }
+      started = true;
+      window.clearTimeout(startTimer);
+      onStart?.();
       markAdvisorSpeaking(true);
       voiceLog("playback-start");
     }).catch(() => {
@@ -453,7 +467,7 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg"): Promise<Clip
 }
 
 /** Speak an on-screen reply without the language model. Success is playback start, not the text itself. */
-export function speakInBrowser(line: string): Promise<ClipPlay> {
+export function speakInBrowser(line: string, onStart?: () => void): Promise<ClipPlay> {
   const text = String(line || "").trim();
   const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
   if (!text || !synth || typeof SpeechSynthesisUtterance === "undefined") {
@@ -508,6 +522,7 @@ export function speakInBrowser(line: string): Promise<ClipPlay> {
         }
         started = true;
         window.clearTimeout(startTimer);
+        onStart?.();
         markAdvisorSpeaking(true);
       };
       utterance.onend = () => {
@@ -641,31 +656,32 @@ export function startAdvisorSpeech(
     const capture = generation;
     const heard = transcriptEchoesPrompt(fallback, prompt, names) ? "" : fallback.replace(/\s+/g, " ").trim();
     const bytes = blob?.size || 0;
+    const mime = blob?.type || "audio/webm";
     if (capture !== speechGeneration) return;
-    if (!blob || bytes < 200) {
-      const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
-      if (!decision.post) releaseCapture(decision.message || "Nothing was heard. Tap Voice command, speak, then tap Stop.");
+    const giveUp = (serverError: string) => {
+      const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false, serverError });
+      if (!decision.post) releaseCapture(decision.message || serverError);
       else sendFinal(decision.text);
+    };
+    if (!blob || bytes < 200) {
+      giveUp("");
       return;
     }
     let settled = false;
     const timer = window.setTimeout(() => {
       if (settled || capture !== speechGeneration) return;
       settled = true;
-      voiceLog("send-browser");
-      const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
-      if (!decision.post) releaseCapture(decision.message || "The recording could not be transcribed. Try again.");
-      else sendFinal(decision.text);
-    }, 8000);
+      voiceLog("stt-timeout", mime);
+      giveUp(publicTranscriptionError({ stage: "timeout", mime, bytes }));
+    }, 20000);
     try {
       const audio = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || "").slice(String(reader.result || "").indexOf(",") + 1));
-        reader.onerror = () => reject(new Error("The recording could not be read."));
+        reader.onerror = () => reject(new Error(publicTranscriptionError({ stage: "unreadable", mime, bytes })));
         reader.readAsDataURL(blob);
       });
       if (capture !== speechGeneration) return;
-      const mime = blob.type.split(";")[0].trim() || (/iPhone|iPad|iPod/i.test(navigator.userAgent) ? "audio/mp4" : "audio/webm");
       const result = await transcribeAssistant({ data: { slug: options.slug, code: options.code, audio, mime, names, language: "en" } });
       if (settled || capture !== speechGeneration) return;
       settled = true;
@@ -679,19 +695,18 @@ export function startAdvisorSpeech(
         browserText: heard,
         serverText,
         serverOk: result.ok,
+        serverError,
       });
-      voiceLog(result.ok ? "server-correct" : "stt-error", (serverText || serverError).slice(0, 80));
-      if (!decision.post) releaseCapture(decision.message || serverError || "The recording could not be transcribed. Try again.");
+      voiceLog(result.ok ? "server-correct" : "stt-error", (serverText || serverError).slice(0, 160));
+      if (!decision.post) releaseCapture(serverError || decision.message);
       else sendFinal(decision.text);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "The recording could not be transcribed.";
-      voiceLog("stt-error", message);
+      const message = error instanceof Error ? error.message : publicTranscriptionError({ stage: "provider", mime, bytes, detail: "The recording could not be sent." });
+      voiceLog("stt-error", message.slice(0, 160));
       if (!settled && capture === speechGeneration) {
         settled = true;
         window.clearTimeout(timer);
-        const decision = decideTranscript({ audioBytes: bytes, prompt, names, browserText: heard, serverText: "", serverOk: false });
-        if (!decision.post) releaseCapture(decision.message || message);
-        else sendFinal(decision.text);
+        giveUp(message);
       }
     }
   };
@@ -712,7 +727,7 @@ export function startAdvisorSpeech(
     }
     recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
     recorder.ondataavailable = (event) => {
-      if (event.data.size > 0 && !advisorSpeaking) chunks.push(event.data);
+      if (event.data.size > 0) chunks.push(event.data);
     };
     try { recorder.start(250); } catch { recorder.start(); }
   };
@@ -811,13 +826,11 @@ export function startAdvisorSpeech(
   };
   finishSpeech = () => {
     window.clearTimeout(voicePauseTimer);
-    const raw = turnText(turn).trim();
-    const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
     keepListening = false;
     voiceStopping = true;
     finishSpeech = null;
-    try { recognition?.abort?.(); } catch { /* stopping */ }
-    recognition = null;
+    const heardNow = recognition;
+    try { heardNow?.stop?.(); } catch { try { heardNow?.abort?.(); } catch { /* already stopped */ } }
     if (voiceSending) {
       haltVoice();
       return;
@@ -825,7 +838,13 @@ export function startAdvisorSpeech(
     emitVoice({ phase: "processing", error: "", listening: false, speaking: false });
     onStatus({ listening: false, error: "", phase: "processing" });
     voiceLog("stop-send");
-    void takeRecording().then((blob) => correct(line, blob));
+    window.setTimeout(() => {
+      if (generation !== speechGeneration) return;
+      recognition = null;
+      const raw = turnText(turn).trim();
+      const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
+      void takeRecording().then((blob) => correct(line, blob));
+    }, 500);
   };
   listenDuringSpeech = () => {
     if (!keepListening) return;
@@ -933,6 +952,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const [replayReady, setReplayReady] = useState(false);
   const [playableLine, setPlayableLine] = useState("");
   const [playingReply, setPlayingReply] = useState(false);
+  const playbackToken = useRef(0);
   const [micTest, setMicTest] = useState("");
   const [playbackNote, setPlaybackNote] = useState("");
   const generation = useRef(0);
@@ -1106,35 +1126,60 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     onVoice?.({ listening: false, speaking: false });
   }
 
+  function cancelPlayback() {
+    playbackToken.current += 1;
+    dropAudio = true;
+    speakToken += 1;
+    browserSpeechGen += 1;
+    try { spokenAudio?.pause(); } catch { /* already stopped */ }
+    try { window.speechSynthesis?.cancel(); } catch { /* no browser voice */ }
+    releasePlayback?.();
+    advisorSpeaking = false;
+    setPlayingReply(false);
+    setPlaybackNote("");
+    if (phaseRef.current === "speaking") emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+  }
+
   async function replaySpoken() {
     const line = playableLine || lastSpokenLine;
     if (!line || playingReply) return;
-    setPlayingReply(true);
-    setPlaybackNote("Playing the reply…");
-    setError("");
-    const result = await playStoredReply({
-      line,
-      speakServer: async (text) => {
-        dropAudio = false;
-        const spoken = await speakAssistant({ data: { slug: desk.slug, code, text } }).catch((error: unknown) => ({
-          ok: false as const,
-          error: error instanceof Error ? error.message : "No spoken audio came back. Press Play reply.",
-        }));
-        if (spoken && "audio" in spoken && spoken.ok && spoken.audio) {
-          const clip = { audio: spoken.audio, mime: spoken.mime || "audio/mpeg" };
-          replayClips.current = [clip];
-          return playVoiceClip(clip.audio, clip.mime);
-        }
-        const error = spoken && "error" in spoken ? String(spoken.error || "") : "No spoken audio came back. Press Play reply.";
-        return { started: false, dropped: false, blocked: true, error };
-      },
-      speakBrowser: (line) => speakInBrowser(line),
-    });
-    setPlayableLine(line);
-    setReplayReady(true);
+    const mine = ++playbackToken.current;
+    dropAudio = false;
     setPlayingReply(false);
-    setPlaybackNote(result.spoke && !result.usedBrowser ? "" : result.note || "Press Play reply to try again.");
-    if (result.spoke) setError("");
+    setPlaybackNote("Preparing the reply…");
+    setError("");
+    const markStarted = () => {
+      if (mine !== playbackToken.current) return;
+      setPlayingReply(true);
+      setPlaybackNote("");
+    };
+    try {
+      const result = await playStoredReply({
+        line,
+        speakServer: async (text) => {
+          const spoken = await speakAssistant({ data: { slug: desk.slug, code, text } }).catch((error: unknown) => ({
+            ok: false as const,
+            error: error instanceof Error ? error.message : "No spoken audio came back. Press Play reply.",
+          }));
+          if (mine !== playbackToken.current) return { started: false, dropped: true, blocked: false };
+          if (spoken && "audio" in spoken && spoken.ok && spoken.audio) {
+            const clip = { audio: spoken.audio, mime: spoken.mime || "audio/mpeg" };
+            replayClips.current = [clip];
+            return playVoiceClip(clip.audio, clip.mime, markStarted);
+          }
+          const error = spoken && "error" in spoken ? String(spoken.error || "") : "No spoken audio came back. Press Play reply.";
+          return { started: false, dropped: false, blocked: true, error };
+        },
+        speakBrowser: (text) => speakInBrowser(text, markStarted),
+      });
+      if (mine !== playbackToken.current) return;
+      setPlayableLine(line);
+      setReplayReady(true);
+      setPlaybackNote(result.spoke && !result.usedBrowser ? "" : result.note || "Press Play reply to try again.");
+      if (result.spoke) setError("");
+    } finally {
+      if (mine === playbackToken.current) setPlayingReply(false);
+    }
   }
 
   async function askByVoice(content: string, id: number, mine: number, confirmed = false) {
@@ -1366,24 +1411,35 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         if (!spoken || !playableReplyLine(line, content)) return;
         if (played) {
           setPlaybackNote("");
+          setPlayingReply(false);
           return;
         }
-        setPlaybackNote("Playing the reply…");
+        setPlayingReply(false);
+        setPlaybackNote("Preparing the reply…");
+        const mine = ++playbackToken.current;
+        const markStarted = () => {
+          if (mine !== playbackToken.current) return;
+          setPlayingReply(true);
+          setPlaybackNote("");
+        };
         const outcome = await playStoredReply({
           line: playableReplyLine(line, content),
           speakServer: async () => {
             if (clips.length) {
               const outcomes: ClipPlay[] = [];
-              for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime));
+              for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime, markStarted));
               if (voiceAudible(outcomes)) return outcomes[0];
               const detail = streamed && typeof streamed === "object" ? streamed as { ttsError?: string } : {};
               return { started: false, dropped: outcomes.some((item) => item.dropped), blocked: outcomes.some((item) => item.blocked), error: detail.ttsError || "" };
             }
             return { started: false, dropped: false, blocked: true, error: "No spoken audio came back. Press Play reply." };
           },
-          speakBrowser: (text) => speakInBrowser(text),
+          speakBrowser: (text) => speakInBrowser(text, markStarted),
         });
-        setPlaybackNote(outcome.spoke && !outcome.usedBrowser ? "" : outcome.note);
+        if (mine === playbackToken.current) {
+          setPlayingReply(false);
+          setPlaybackNote(outcome.spoke && !outcome.usedBrowser ? "" : outcome.note);
+        }
       };
       if (!result?.ok) {
         const failure = result && "error" in result && typeof result.error === "string" ? result.error : "";
@@ -1708,8 +1764,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   const linkedPreviewIds = new Set(turns.flatMap((turn) => (turn.previews || []).map((item) => item.id)));
   const trayActions = actions.filter((item) => trayOffers(item, linkedPreviewIds));
-  const liveState = voicePhase === "listening" || voicePhase === "speaking" || voicePhase === "error"
-    ? voiceLabel(voicePhase, voiceError)
+  const liveState = voicePhase === "listening" || voicePhase === "speaking"
+    ? voiceLabel(voicePhase, "")
     : busy || voicePhase === "processing"
       ? "Thinking"
       : "";
@@ -1922,8 +1978,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               stopAdvisorSpeech();
               void ask();
             }} className="ua-assist-compose" data-command-bar>
-              {playbackNote && <p className="ua-playback-note" role="status">{playbackNote}</p>}
-              {voiceLabel(voicePhase, voiceError) && <p className="text-sm font-extrabold" style={{ color: voicePhase === "error" ? "#b42318" : "#0f4c81" }}>{voiceLabel(voicePhase, voiceError)}</p>}
+              {playbackNote && <p className="ua-playback-note" role="status" data-playback-note>{playbackNote}</p>}
+              {voicePhase !== "error" && voiceLabel(voicePhase, voiceError) && <p className="text-sm font-extrabold" style={{ color: "#0f4c81" }}>{voiceLabel(voicePhase, "")}</p>}
               {choices.length > 0 && (
                 <div className="flex flex-wrap gap-2">
                   {choiceNote ? <p className="w-full text-sm font-semibold" style={{ color: "#8a3a12" }}>{choiceNote}</p> : null}
@@ -2038,7 +2094,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               {micTest && <p className="ua-playback-note" data-mic-test-result>{micTest}</p>}
               {playbackNote && <p className="ua-playback-note" data-playback-note>{playbackNote}</p>}
               <div className="ua-command-row">
-                {playableLine && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => void replaySpoken()}>{playingReply ? "Playing…" : "Play reply"}</button>}
+                {playableLine && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => { if (playingReply) cancelPlayback(); else void replaySpoken(); }}>{playingReply ? "Playing…" : "Play reply"}</button>}
                 <button type="button" className="ua-btn ua-voice-command" data-voice-command style={{ background: listening || speaking ? "#b42318" : undefined }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
                 <button type="button" className="ua-btn-line" data-mic-test style={{ padding: "8px 12px" }} onClick={() => void runMicTest()}>Test mic</button>
                 <button type="submit" className="ua-btn ua-ask" data-ask disabled={busy}>{busy ? "Thinking…" : "Ask"}</button>

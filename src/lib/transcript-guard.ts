@@ -78,6 +78,7 @@ export function decideTranscript(input: {
   duplicate?: boolean;
   permissionDenied?: boolean;
   noDevice?: boolean;
+  serverError?: string;
 }): TranscriptDecision {
   if (input.permissionDenied) return { post: false, message: "Microphone permission was denied." };
   if (input.noDevice) return { post: false, message: "No microphone was found." };
@@ -91,6 +92,8 @@ export function decideTranscript(input: {
   const retry = "Nothing was heard. Tap Voice command, speak, then tap Stop.";
   if (input.audioBytes < 200 && !browserOk) return { post: false, message: retry };
   if (!serverOk && !browserOk) {
+    const reported = String(input.serverError || "").replace(/\s+/g, " ").trim();
+    if (reported) return { post: false, message: reported };
     if (input.serverOk === false && input.audioBytes >= 200 && !echoed(server)) return { post: false, message: "The recording could not be transcribed. Try again." };
     return { post: false, message: retry };
   }
@@ -136,4 +139,37 @@ export function microphoneTestReport(input: {
     return { submit: false as const, message: `${device} ${size} The microphone opened, but no speech was detected. Speak closer to the mic and confirm this site is allowed to use it, then tap Test mic again. ${recognition} This test did not send a command.` };
   }
   return { submit: false as const, message: `${device} ${size} Sound was detected. This test did not send a command. ${recognition}` };
+}
+
+export function sanitizeProviderDetail(value: string) {
+  return String(value || "")
+    .replace(/sk-[A-Za-z0-9_-]+/g, "[key]")
+    .replace(/\bBearer\s+\S+/gi, "Bearer [key]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+}
+
+/** A transcription failure the user can act on. It never includes a key or the audio. */
+export function publicTranscriptionError(input: {
+  stage: "closed" | "key" | "timeout" | "provider" | "empty" | "unreadable";
+  status?: number;
+  model?: string;
+  mime?: string;
+  bytes?: number;
+  detail?: string;
+  reason?: string;
+}) {
+  const mime = String(input.mime || "").split(";")[0].trim();
+  const where = `${Math.max(0, input.bytes || 0)} bytes${mime ? `, ${mime}` : ""}`;
+  if (input.stage === "closed") return String(input.reason || "The language model is off in this environment. No model request was made.").replace(/\s+/g, " ").trim();
+  if (input.stage === "key") return `Voice transcription is not available. No transcription key is configured. Recording was ${where}. Nothing was added to the chat.`;
+  if (input.stage === "empty") return "No speech was captured. Tap Voice command, speak, then tap Stop.";
+  if (input.stage === "unreadable") return `The recording could not be read (${where}). Nothing was added to the chat.`;
+  if (input.stage === "timeout") return `Transcription did not answer in time. Recording was ${where}. Nothing was added to the chat.`;
+  const detail = sanitizeProviderDetail(input.detail || "");
+  const model = input.model ? ` ${input.model}` : "";
+  const status = input.status ? ` (${input.status})` : "";
+  return `Transcription was refused${model}${status}. Recording was ${where}.${detail ? ` ${detail}` : ""} Nothing was added to the chat.`;
 }

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { hostedDataPlane, redactPrivate } from "@/lib/hosted-runtime";
+import { modelTransportOpen } from "@/lib/outbound-guard";
 
 export const Route = createFileRoute("/api/health")({
   server: {
@@ -13,11 +14,15 @@ export const Route = createFileRoute("/api/health")({
         try {
           const sql = await getSql();
           await sql.query("select 1 as ok");
+          const model = modelTransportOpen();
           return Response.json({
             ok: true,
             plane,
             database: "up",
             hostEnv: process.env.UA_HOST_ENV || "",
+            modelTransport: model.ok ? "open" : "closed",
+            modelReason: model.ok ? "" : model.reason,
+            openAiEnvKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
           });
         } catch (error) {
           const message = error instanceof Error ? error.message : "database down";

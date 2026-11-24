@@ -5,6 +5,8 @@ import {
   isDuplicateTranscript,
   micFailureMessage,
   microphoneTestReport,
+  publicTranscriptionError,
+  sanitizeProviderDetail,
   speechToSubmit,
   transcriptEchoesPrompt,
   transcriptionPrompt,
@@ -78,5 +80,43 @@ describe("microphone transcript is not the prompt", () => {
     assert.match(heard.message, /Sound was detected/);
     assert.match(heard.message, /did not send a command/);
     assert.match(heard.message, /Live recognition is not available/);
+  });
+
+  it("shows the transcription failure instead of a generic sentence, and still accepts browser speech", () => {
+    const closed = decideTranscript({
+      audioBytes: 8024,
+      prompt,
+      names,
+      browserText: "",
+      serverOk: false,
+      serverError: "The language model is off in this environment. No model request was made.",
+    });
+    assert.equal(closed.post, false);
+    if (!closed.post) assert.match(closed.message, /language model is off/);
+    assert.doesNotMatch(closed.post ? "" : closed.message, /could not be transcribed/);
+    const refused = publicTranscriptionError({
+      stage: "provider",
+      status: 401,
+      model: "whisper-1",
+      mime: "audio/webm;codecs=opus",
+      bytes: 8024,
+      detail: "Incorrect API key sk-secretvalue provided",
+    });
+    assert.match(refused, /whisper-1 \(401\)/);
+    assert.match(refused, /8024 bytes, audio\/webm/);
+    assert.doesNotMatch(refused, /sk-secret/);
+    assert.match(sanitizeProviderDetail("Bearer abcdefghijklmnop"), /Bearer \[key\]/);
+    const heard = decideTranscript({
+      audioBytes: 8024,
+      prompt,
+      names,
+      browserText: "hello",
+      serverOk: false,
+      serverError: refused,
+    });
+    assert.deepEqual(heard, { post: true, text: "hello" });
+    const timedOut = publicTranscriptionError({ stage: "timeout", mime: "audio/webm;codecs=opus", bytes: 8024 });
+    assert.match(timedOut, /did not answer in time/);
+    assert.match(timedOut, /Nothing was added to the chat/);
   });
 });

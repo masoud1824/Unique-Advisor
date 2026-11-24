@@ -34,7 +34,7 @@ import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
 import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readPublicHttps, searchPublicFormPages } from "@/lib/form-lookup";
-import { decideTranscript, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
+import { decideTranscript, publicTranscriptionError, sanitizeProviderDetail, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
 import { DOCUMENT_MAIL, REVIEWED_ATTACHMENT, documentMailPreview } from "@/lib/document-mail";
@@ -206,12 +206,20 @@ export const speakAssistant = createServerFn({ method: "POST" }).validator((inpu
   const apiKey = await companyApiKey();
   if (!apiKey) return { ok: false as const, error: "No voice key." };
   const voice = await savedAdvisorVoice(gate.row.id);
-  const response = await fetch(`${OPENAI}/audio/speech`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: speechBody(text, voice)
-  });
-  if (!response.ok) return { ok: false as const, error: "The warmer voice is not available." };
+  let response: Response;
+  try {
+    response = await fetch(`${OPENAI}/audio/speech`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: speechBody(text, voice),
+      signal: AbortSignal.timeout(12000),
+    });
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    const timedOut = name === "TimeoutError" || name === "AbortError";
+    return { ok: false as const, error: timedOut ? "The spoken reply was not ready in time. Press Play reply." : "The warmer voice is not available. Press Play reply." };
+  }
+  if (!response.ok) return { ok: false as const, error: `OpenAI speech did not start (${response.status}). Press Play reply.` };
   await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response)]).catch(() => void 0);
   const audio = Buffer.from(await response.arrayBuffer()).toString("base64");
   if (!audio) return { ok: false as const, error: "The warmer voice is not available." };
@@ -287,25 +295,58 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   if (audio.length < 80) return { ok: false as const, error: "No speech was captured." };
   if (audio.length > 8e6) return { ok: false as const, error: "That recording is too long. Speak one sentence, then pause." };
   const apiKey = await companyApiKey();
-  if (!apiKey) return { ok: false as const, error: "Voice transcription is not available." };
+  if (!apiKey) return { ok: false as const, error: publicTranscriptionError({ stage: "key", mime: String(data.mime || "audio/webm"), bytes: Buffer.from(audio, "base64").length }) };
   const bytes = Buffer.from(audio, "base64");
-  const mime = String(data.mime || "audio/webm").split(";")[0] || "audio/webm";
+  const mime = String(data.mime || "audio/webm");
+  const type = mime.split(";")[0].trim() || "audio/webm";
   const started = Date.now();
   const names = (Array.isArray(data.names) ? data.names : []).map((name) => String(name || "").trim().slice(0, 50)).filter(Boolean).slice(0, 40);
   const prompt = transcriptionPrompt(names);
   const retry = "Nothing was heard. Tap Voice command, speak, then tap Stop.";
-  if (bytes.length < 200) return { ok: false as const, error: "No speech was captured." };
+  if (bytes.length < 200) return { ok: false as const, error: publicTranscriptionError({ stage: "empty", mime, bytes: bytes.length }) };
+  const fileName = type.includes("mp4") ? "speech.m4a" : type.includes("wav") ? "speech.wav" : "speech.webm";
   const send = async (model: string) => {
     const form = new FormData();
     form.append("model", model);
     if (prompt) form.append("prompt", prompt);
     form.append("language", "en");
-    form.append("file", new Blob([bytes], { type: mime }), mime.includes("mp4") ? "speech.m4a" : "speech.webm");
-    return fetch(`${OPENAI}/audio/transcriptions`, { method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form });
+    form.append("file", new File([new Uint8Array(bytes)], fileName, { type }), fileName);
+    return fetch(`${OPENAI}/audio/transcriptions`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      body: form,
+      signal: AbortSignal.timeout(12000),
+    });
   };
-  let response = await send("gpt-4o-mini-transcribe");
-  if (!response.ok) response = await send("whisper-1");
-  if (!response.ok) return { ok: false as const, error: "The recording could not be transcribed." };
+  const refused = async (response: Response, model: string) => {
+    let detail = "";
+    try {
+      const raw = await response.text();
+      const parsed = JSON.parse(raw) as { error?: { message?: string } };
+      detail = sanitizeProviderDetail(parsed?.error?.message || raw);
+    } catch { /* the status is still useful */ }
+    console.info(`[voice] stt-refused model=${model} status=${response.status} bytes=${bytes.length} mime=${type}`);
+    return publicTranscriptionError({ stage: "provider", status: response.status, model, mime, bytes: bytes.length, detail });
+  };
+  let response: Response;
+  try {
+    response = await send("gpt-4o-mini-transcribe");
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    console.info(`[voice] stt-error model=gpt-4o-mini-transcribe ${name || "failed"} bytes=${bytes.length}`);
+    return { ok: false as const, error: publicTranscriptionError({ stage: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider", model: "gpt-4o-mini-transcribe", mime, bytes: bytes.length, detail: name === "TimeoutError" || name === "AbortError" ? "" : "The transcription request did not connect." }) };
+  }
+  if (!response.ok) {
+    const first = await refused(response, "gpt-4o-mini-transcribe");
+    try {
+      response = await send("whisper-1");
+    } catch (error) {
+      const name = error instanceof Error ? error.name : "";
+      console.info(`[voice] stt-error model=whisper-1 ${name || "failed"} bytes=${bytes.length}`);
+      return { ok: false as const, error: name === "TimeoutError" || name === "AbortError" ? publicTranscriptionError({ stage: "timeout", model: "whisper-1", mime, bytes: bytes.length }) : first };
+    }
+    if (!response.ok) return { ok: false as const, error: await refused(response, "whisper-1") };
+  }
   const body = await response.json();
   await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response, body)]).catch(() => void 0);
   const text = String(body.text || "").replace(/\s+/g, " ").trim();

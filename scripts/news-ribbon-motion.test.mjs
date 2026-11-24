@@ -30,7 +30,7 @@ describe("english desk and news ribbon source", () => {
     assert.match(assistant, /data-command-bar/);
     assert.match(assistant, /data-play-reply/);
     assert.match(assistant, /ua-assist-stage/);
-    assert.match(assistant, /speakInBrowser\(line\)/);
+    assert.match(assistant, /speakInBrowser\(line/);
     assert.match(desk, /ua-practice-shell/);
     assert.match(desk, /ua-assistant-lock/);
     assert.match(read("src/lib/voice-desk.ts"), /export function preferredBrowserVoice/);
@@ -55,7 +55,9 @@ describe("english desk and news ribbon source", () => {
     assert.match(read("src/lib/form-lookup.ts"), /I could not find this form in Useful Links\. Would you like me to search online\?/);
     const replay = assistant.slice(assistant.indexOf("async function replaySpoken"), assistant.indexOf("async function askByVoice"));
     assert.match(replay, /playStoredReply/);
-    assert.match(replay, /speakInBrowser\(line\)/);
+    assert.match(replay, /speakInBrowser\(/);
+    assert.match(replay, /Preparing the reply/);
+    assert.doesNotMatch(replay, /setPlaybackNote\("Playing the reply/);
     assert.doesNotMatch(replay, /await speak\(line\)/);
     assert.doesNotMatch(replay, /ask\(/);
     assert.match(assistant, /data-mic-test/);
