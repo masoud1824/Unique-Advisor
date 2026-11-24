@@ -1,3 +1,4 @@
+import { lookup } from "node:dns/promises";
 import { OUTBOUND_BLOCKED, outboundBlocked } from "./outbound-guard.ts";
 import type { FormChoice, SavedLink } from "./desk-workflows.ts";
 import { chooseSavedLink, formsFromPage } from "./desk-workflows.ts";
@@ -72,8 +73,117 @@ function isPrivateAddress(host: string) {
   return false;
 }
 
-export type PublicRead = { ok: true; text: string; finalUrl: string } | { ok: false; blocked: true } | { ok: false; blocked: false; access: string };
+export type PublicRead = { ok: true; text: string; finalUrl: string; contentType?: string } | { ok: false; blocked: true } | { ok: false; blocked: false; access: string };
 
+const READ_LIMIT = 1_500_000;
+const LIBRARY_TYPES = ["text/html", "application/xhtml+xml", "application/pdf"];
+
+export type HostLookup = (host: string) => Promise<string[]>;
+
+export async function resolvePublicAddresses(host: string) {
+  const found = await lookup(host, { all: true, verbatim: true });
+  return found.map((item) => item.address);
+}
+
+/** A saved Useful Link may be read while mail, uploads, and other provider calls stay blocked. */
+function contentTypeOf(response: Response) {
+  return (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+}
+
+async function hostIsPublic(host: string, lookupHost: HostLookup) {
+  if (isPrivateAddress(host)) return "A private network address was not opened.";
+  if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) || host.includes(":")) return "";
+  let addresses: string[] = [];
+  try {
+    addresses = await lookupHost(host);
+  } catch {
+    return "The address could not be checked. That is an access failure, not a missing form.";
+  }
+  if (!addresses.length || addresses.some((address) => isPrivateAddress(address))) return "A private network address was not opened.";
+  return "";
+}
+
+export function sameLibrarySite(pageUrl: string, documentUrl: string) {
+  const page = publicHttpsTarget(pageUrl);
+  const document = publicHttpsTarget(documentUrl);
+  if (!page.ok || !document.ok) return false;
+  const left = new URL(page.href).hostname.toLowerCase();
+  const right = new URL(document.href).hostname.toLowerCase();
+  return left === right;
+}
+
+export async function readApprovedUsefulLink(value: string, fetchImpl: typeof fetch = fetch, lookupHost: HostLookup = resolvePublicAddresses): Promise<PublicRead> {
+  let current = publicHttpsTarget(value);
+  if (!current.ok) return { ok: false, blocked: false, access: current.reason };
+  for (let hop = 0; hop < 3; hop += 1) {
+    const host = new URL(current.href).hostname.toLowerCase();
+    const blockedHost = await hostIsPublic(host, lookupHost);
+    if (blockedHost) return { ok: false, blocked: false, access: blockedHost };
+    let response: Response;
+    try {
+      response = await fetchImpl(current.href, {
+        method: "GET",
+        redirect: "manual",
+        headers: { Accept: "text/html,application/xhtml+xml,application/pdf", "User-Agent": "UniqueAdvisorFormLookup/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch {
+      return { ok: false, blocked: false, access: "The page did not open. That is an access failure, not a missing form." };
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location") || "";
+      if (!location) return { ok: false, blocked: false, access: "The page redirect had no destination. That is an access failure, not a missing form." };
+      const next = publicHttpsTarget(new URL(location, current.href).href);
+      if (!next.ok) return { ok: false, blocked: false, access: next.reason };
+      current = next;
+      continue;
+    }
+    if (!response.ok) return { ok: false, blocked: false, access: `The page did not open (${response.status}). That is an access failure, not a missing form.` };
+    const type = contentTypeOf(response);
+    if (!LIBRARY_TYPES.includes(type)) return { ok: false, blocked: false, access: `The page type ${type || "unknown"} was not opened. That is an access failure, not a missing form.` };
+    const declared = Number(response.headers.get("content-length") || "0");
+    if (declared > READ_LIMIT) return { ok: false, blocked: false, access: "The page was larger than the read limit. That is an access failure, not a missing form." };
+    const text = type === "application/pdf" ? "" : (await response.text()).slice(0, READ_LIMIT);
+    return { ok: true, text, finalUrl: current.href, contentType: type };
+  }
+  return { ok: false, blocked: false, access: "The page redirected too many times. That is an access failure, not a missing form." };
+}
+
+export async function verifySavedDocument(value: string, fetchImpl: typeof fetch = fetch, lookupHost: HostLookup = resolvePublicAddresses): Promise<{ ok: true; href: string; contentType: string } | { ok: false; access: string }> {
+  let current = publicHttpsTarget(value);
+  if (!current.ok) return { ok: false, access: current.reason };
+  for (let hop = 0; hop < 3; hop += 1) {
+    const host = new URL(current.href).hostname.toLowerCase();
+    const blockedHost = await hostIsPublic(host, lookupHost);
+    if (blockedHost) return { ok: false, access: blockedHost };
+    let response: Response;
+    try {
+      response = await fetchImpl(current.href, {
+        method: "HEAD",
+        redirect: "manual",
+        headers: { Accept: "application/pdf,text/html", "User-Agent": "UniqueAdvisorFormLookup/1.0" },
+        signal: AbortSignal.timeout(12000),
+      });
+    } catch {
+      return { ok: false, access: "The form file did not open. That is an access failure, not a missing form." };
+    }
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location") || "";
+      if (!location) return { ok: false, access: "The form file redirect had no destination. That is an access failure, not a missing form." };
+      const next = publicHttpsTarget(new URL(location, current.href).href);
+      if (!next.ok) return { ok: false, access: next.reason };
+      current = next;
+      continue;
+    }
+    if (!response.ok) return { ok: false, access: `The form file did not open (${response.status}). That is an access failure, not a missing form.` };
+    const type = contentTypeOf(response);
+    if (type !== "application/pdf" && type !== "text/html") return { ok: false, access: `The form file type ${type || "unknown"} was not accepted. That is an access failure, not a missing form.` };
+    return { ok: true, href: current.href, contentType: type };
+  }
+  return { ok: false, access: "The form file redirected too many times. That is an access failure, not a missing form." };
+}
+
+/** Wider web and unsaved addresses stay closed while outbound is blocked. */
 export async function readPublicHttps(value: string, fetchImpl: typeof fetch = fetch): Promise<PublicRead> {
   if (outboundBlocked()) return { ok: false, blocked: true };
   let current = publicHttpsTarget(value);
@@ -171,7 +281,7 @@ export function webSearchBlockedNote() {
 }
 
 export function foundFormNote(label: string, href: string, title: string) {
-  return `Saved Useful Link: ${label}\n${title}\n${href}\nThis is a read-only form link. Nothing was sent or uploaded.`;
+  return `Saved Useful Link: ${label}\nForm: ${title}\n${href}\nThis is the verified form link from that library. Nothing was filled, saved, uploaded, or sent.`;
 }
 
 export function webResultsNote(request: string, links: Array<{ title: string; href: string }>) {

@@ -10,11 +10,15 @@ import {
   pendingFormRequest,
   publicHttpsTarget,
   publicResultLinks,
+  readApprovedUsefulLink,
   readPublicHttps,
+  sameLibrarySite,
   savedLinkBlockedNote,
   searchPublicFormPages,
+  verifySavedDocument,
   webSearchBlockedNote,
 } from "./form-lookup.ts";
+import { chooseForm, formsFromPage } from "./desk-workflows.ts";
 import { isFormAsk } from "./advisor-intent.ts";
 import { contentHoldKind } from "./workspace-policy.ts";
 
@@ -82,5 +86,47 @@ describe("useful links before the web", () => {
     else process.env.UA_OUTBOUND_BLOCK = previous;
     const links = publicResultLinks('<a href="https://html.duckduckgo.com/l/?uddg=https%3A%2F%2Fforms.example.com%2Flife.pdf">Life form</a><a href="https://127.0.0.1/secret">Secret</a>');
     assert.deepEqual(links, [{ title: "Life form", href: "https://forms.example.com/life.pdf" }]);
+  });
+
+  it("reads an approved Useful Link while outbound stays blocked, and rejects private redirects", async () => {
+    const previousBlock = process.env.UA_OUTBOUND_BLOCK;
+    const previousRelease = process.env.UA_RELEASE_ENV;
+    process.env.UA_OUTBOUND_BLOCK = "1";
+    process.env.UA_RELEASE_ENV = "staging";
+    const html = `<tr><td scope="row">0671BCF</td><td></td><td><a href="/advisor/getattachment/671BCF.pdf" class="f6 font-weight-bold">Beneficiary Change Request Form <span class="sr-only">File</span></a><br /><span>A digital version of this form is available on the Beneficiary tab</span></td><td><a href="/advisor/getattachment/671BCF-FR.pdf" class="f6 advisor-form-lang">FR</a></td></tr><tr><td scope="row">0594</td><td><a href="/advisor/getattachment/594.pdf" class="f6 font-weight-bold">Business Information Form <span class="sr-only">File</span></a></td></tr>`;
+    const publicLookup = async () => ["203.0.113.10"];
+    let calls: string[] = [];
+    const opened = await readApprovedUsefulLink("https://advisor.example.com/forms", (async (url: string | URL) => {
+      calls.push(String(url));
+      return new Response(html, { status: 200, headers: { "content-type": "text/html" } });
+    }) as typeof fetch, publicLookup);
+    assert.equal(opened.ok, true);
+    if (opened.ok) {
+      const forms = formsFromPage(opened.text, opened.finalUrl);
+      const choice = chooseForm(forms, "find a change of beneficiary form from equitable and show me here");
+      assert.equal(choice.kind, "one");
+      if (choice.kind === "one") {
+        assert.equal(choice.form.title, "Beneficiary Change Request Form (0671BCF)");
+        assert.equal(choice.form.href, "https://advisor.example.com/advisor/getattachment/671BCF.pdf");
+      }
+    }
+    const checked = await verifySavedDocument("https://advisor.example.com/advisor/getattachment/671BCF.pdf", (async () => new Response(null, { status: 200, headers: { "content-type": "application/pdf" } })) as typeof fetch, publicLookup);
+    assert.equal(checked.ok, true);
+    calls = [];
+    const redirected = await readApprovedUsefulLink("https://advisor.example.com/forms", (async (url: string | URL) => {
+      calls.push(String(url));
+      return new Response(null, { status: 302, headers: { location: "https://10.1.1.1/secret" } });
+    }) as typeof fetch, publicLookup);
+    assert.equal(redirected.ok, false);
+    if (!redirected.ok) assert.match("access" in redirected ? redirected.access : "", /private network/);
+    assert.deepEqual(calls, ["https://advisor.example.com/forms"]);
+    const searched = await searchPublicFormPages("change of beneficiary", (() => Promise.resolve(new Response("no"))) as typeof fetch);
+    assert.match(searched, /was not searched/);
+    assert.equal(sameLibrarySite("https://advisor.example.com/forms", "https://cdn.example.com/file.pdf"), false);
+    assert.equal(publicHttpsTarget("https://user:secret@advisor.example.com/forms").ok, false);
+    if (previousBlock === undefined) delete process.env.UA_OUTBOUND_BLOCK;
+    else process.env.UA_OUTBOUND_BLOCK = previousBlock;
+    if (previousRelease === undefined) delete process.env.UA_RELEASE_ENV;
+    else process.env.UA_RELEASE_ENV = previousRelease;
   });
 });

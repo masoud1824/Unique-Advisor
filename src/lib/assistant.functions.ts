@@ -33,7 +33,7 @@ import { taskOn, taskPaused } from "@/lib/secretary-rules";
 import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
-import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readPublicHttps, searchPublicFormPages } from "@/lib/form-lookup";
+import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readApprovedUsefulLink, readPublicHttps, sameLibrarySite, searchPublicFormPages, verifySavedDocument } from "@/lib/form-lookup";
 import { decideTranscript, publicTranscriptionError, sanitizeProviderDetail, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
@@ -2317,12 +2317,27 @@ async function formBrief(advisorId: number, text: string) {
     forms = fixture;
     simulated = true;
   } else {
+    if (/\.pdf(?:$|\?)/i.test(pageUrl)) {
+      const verified = await verifySavedDocument(pageUrl);
+      if (!verified.ok) return `Saved Useful Link: ${matched[0].label}\n${pageUrl}\n${verified.access} I did not search online. Nothing was filled, saved, or uploaded.`;
+      return foundFormNote(matched[0].label, verified.href, matched[0].label);
+    }
     const preview = explainFormLookup({ links: [matched[0]], request: text });
     if (preview) return preview;
-    const read = await readPublicHttps(pageUrl);
+    const read = await readApprovedUsefulLink(pageUrl);
     if (!read.ok) return explainFormLookup({ links: [matched[0]], request: text, page: { ok: false, blocked: read.blocked, access: "access" in read ? read.access : "" } });
     forms = formsOnSavedPage(read.text, read.finalUrl, text);
     if (!forms.length) forms = formsFromPage(read.text, read.finalUrl);
+    const choice = chooseForm(forms, text);
+    if (choice.kind === "none") return formWebPrompt(text);
+    if (choice.kind === "many") return `More than one form fits. Which one?\n${choice.forms.map((form) => `- ${form.title} — ${form.href}`).join("\n")}\nNothing was filled, saved, or uploaded.`;
+    const form = choice.form;
+    if (!sameLibrarySite(read.finalUrl, form.href)) {
+      return `Saved Useful Link: ${matched[0].label}\n${read.finalUrl}\nForm listed: ${form.title}\n${form.href}\nThat file is on a different host, so it was not opened. I did not search online. Nothing was filled, saved, or uploaded.`;
+    }
+    const verified = await verifySavedDocument(form.href);
+    if (!verified.ok) return `Saved Useful Link: ${matched[0].label}\n${read.finalUrl}\nForm listed: ${form.title}\n${form.href}\n${verified.access} I did not search online. Nothing was filled, saved, or uploaded.`;
+    return foundFormNote(matched[0].label, verified.href, form.title);
   }
   const choice = chooseForm(forms, text);
   if (choice.kind === "none") return formWebPrompt(text);

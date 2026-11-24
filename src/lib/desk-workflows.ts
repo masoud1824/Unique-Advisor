@@ -274,6 +274,24 @@ export function formsFromPage(html: string, pageUrl: string): FormChoice[] {
     });
   }
   if (forms.length) return forms;
+  for (const rowMatch of html.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const row = rowMatch[1];
+    const link = row.match(/<a\b[^>]*class="[^"]*font-weight-bold[^"]*"[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i)
+      || row.match(/<a\b[^>]*href=["']([^"']+)["'][^>]*class="[^"]*font-weight-bold[^"]*"[^>]*>([\s\S]*?)<\/a>/i);
+    if (!link || /advisor-form-lang/i.test(link[0])) continue;
+    const href = absoluteHref(link[1], pageUrl);
+    const title = decodeText(link[2]).replace(/\bFile\b/g, " ").replace(/\s+/g, " ").trim();
+    const code = decodeText(row.match(/<td\b[^>]*>\s*([0-9A-Z]{3,16})\s*<\/td>/i)?.[1] || "");
+    const purpose = decodeText(row.match(/<span>([^<]{8,240})<\/span>/i)?.[1] || "").slice(0, 180);
+    add({
+      title: code && title ? `${title} (${code})` : title,
+      href,
+      purpose: purpose || "unknown",
+      jurisdiction: "unknown",
+      version: code || "unknown",
+    });
+  }
+  if (forms.length) return forms;
   const pattern = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(pattern)) {
     const href = absoluteHref(match[1], pageUrl);
@@ -296,7 +314,7 @@ export function formsFromPage(html: string, pageUrl: string): FormChoice[] {
 export function chooseForm(forms: FormChoice[], request: string): { kind: "one"; form: FormChoice } | { kind: "many"; forms: FormChoice[] } | { kind: "none" } {
   const insurer = insurerIn(request);
   const withoutInsurer = insurer ? request.toLowerCase().replace(insurer, " ") : request.toLowerCase();
-  const words = withoutInsurer.split(/[^a-z0-9]+/).filter((word) => word.length > 3 && !["form", "forms", "from", "official", "insurer", "please", "send", "with", "page", "useful", "link"].includes(word));
+  const words = withoutInsurer.split(/[^a-z0-9]+/).filter((word) => word.length > 3 && !["form", "forms", "from", "official", "insurer", "please", "send", "with", "page", "useful", "link", "show", "here", "find", "open", "look"].includes(word));
   if (!words.length) {
     if (forms.length === 1) return { kind: "one", form: forms[0] };
     if (forms.length > 1) return { kind: "many", forms };
@@ -310,8 +328,6 @@ export function chooseForm(forms: FormChoice[], request: string): { kind: "one";
   const pool = best > 0 ? scored.filter((item) => item.score === best).map((item) => item.form) : [];
   if (pool.length === 1) return { kind: "one", form: pool[0] };
   if (pool.length > 1) return { kind: "many", forms: pool };
-  if (forms.length === 1) return { kind: "one", form: forms[0] };
-  if (forms.length > 1) return { kind: "many", forms };
   return { kind: "none" };
 }
 
