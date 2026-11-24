@@ -439,7 +439,16 @@ export async function playStoredReply(input: {
   const line = String(input.line || "").replace(/\s+/g, " ").trim();
   if (!line) return { visible: true as const, reranCommand: false as const, usedBrowser: false, note: "There is no reply to play.", spoke: false };
   const server = await input.speakServer(line);
-  if (clipAudible(server)) return { visible: true as const, reranCommand: false as const, usedBrowser: false, note: "", spoke: true };
+  if (server.started || clipAudible(server)) {
+    const finished = clipAudible(server);
+    return {
+      visible: true as const,
+      reranCommand: false as const,
+      usedBrowser: false,
+      note: finished ? "" : "Playback stopped before the reply finished. Press Play reply.",
+      spoke: finished,
+    };
+  }
   const browser = await input.speakBrowser(line);
   const heard = clipAudible(browser);
   const problem = String(server.error || "").trim() || voicePlaybackNote({ spoken: true, audible: false, clips: 0, blocked: browser.blocked, dropped: browser.dropped });
@@ -451,4 +460,39 @@ export async function playStoredReply(input: {
     note: heard || /press play reply/i.test(note) ? note : `${note} Press Play reply.`,
     spoke: heard,
   };
+}
+
+export type PlaybackState = { owner: number; autoplayed: string[] };
+
+export function emptyPlayback(): PlaybackState {
+  return { owner: 0, autoplayed: [] };
+}
+
+/** One owner for server audio and browser speech. Autoplay of the same reply is refused. */
+export function beginPlayback(state: PlaybackState, input: { replyKey: string; manual?: boolean }) {
+  const key = String(input.replyKey || "").replace(/\s+/g, " ").trim();
+  const owner = state.owner + 1;
+  if (!input.manual && key && state.autoplayed.includes(key)) {
+    return { state: { ...state, owner }, accept: false as const, owner, reason: "already-played" as const };
+  }
+  const autoplayed = !input.manual && key ? [...state.autoplayed, key] : state.autoplayed;
+  return { state: { owner, autoplayed }, accept: true as const, owner, reason: "started" as const };
+}
+
+export function stopPlayback(state: PlaybackState) {
+  return { owner: state.owner + 1, autoplayed: state.autoplayed };
+}
+
+export function browserFallbackAllowed(input: { owner: number; activeOwner: number; serverStarted: boolean }) {
+  return input.owner === input.activeOwner && input.serverStarted !== true;
+}
+
+/** The microphone stays closed while a reply is being prepared or spoken. */
+export function shouldCaptureSpeech(input: { explicitListen: boolean; speaking: boolean; preparing: boolean }) {
+  return input.explicitListen === true && input.speaking !== true && input.preparing !== true;
+}
+
+/** Finishing a clip must not open the microphone again by itself. */
+export function shouldResumeAfterSpeech() {
+  return false;
 }

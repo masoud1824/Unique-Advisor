@@ -21,6 +21,12 @@ import {
   playStoredReply,
   playableReplyLine,
   voiceTurnKey,
+  beginPlayback,
+  browserFallbackAllowed,
+  emptyPlayback,
+  shouldCaptureSpeech,
+  shouldResumeAfterSpeech,
+  stopPlayback,
 } from "./voice-desk.ts";
 import { OUTBOUND_BLOCKED } from "./outbound-guard.ts";
 import { speechRequest, NEUTRAL_NORTH_AMERICAN_DELIVERY, OPENAI_TTS_MODEL } from "./openai-voices.ts";
@@ -207,5 +213,37 @@ describe("spoken reply playback", () => {
     });
     assert.equal(rejected.spoke, false);
     assert.match(rejected.note, /Press Play reply/);
+  });
+
+  it("does not overlap a started server clip with browser speech, and does not autoplay twice", async () => {
+    let browser = 0;
+    const started = await playStoredReply({
+      line: "The client review is on the screen.",
+      speakServer: async () => ({ started: true, dropped: true, blocked: false }),
+      speakBrowser: async () => {
+        browser += 1;
+        return { started: true, dropped: false, blocked: false };
+      },
+    });
+    assert.equal(browser, 0);
+    assert.equal(started.usedBrowser, false);
+    assert.equal(started.reranCommand, false);
+    const first = beginPlayback(emptyPlayback(), { replyKey: "review" });
+    const again = beginPlayback(first.state, { replyKey: "review" });
+    assert.equal(first.accept, true);
+    assert.equal(again.accept, false);
+    assert.equal(again.reason, "already-played");
+    const manual = beginPlayback(again.state, { replyKey: "review", manual: true });
+    assert.equal(manual.accept, true);
+    const stopped = stopPlayback(manual.state);
+    assert.notEqual(stopped.owner, manual.owner);
+    assert.equal(browserFallbackAllowed({ owner: manual.owner, activeOwner: stopped.owner, serverStarted: false }), false);
+    assert.equal(browserFallbackAllowed({ owner: stopped.owner, activeOwner: stopped.owner, serverStarted: true }), false);
+    assert.equal(browserFallbackAllowed({ owner: stopped.owner, activeOwner: stopped.owner, serverStarted: false }), true);
+    assert.equal(shouldCaptureSpeech({ explicitListen: true, speaking: true, preparing: false }), false);
+    assert.equal(shouldCaptureSpeech({ explicitListen: true, speaking: false, preparing: true }), false);
+    assert.equal(shouldCaptureSpeech({ explicitListen: false, speaking: false, preparing: false }), false);
+    assert.equal(shouldCaptureSpeech({ explicitListen: true, speaking: false, preparing: false }), true);
+    assert.equal(shouldResumeAfterSpeech(), false);
   });
 });

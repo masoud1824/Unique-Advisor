@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
-import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
+import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, shouldCaptureSpeech, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
@@ -212,6 +212,7 @@ let latestDraft = "";
 let speechGeneration = 0;
 let playQueue: Promise<void> = Promise.resolve();
 let clipsPlaying = 0;
+let playbackGeneration = 0;
 let lastSpokenLine = "";
 let dropAudio = false;
 let releasePlayback: (() => void) | null = null;
@@ -334,16 +335,37 @@ function voiceLanguage() {
 export function markAdvisorSpeaking(on: boolean) {
   advisorSpeaking = on;
   if (on) {
-    emitVoice({ phase: "speaking", error: "", listening: keepListening, speaking: true });
-    listenDuringSpeech?.();
-    return;
-  }
-  if (keepListening) {
-    emitVoice({ phase: "listening", error: "", listening: true, speaking: false });
-    restartListening?.();
+    try { recognition?.abort?.(); } catch { /* do not hear the reply */ }
+    recognition = null;
+    window.clearTimeout(voicePauseTimer);
+    window.clearTimeout(listenTimer);
+    emitVoice({ phase: "speaking", error: "", listening: false, speaking: true });
     return;
   }
   emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+}
+
+function invalidatePlayback() {
+  playbackGeneration += 1;
+  dropAudio = true;
+  speakToken += 1;
+  browserSpeechGen += 1;
+  window.clearTimeout(listenTimer);
+  window.clearTimeout(voicePauseTimer);
+  const audio = spokenAudio;
+  spokenAudio = null;
+  if (audio) {
+    audio.onended = null;
+    audio.onerror = null;
+    try { audio.pause(); } catch { /* already stopped */ }
+    try { audio.src = ""; } catch { /* already released */ }
+  }
+  try { window.speechSynthesis?.cancel(); } catch { /* no browser voice */ }
+  advisorSpeaking = false;
+  clipsPlaying = 0;
+  const release = releasePlayback;
+  releasePlayback = null;
+  release?.();
 }
 
 function haltVoice() {
@@ -354,8 +376,7 @@ function haltVoice() {
   speechGeneration += 1;
   window.clearTimeout(voicePauseTimer);
   window.clearTimeout(listenTimer);
-  speakToken += 1;
-  browserSpeechGen += 1;
+  invalidatePlayback();
   const current = recognition;
   try { current?.abort?.(); } catch { /* already stopped */ }
   try { current?.stop?.(); } catch { /* already stopped */ }
@@ -405,9 +426,9 @@ export function stopAdvisorSpeech() {
   haltVoice();
 }
 
-export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () => void): Promise<ClipPlay> {
+export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () => void, owner = playbackGeneration): Promise<ClipPlay> {
   const run = playQueue.then(() => new Promise<ClipPlay>((resolve) => {
-    if (dropAudio) {
+    if (dropAudio || owner !== playbackGeneration) {
       resolve({ started: false, dropped: true, blocked: false });
       return;
     }
@@ -421,35 +442,38 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () 
       settled = true;
       window.clearTimeout(startTimer);
       window.clearTimeout(endTimer);
-      releasePlayback = null;
+      if (releasePlayback === release) releasePlayback = null;
       clipsPlaying = Math.max(0, clipsPlaying - 1);
-      if (clipsPlaying === 0) {
-        advisorSpeaking = false;
-        if (spokenAudio === audio) spokenAudio = null;
-        if (keepListening) {
-          emitVoice({ phase: "listening", error: "", listening: true, speaking: false });
-          if (result.started) {
-            restartListening?.();
-            voiceLog("resume-after-speech");
-          }
-        } else emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+      if (spokenAudio === audio) spokenAudio = null;
+      try { audio.pause(); } catch { /* already stopped */ }
+      if (!result.started) {
+        try { audio.src = ""; } catch { /* already released */ }
+      }
+      if (clipsPlaying === 0 && !result.started) advisorSpeaking = false;
+      if (clipsPlaying === 0 && owner === playbackGeneration && result.started && !result.dropped) {
+        markAdvisorSpeaking(false);
       }
       resolve(result);
     };
+    const release = () => finish({ started, dropped: true, blocked: false });
     const startTimer = window.setTimeout(() => {
-      if (!started) finish({ started: false, dropped: false, blocked: true });
+      if (started) return;
+      try { audio.pause(); } catch { /* not playing */ }
+      try { audio.src = ""; } catch { /* already released */ }
+      finish({ started: false, dropped: false, blocked: true });
     }, 6000);
     const endTimer = window.setTimeout(() => {
       try { audio.pause(); } catch { /* already stopped */ }
       finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
-    }, 25000);
-    releasePlayback = () => finish({ started, dropped: true, blocked: false });
+    }, 120000);
+    releasePlayback = release;
     audio.onended = () => finish({ started: true, dropped: false, blocked: false });
     audio.onerror = () => finish({ started: false, dropped: false, blocked: true });
     audio.play().then(() => {
-      if (dropAudio || spokenAudio !== audio) {
+      if (settled || dropAudio || owner !== playbackGeneration || spokenAudio !== audio) {
         try { audio.pause(); } catch { /* interrupted */ }
-        finish({ started: false, dropped: true, blocked: false });
+        try { audio.src = ""; } catch { /* already released */ }
+        if (!settled) finish({ started: false, dropped: true, blocked: false });
         return;
       }
       started = true;
@@ -458,6 +482,7 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () 
       markAdvisorSpeaking(true);
       voiceLog("playback-start");
     }).catch(() => {
+      if (settled) return;
       try { audio.pause(); } catch { /* not playing */ }
       finish({ started: false, dropped: false, blocked: true });
     });
@@ -467,7 +492,7 @@ export function playVoiceClip(base64: string, mime = "audio/mpeg", onStart?: () 
 }
 
 /** Speak an on-screen reply without the language model. Success is playback start, not the text itself. */
-export function speakInBrowser(line: string, onStart?: () => void): Promise<ClipPlay> {
+export function speakInBrowser(line: string, onStart?: () => void, owner = playbackGeneration): Promise<ClipPlay> {
   const text = String(line || "").trim();
   const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
   if (!text || !synth || typeof SpeechSynthesisUtterance === "undefined") {
@@ -489,7 +514,7 @@ export function speakInBrowser(line: string, onStart?: () => void): Promise<Clip
       });
       voices = speech.getVoices();
     }
-    if (generation !== browserSpeechGen) return { started: false, dropped: true, blocked: false };
+    if (generation !== browserSpeechGen || owner !== playbackGeneration) return { started: false, dropped: true, blocked: false };
     if (speech.speaking || speech.pending) speech.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "en-US";
@@ -516,7 +541,8 @@ export function speakInBrowser(line: string, onStart?: () => void): Promise<Clip
         finish(started ? { started: true, dropped: true, blocked: false } : { started: false, dropped: false, blocked: true });
       }, 20000);
       utterance.onstart = () => {
-        if (generation !== browserSpeechGen) {
+        if (generation !== browserSpeechGen || owner !== playbackGeneration) {
+          try { speech.cancel(); } catch { /* replaced */ }
           finish({ started: false, dropped: true, blocked: false });
           return;
         }
@@ -543,23 +569,9 @@ export function speakInBrowser(line: string, onStart?: () => void): Promise<Clip
 }
 
 function interruptAdvisorSpeech() {
-  dropAudio = true;
-  speakToken += 1;
-  const audio = spokenAudio;
-  spokenAudio = null;
-  if (audio) {
-    audio.onended = null;
-    audio.onerror = null;
-    try { audio.pause(); } catch { /* already stopped */ }
-  }
-  try { window.speechSynthesis?.cancel(); } catch { /* no browser voice */ }
-  advisorSpeaking = false;
-  clipsPlaying = 0;
+  invalidatePlayback();
   voiceSending = false;
-  const release = releasePlayback;
-  releasePlayback = null;
-  release?.();
-  if (keepListening) emitVoice({ phase: "listening", error: "", listening: true, speaking: false });
+  emitVoice({ phase: keepListening ? "listening" : "off", error: "", listening: keepListening, speaking: false });
 }
 
 export function startAdvisorSpeech(
@@ -778,7 +790,7 @@ export function startAdvisorSpeech(
       window.clearTimeout(voicePauseTimer);
       if (!autoSend) return;
       voicePauseTimer = window.setTimeout(() => {
-        if (!keepListening || advisorSpeaking || voiceSending) return;
+        if (!shouldCaptureSpeech({ explicitListen: keepListening, speaking: advisorSpeaking || clipsPlaying > 0, preparing: false })) return;
         if (!shouldAutoSend(true, 3000)) return;
         const raw = turnText(turn).trim();
         const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
@@ -801,12 +813,11 @@ export function startAdvisorSpeech(
     };
     heard.onend = () => {
       if (recognition === heard) pushVoiceEvent({ at: new Date().toISOString(), type: "end" });
-      if (voiceStopping || generation !== speechGeneration || !keepListening || voiceSending) return;
+      if (voiceStopping || generation !== speechGeneration || !shouldCaptureSpeech({ explicitListen: keepListening, speaking: advisorSpeaking, preparing: false }) || voiceSending) return;
       if (recognition !== heard) return;
-      const during = advisorSpeaking;
       listenTimer = window.setTimeout(() => {
-        if (voiceStopping || !keepListening || voiceSending) return;
-        armRecognition(during || advisorSpeaking);
+        if (voiceStopping || !shouldCaptureSpeech({ explicitListen: keepListening, speaking: advisorSpeaking || clipsPlaying > 0, preparing: false }) || voiceSending) return;
+        armRecognition(false);
       }, 200);
     };
     recognition = heard;
@@ -847,8 +858,8 @@ export function startAdvisorSpeech(
     }, 500);
   };
   listenDuringSpeech = () => {
-    if (!keepListening) return;
-    armRecognition(true);
+    try { recognition?.abort?.(); } catch { /* the reply is not a command */ }
+    recognition = null;
   };
   restartListening = () => {
     if (!keepListening || advisorSpeaking) return;
@@ -1128,28 +1139,25 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   function cancelPlayback() {
     playbackToken.current += 1;
-    dropAudio = true;
-    speakToken += 1;
-    browserSpeechGen += 1;
-    try { spokenAudio?.pause(); } catch { /* already stopped */ }
-    try { window.speechSynthesis?.cancel(); } catch { /* no browser voice */ }
-    releasePlayback?.();
-    advisorSpeaking = false;
+    invalidatePlayback();
     setPlayingReply(false);
     setPlaybackNote("");
-    if (phaseRef.current === "speaking") emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+    setSpeaking(false);
+    emitVoice({ phase: "off", error: "", listening: false, speaking: false });
   }
 
   async function replaySpoken() {
     const line = playableLine || lastSpokenLine;
     if (!line || playingReply) return;
     const mine = ++playbackToken.current;
+    invalidatePlayback();
     dropAudio = false;
+    const owner = playbackGeneration;
     setPlayingReply(false);
     setPlaybackNote("Preparing the reply…");
     setError("");
     const markStarted = () => {
-      if (mine !== playbackToken.current) return;
+      if (mine !== playbackToken.current || owner !== playbackGeneration) return;
       setPlayingReply(true);
       setPlaybackNote("");
     };
@@ -1157,20 +1165,21 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       const result = await playStoredReply({
         line,
         speakServer: async (text) => {
+          if (owner !== playbackGeneration) return { started: false, dropped: true, blocked: false };
           const spoken = await speakAssistant({ data: { slug: desk.slug, code, text } }).catch((error: unknown) => ({
             ok: false as const,
             error: error instanceof Error ? error.message : "No spoken audio came back. Press Play reply.",
           }));
-          if (mine !== playbackToken.current) return { started: false, dropped: true, blocked: false };
+          if (mine !== playbackToken.current || owner !== playbackGeneration) return { started: false, dropped: true, blocked: false };
           if (spoken && "audio" in spoken && spoken.ok && spoken.audio) {
             const clip = { audio: spoken.audio, mime: spoken.mime || "audio/mpeg" };
             replayClips.current = [clip];
-            return playVoiceClip(clip.audio, clip.mime, markStarted);
+            return playVoiceClip(clip.audio, clip.mime, markStarted, owner);
           }
           const error = spoken && "error" in spoken ? String(spoken.error || "") : "No spoken audio came back. Press Play reply.";
           return { started: false, dropped: false, blocked: true, error };
         },
-        speakBrowser: (text) => speakInBrowser(text, markStarted),
+        speakBrowser: (text) => owner === playbackGeneration ? speakInBrowser(text, markStarted, owner) : Promise.resolve({ started: false, dropped: true, blocked: false }),
       });
       if (mine !== playbackToken.current) return;
       setPlayableLine(line);
@@ -1183,7 +1192,10 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   }
 
   async function askByVoice(content: string, id: number, mine: number, confirmed = false) {
+    invalidatePlayback();
     dropAudio = false;
+    const owner = playbackGeneration;
+    pendingVoice.current = [];
     setTurns((current) => [...current, { role: "assistant", content: "", at: new Date().toISOString() }]);
     const clips: Array<{ audio: string; mime: string }> = [];
     const pending: Promise<ClipPlay>[] = [];
@@ -1195,6 +1207,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       const outcomes = await Promise.all(pending);
       return {
         played: voiceAudible(outcomes),
+        started: outcomes.some((item) => item.started),
         blocked: outcomes.some((item) => item.blocked),
         dropped: outcomes.some((item) => item.dropped),
       };
@@ -1245,7 +1258,11 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           } else if (event.type === "audio" && event.audio) {
             const clip = { audio: event.audio, mime: event.mime || "audio/mpeg" };
             clips.push(clip);
-            pending.push(playVoiceClip(clip.audio, clip.mime));
+            pending.push(playVoiceClip(clip.audio, clip.mime, () => {
+              if (owner !== playbackGeneration) return;
+              setPlayingReply(true);
+              setPlaybackNote("");
+            }, owner));
           } else if (event.type === "error") {
             const playback = await settled();
             return { ok: false as const, error: event.error || "The assistant could not answer.", ...playback, accepted: true as const, clips, ttsError, reply: event.error || reply };
@@ -1310,6 +1327,10 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   function hear(text: string) {
     voiceSending = false;
     keepListening = false;
+    window.clearTimeout(listenTimer);
+    window.clearTimeout(voicePauseTimer);
+    try { recognition?.abort?.(); } catch { /* the command is already captured */ }
+    recognition = null;
     setListening(false);
     setSpeaking(false);
     onVoice?.({ listening: false, speaking: false });
@@ -1390,8 +1411,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       const result = readAssistantAnswer(streamed || await askAssistant({ data: { slug: desk.slug, code, chatId: id, page: pageCue, transcriptConfirmed: Boolean(options?.confirmed), activeNewsletterId: activeNewsletterId.current, messages: [{ role: "user", content }] } }));
       if (mine !== generation.current) return;
       if (spoken) setText("");
-      const played = Boolean(streamed && "played" in streamed && streamed.played);
-      const clips = streamed && "clips" in streamed && Array.isArray(streamed.clips) ? streamed.clips : [];
+      busyRef.current = false;
+      setBusy(false);
+      const started = Boolean(streamed && "started" in streamed && streamed.started);
       const showReply = (line: string) => {
         const playable = playableReplyLine(line, content);
         if (playable) {
@@ -1404,39 +1426,41 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         showReply(line);
         voiceSending = false;
         keepListening = false;
+        window.clearTimeout(listenTimer);
+        try { recognition?.abort?.(); } catch { /* already closed */ }
+        recognition = null;
         setListening(false);
-        setSpeaking(false);
-        onVoice?.({ listening: false, speaking: false });
-        emitVoice({ phase: "off", error: "", listening: false, speaking: false });
         if (!spoken || !playableReplyLine(line, content)) return;
-        if (played) {
-          setPlaybackNote("");
+        if (started) {
           setPlayingReply(false);
           return;
         }
-        setPlayingReply(false);
+        const minePlay = ++playbackToken.current;
+        invalidatePlayback();
+        dropAudio = false;
+        const owner = playbackGeneration;
         setPlaybackNote("Preparing the reply…");
-        const mine = ++playbackToken.current;
         const markStarted = () => {
-          if (mine !== playbackToken.current) return;
+          if (minePlay !== playbackToken.current || owner !== playbackGeneration) return;
           setPlayingReply(true);
           setPlaybackNote("");
         };
         const outcome = await playStoredReply({
           line: playableReplyLine(line, content),
-          speakServer: async () => {
-            if (clips.length) {
-              const outcomes: ClipPlay[] = [];
-              for (const clip of clips) outcomes.push(await playVoiceClip(clip.audio, clip.mime, markStarted));
-              if (voiceAudible(outcomes)) return outcomes[0];
-              const detail = streamed && typeof streamed === "object" ? streamed as { ttsError?: string } : {};
-              return { started: false, dropped: outcomes.some((item) => item.dropped), blocked: outcomes.some((item) => item.blocked), error: detail.ttsError || "" };
-            }
-            return { started: false, dropped: false, blocked: true, error: "No spoken audio came back. Press Play reply." };
+          speakServer: async (text) => {
+            if (owner !== playbackGeneration) return { started: false, dropped: true, blocked: false };
+            const audio = await speakAssistant({ data: { slug: desk.slug, code, text } }).catch((error: unknown) => ({
+              ok: false as const,
+              error: error instanceof Error ? error.message : "No spoken audio came back. Press Play reply.",
+            }));
+            if (owner !== playbackGeneration) return { started: false, dropped: true, blocked: false };
+            if (audio && "audio" in audio && audio.ok && audio.audio) return playVoiceClip(audio.audio, audio.mime || "audio/mpeg", markStarted, owner);
+            const error = audio && "error" in audio ? String(audio.error || "") : "No spoken audio came back. Press Play reply.";
+            return { started: false, dropped: false, blocked: true, error };
           },
-          speakBrowser: (text) => speakInBrowser(text, markStarted),
+          speakBrowser: (text) => owner === playbackGeneration ? speakInBrowser(text, markStarted, owner) : Promise.resolve({ started: false, dropped: true, blocked: false }),
         });
-        if (mine === playbackToken.current) {
+        if (minePlay === playbackToken.current) {
           setPlayingReply(false);
           setPlaybackNote(outcome.spoke && !outcome.usedBrowser ? "" : outcome.note);
         }
@@ -1450,7 +1474,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
           setError("");
         } else failed(failure || "Sorry, something went wrong — please try again.");
         await offerSpeech(failure || String(result?.reply || ""));
-        resumeAdvisorListening();
       } else if (!result.reply?.trim()) {
         failed("Sorry, something went wrong — please try again.");
       } else {
@@ -1520,7 +1543,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   askRef.current = ask;
 
   function listen() {
-    if (hearing || listening || speaking || advisorVoiceOn()) {
+    if (hearing || listening || speaking || playingReply || advisorVoiceOn()) {
+      pendingVoice.current = [];
+      generation.current += 1;
+      busyRef.current = false;
+      setBusy(false);
+      cancelPlayback();
       stopAdvisorSpeech();
       return;
     }
@@ -1630,6 +1658,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     busyRef.current = false;
     lastQuestion.current = "";
     setBusy(false);
+    cancelPlayback();
+    stopAdvisorSpeech();
     setRulesOpen(false);
     setText("");
     setHeard("");
@@ -1764,11 +1794,15 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   const linkedPreviewIds = new Set(turns.flatMap((turn) => (turn.previews || []).map((item) => item.id)));
   const trayActions = actions.filter((item) => trayOffers(item, linkedPreviewIds));
-  const liveState = voicePhase === "listening" || voicePhase === "speaking"
-    ? voiceLabel(voicePhase, "")
-    : busy || voicePhase === "processing"
-      ? "Thinking"
-      : "";
+  const liveState = playingReply || voicePhase === "speaking"
+    ? "Speaking"
+    : voicePhase === "listening"
+      ? voiceLabel(voicePhase, "")
+      : playbackNote
+        ? ""
+        : busy || voicePhase === "processing"
+          ? "Thinking"
+          : "";
   const historyPane = (drawer: boolean) => (
     <aside className={drawer ? "ua-assist-list ua-history-drawer" : "ua-assist-list"} aria-label="Previous chats" onClick={drawer ? (event) => event.stopPropagation() : undefined}>
       <p className="ua-assist-head">Previous chats</p>
