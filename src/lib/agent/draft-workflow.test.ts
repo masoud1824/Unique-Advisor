@@ -7,7 +7,8 @@ import { decideTranscript } from "../transcript-guard.ts";
 import { beginPlayback, browserFallbackAllowed, emptyPlayback, shouldResumeAfterSpeech, stopPlayback } from "../voice-desk.ts";
 import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftScope } from "./draft-agent.ts";
 import { fillMappedDraft } from "./equitable-draft.ts";
-import { acceptSuppliedFacts, missingQuestions, SIGNATURE_FIELDS } from "./equitable-fields.ts";
+import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "./assistant-capabilities.ts";
+import { acceptSuppliedFacts, missingQuestions, providerMapping, SIGNATURE_FIELDS } from "./equitable-fields.ts";
 import { bareApprovalSpeech, echoesAssistantReply, explicitReplayRunsTools, phaseAfterStop, sameTurnGuard, speechAuthorizesAction } from "./voice-bridge.ts";
 
 const SOURCE = readFileSync(new URL("./draft-agent.ts", import.meta.url), "utf8");
@@ -144,8 +145,11 @@ describe("equitable draft agent", () => {
   });
 
   it("rejects another advisor, a tampered payload, a repeated approval, and a denial", async () => {
+    const bytes = new Uint8Array(await readFile("/tmp/eq-form/671BCF.pdf"));
     const store = new MemoryDraftStore();
-    const owner = scope("7", "staging-practice");
+    const owner = scope("7", "staging-practice", {
+      loadForm: async () => ({ ok: true, title: "Beneficiary Change Request Form (671BCF)", href: "https://advisor.equitable.ca/671BCF.pdf", bytes, notice: "671BCF" }),
+    });
     const opened = await runDraftTurn({
       store,
       scope: owner,
@@ -153,6 +157,7 @@ describe("equitable draft agent", () => {
       source: "typed",
       runId: "save",
       model: new ScriptedModel([
+        [functionCall("inspect_form", { query: "Equitable 671BCF" }, { callId: "i" })],
         [functionCall("load_client", { clientName: "Avery Example" }, { callId: "c" })],
         [functionCall("record_facts", { beneficiaryName: "Riley Example", relationship: "sibling", sharePercent: "100", designation: "named", trustee: "none" }, { callId: "r" })],
         [functionCall("propose_dropbox_save", { destination: "/Assistant Test/Avery Example/671BCF.pdf" }, { callId: "s" })],
@@ -202,8 +207,11 @@ describe("equitable draft agent", () => {
   });
 
   it("denies a save, resumes after a new store instance, and does not call the model for a spoken yes", async () => {
+    const bytes = new Uint8Array(await readFile("/tmp/eq-form/671BCF.pdf"));
     const first = new MemoryDraftStore();
-    const owner = scope("7", "staging-practice");
+    const owner = scope("7", "staging-practice", {
+      loadForm: async () => ({ ok: true, title: "Beneficiary Change Request Form (671BCF)", href: "https://advisor.equitable.ca/671BCF.pdf", bytes, notice: "671BCF" }),
+    });
     const opened = await runDraftTurn({
       store: first,
       scope: owner,
@@ -211,6 +219,7 @@ describe("equitable draft agent", () => {
       source: "voice",
       runId: "resume",
       model: new ScriptedModel([
+        [functionCall("inspect_form", { query: "Equitable 671BCF" }, { callId: "i" })],
         [functionCall("load_client", { clientName: "Avery Example" }, { callId: "c" })],
         [functionCall("record_facts", { beneficiaryName: "Riley Example", relationship: "sibling", sharePercent: "100", designation: "named", trustee: "none" }, { callId: "r" })],
         [functionCall("propose_dropbox_save", { destination: "/Assistant Test/Avery Example/671BCF.pdf" }, { callId: "s" })],
@@ -241,6 +250,33 @@ describe("equitable draft agent", () => {
     });
     assert.equal(denied.code, "denied");
     assert.match(denied.reply, /Nothing was uploaded/);
+  });
+
+  it("names the assistant and keeps other advisor tasks unavailable", async () => {
+    assert.equal(ASSISTANT_NAME, "Unique Advisor AI Assistant");
+    assert.equal(providerMapping("Beneficiary Change Request Form (671BCF)", "https://advisor.equitable.ca/671BCF.pdf"), "671BCF");
+    assert.equal(providerMapping("Canada Life change form", "https://www.canadalife.com/form.pdf"), "");
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "newsletters" && item.status === "not-available"));
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "scheduling" && item.status === "not-available"));
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "client-reviews" && item.status === "not-available"));
+    assert.match(SOURCE, /Unique Advisor AI Assistant/);
+    assert.doesNotMatch(SOURCE, /name: "Equitable draft manager"/);
+    const unmapped = await runDraftTurn({
+      store: new MemoryDraftStore(),
+      scope: scope("7", "staging-practice", {
+        loadForm: async () => ({ ok: true, title: "Canada Life change form", href: "https://www.canadalife.com/form.pdf", bytes: new Uint8Array([1, 2, 3]), notice: "Canada Life change form" }),
+      }),
+      request: "Find the Canada Life form.",
+      source: "typed",
+      runId: "other-form",
+      model: new ScriptedModel([
+        [functionCall("inspect_form", { query: "Canada Life" }, { callId: "other" })],
+        [assistantMessage("I found the form. A field mapping is not available, so nothing was filled.")],
+      ]),
+    });
+    assert.equal(unmapped.preview, false);
+    assert.equal(unmapped.formHref, "https://www.canadalife.com/form.pdf");
+    assert.deepEqual(unmapped.readBack, {});
   });
 
   it("reports a tool failure instead of a successful save", async () => {

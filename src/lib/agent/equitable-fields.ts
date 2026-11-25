@@ -3,6 +3,11 @@ import { createHash } from "node:crypto";
 export const FORM_CODE = "671BCF";
 export const FORM_TITLE = "Beneficiary Change Request Form (671BCF)";
 
+/** Equitable 671BCF is the only fill mapping. Other providers stay unfilled. */
+export function providerMapping(title: string, href: string) {
+  return /671bcf/i.test(`${title} ${href}`) ? FORM_CODE : "";
+}
+
 /** Signature and witness lines. These are never written. */
 export const SIGNATURE_FIELDS = [
   "Name of Policy Owner",

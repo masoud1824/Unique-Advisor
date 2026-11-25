@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { transcribeAssistant } from "@/lib/assistant.functions";
+import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "@/lib/agent/assistant-capabilities";
 import { echoesAssistantReply, phaseAfterStop, sameTurnGuard, type VoicePhase } from "@/lib/agent/voice-bridge";
 import { decideTranscript, microphoneTestReport, transcriptionPrompt } from "@/lib/transcript-guard";
 import { beginPlayback, browserFallbackAllowed, emptyPlayback, shouldCaptureSpeech, shouldResumeAfterSpeech, stopPlayback, type PlaybackState } from "@/lib/voice-desk";
@@ -333,6 +334,11 @@ function AgentPreview() {
         .agent-preview { min-height: 100vh; box-sizing: border-box; padding: 16px; background: #f4f1ea; color: #1d1b16; font: 16px/1.45 Georgia, serif; }
         .agent-preview * { box-sizing: border-box; }
         .agent-preview h1 { font-size: 1.3rem; margin: 0 0 4px; }
+        .agent-preview .eyebrow { margin: 0; font: 600 0.75rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6458; }
+        .agent-preview .caps { background: white; border: 1px solid #d9d2c5; border-radius: 12px; padding: 8px 12px; margin: 8px 0 12px; }
+        .agent-preview .caps li { margin: 4px 0; }
+        .agent-preview .testing { color: #6a4b16; }
+        .agent-preview .unavailable { color: #6b6458; }
         .agent-preview .status { font-weight: 700; text-transform: capitalize; }
         .agent-preview .note { color: #8a2b1f; min-height: 1.2em; }
         .agent-preview .log { background: white; border: 1px solid #d9d2c5; border-radius: 12px; min-height: 180px; max-height: 36vh; overflow: auto; padding: 12px; }
@@ -342,8 +348,15 @@ function AgentPreview() {
         .agent-preview iframe { width: 100%; height: 480px; border: 1px solid #d9d2c5; background: white; }
         .agent-preview .you { color: #3d4a3a; }
       `}</style>
-      <p>Agent preview. The desk is unchanged. Nothing is emailed, booked, or uploaded.</p>
-      <h1>Equitable draft</h1>
+      <p className="eyebrow">Agent Preview</p>
+      <h1>{ASSISTANT_NAME}</h1>
+      <ul className="caps">
+        {ASSISTANT_CAPABILITIES.map((item) => (
+          <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
+            <strong>{item.status === "testing" ? "Testing" : "Not available"}: </strong>{item.label}. {item.note}
+          </li>
+        ))}
+      </ul>
       <p className="status" aria-live="polite">{phase === "idle" ? "Idle" : phase}</p>
       <p className="note" aria-live="polite">{note}</p>
       <div className="row">
@@ -356,7 +369,7 @@ function AgentPreview() {
           </p>
         ))}
       </div>
-      <textarea aria-label="Typed request" value={text} onChange={(event) => setText(event.target.value)} placeholder="Type a request. Voice uses this same draft." />
+      <textarea aria-label="Typed request" value={text} onChange={(event) => setText(event.target.value)} placeholder="Type a request. Voice uses the same assistant." />
       <div className="row">
         <button type="button" onClick={() => void send(text, "typed")}>Send</button>
         <button type="button" onClick={() => void listen()}>Voice command</button>

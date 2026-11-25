@@ -37,6 +37,7 @@ export function ensurePreviewTables(sql: Sql) {
       tool_trace jsonb not null default '[]'::jsonb,
       form_title text not null default '',
       form_href text not null default '',
+      form_code text not null default '',
       read_back jsonb not null default '{}'::jsonb,
       stale_hashes jsonb not null default '[]'::jsonb,
       slug text not null default '',
@@ -44,6 +45,7 @@ export function ensurePreviewTables(sql: Sql) {
       updated_at timestamptz not null default now()
     );
     create index if not exists agent_preview_runs_advisor_idx on agent_preview_runs (advisor_id, updated_at desc);
+    alter table agent_preview_runs add column if not exists form_code text not null default '';
     create table if not exists agent_form_templates (
       form_code text primary key,
       source_url text not null default '',
@@ -94,7 +96,7 @@ function asJson<T>(value: unknown, fallback: T): T {
 async function readRun(sql: Sql, advisorId: number, runId: string): Promise<DraftRecord | null> {
   const rows = await sql.query<Record<string, unknown>>(
     `select id, advisor_id, slug, messages, facts, pending, consumed_hashes, stale_hashes, approval_status,
-            serialized, pdf, template_pdf, tool_trace, form_title, form_href, read_back
+            serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, read_back
      from agent_preview_runs where id = $1 and advisor_id = $2`,
     [runId, advisorId],
   );
@@ -116,6 +118,7 @@ async function readRun(sql: Sql, advisorId: number, runId: string): Promise<Draf
     readBack: asJson(row.read_back, {}),
     formTitle: String(row.form_title || ""),
     formHref: String(row.form_href || ""),
+    formCode: String(row.form_code || ""),
     toolTrace: asJson(row.tool_trace, []),
     dropboxConnected: false,
     dropboxUploaded: false,
@@ -126,8 +129,8 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
   await sql.query(
     `insert into agent_preview_runs
       (id, advisor_id, slug, status, messages, facts, pending, consumed_hashes, stale_hashes, approval_status,
-       serialized, pdf, template_pdf, tool_trace, form_title, form_href, read_back, updated_at)
-     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17::jsonb, now())
+       serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, read_back, updated_at)
+     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18::jsonb, now())
      on conflict (id) do update set
        status = excluded.status,
        messages = excluded.messages,
@@ -142,6 +145,7 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
        tool_trace = excluded.tool_trace,
        form_title = excluded.form_title,
        form_href = excluded.form_href,
+       form_code = excluded.form_code,
        read_back = excluded.read_back,
        updated_at = now()
      where agent_preview_runs.advisor_id = excluded.advisor_id`,
@@ -162,6 +166,7 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
       JSON.stringify(record.toolTrace),
       record.formTitle,
       record.formHref,
+      record.formCode,
       JSON.stringify(record.readBack),
     ],
   );
