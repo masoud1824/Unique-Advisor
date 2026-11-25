@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { transcribeAssistant } from "@/lib/assistant.functions";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "@/lib/agent/assistant-capabilities";
 import { echoesAssistantReply, phaseAfterStop, sameTurnGuard, type VoicePhase } from "@/lib/agent/voice-bridge";
@@ -26,6 +26,32 @@ type Turn = {
   code?: string;
 };
 type Line = { role: "user" | "assistant"; text: string };
+type AuthState = "locked" | "checking" | "open" | "error";
+
+const fieldStyle = {
+  display: "block",
+  width: "100%",
+  maxWidth: "36rem",
+  boxSizing: "border-box" as const,
+  border: "1px solid #8a8175",
+  background: "#fff",
+  color: "#1d1b16",
+  borderRadius: 8,
+  padding: "10px 12px",
+  minHeight: 44,
+  font: "16px/1.4 Georgia, serif",
+};
+const buttonStyle = {
+  appearance: "auto" as const,
+  border: "1px solid #14324f",
+  borderRadius: 8,
+  background: "#14324f",
+  color: "#fff",
+  padding: "10px 16px",
+  minHeight: 44,
+  font: "600 16px/1 system-ui, sans-serif",
+  cursor: "pointer",
+};
 
 const NAMES = ["Avery Example", "Blake Example"];
 
@@ -37,6 +63,7 @@ function AgentPreview() {
   const { slug } = Route.useParams();
   const [code, setCode] = useState("");
   const [sessionToken, setSessionToken] = useState("");
+  const [auth, setAuth] = useState<AuthState>("locked");
   const [text, setText] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [phase, setPhase] = useState<VoicePhase>("idle");
@@ -141,6 +168,43 @@ function AgentPreview() {
     window.speechSynthesis.speak(utter);
   }
 
+  async function openAssistant(event?: FormEvent) {
+    event?.preventDefault();
+    if (!code.trim()) {
+      setAuth("error");
+      setNote("Enter the advisor access code, then press Open assistant.");
+      return;
+    }
+    setAuth("checking");
+    setNote("Checking the access code…");
+    try {
+      const response = await fetch("/api/agent/turn", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug, code, sessionToken, intent: "open" }),
+      });
+      const result = (await response.json()) as Turn;
+      if (!response.ok || result.ok === false) {
+        setSessionToken("");
+        setAuth("error");
+        setNote(result.error || result.reason || "That access code is not right.");
+        return;
+      }
+      if (result.sessionToken) setSessionToken(result.sessionToken);
+      setAuth("open");
+      setNote("Signed in. Type a request and press Send.");
+    } catch {
+      setAuth("error");
+      setNote("The access code could not be checked. Nothing was changed.");
+    }
+  }
+
+  function onRequestKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void send(text, "typed");
+  }
+
   async function send(message: string, source: "typed" | "voice") {
     const clean = message.replace(/\s+/g, " ").trim();
     const guard = sameTurnGuard({ busy: busyRef.current, previous: lastSent.current.text, text: clean, elapsedMs: Date.now() - lastSent.current.at });
@@ -148,8 +212,8 @@ function AgentPreview() {
       if (guard.reason === "duplicate") setNote("That was already sent. I did not run it again.");
       return;
     }
-    if (!code.trim()) {
-      setNote("Enter the access code first. You can still type the request.");
+    if (auth !== "open") {
+      setNote("The request box is locked until the access code is accepted.");
       return;
     }
     busyRef.current = true;
@@ -344,12 +408,45 @@ function AgentPreview() {
         .agent-preview .log { background: white; border: 1px solid #d9d2c5; border-radius: 12px; min-height: 180px; max-height: 36vh; overflow: auto; padding: 12px; }
         .agent-preview .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
         .agent-preview button, .agent-preview textarea, .agent-preview input { font: inherit; }
-        .agent-preview textarea { width: 100%; min-height: 64px; }
+        .agent-preview input, .agent-preview textarea { display: block; width: 100%; max-width: 36rem; border: 1px solid #8a8175; background: #fff; color: #1d1b16; border-radius: 8px; padding: 10px 12px; min-height: 44px; }
+        .agent-preview textarea { min-height: 96px; }
+        .agent-preview button { appearance: auto; border: 1px solid #14324f; border-radius: 8px; background: #14324f; color: #fff; padding: 10px 16px; min-height: 44px; }
+        .agent-preview button:disabled, .agent-preview textarea:disabled, .agent-preview input:disabled { opacity: 0.7; }
+        .agent-preview label { display: block; font-weight: 700; margin: 10px 0 4px; }
         .agent-preview iframe { width: 100%; height: 480px; border: 1px solid #d9d2c5; background: white; }
         .agent-preview .you { color: #3d4a3a; }
       `}</style>
       <p className="eyebrow">Agent Preview</p>
       <h1>{ASSISTANT_NAME}</h1>
+      <p className="status" role="status">{auth === "checking" ? "Checking the access code" : auth === "open" ? "Signed in" : auth === "error" ? "Access code was not accepted" : "Locked"}</p>
+      <p className="status" aria-live="polite">{phase === "idle" ? "Idle" : phase}</p>
+      <p className="note" aria-live="polite">{note}</p>
+      <form aria-label="Advisor access" onSubmit={(event) => void openAssistant(event)}>
+        <label htmlFor="advisor-access-code">Advisor access code</label>
+        <input
+          id="advisor-access-code"
+          name="advisor-access-code"
+          aria-label="Advisor access code"
+          aria-invalid={auth === "error"}
+          placeholder="Advisor access code"
+          value={code}
+          onChange={(event) => {
+            setCode(event.target.value);
+            if (auth === "open") {
+              setSessionToken("");
+              setAuth("locked");
+              setNote("The code changed. Press Open assistant again.");
+            }
+          }}
+          type="password"
+          autoComplete="current-password"
+          style={fieldStyle}
+        />
+        <div className="row">
+          <button type="submit" style={buttonStyle} disabled={auth === "checking"}>{auth === "checking" ? "Checking…" : "Open assistant"}</button>
+        </div>
+      </form>
+      <p>{auth === "open" ? "The request box is ready." : "The request box is locked until the access code is accepted."}</p>
       <ul className="caps">
         {ASSISTANT_CAPABILITIES.map((item) => (
           <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
@@ -357,11 +454,6 @@ function AgentPreview() {
           </li>
         ))}
       </ul>
-      <p className="status" aria-live="polite">{phase === "idle" ? "Idle" : phase}</p>
-      <p className="note" aria-live="polite">{note}</p>
-      <div className="row">
-        <input aria-label="Access code" placeholder="Access code" value={code} onChange={(event) => setCode(event.target.value)} type="password" />
-      </div>
       <div className="log" aria-live="polite">
         {lines.map((line, index) => (
           <p key={index} className={line.role === "user" ? "you" : ""}>
@@ -369,15 +461,18 @@ function AgentPreview() {
           </p>
         ))}
       </div>
-      <textarea aria-label="Typed request" value={text} onChange={(event) => setText(event.target.value)} placeholder="Type a request. Voice uses the same assistant." />
-      <div className="row">
-        <button type="button" onClick={() => void send(text, "typed")}>Send</button>
-        <button type="button" onClick={() => void listen()}>Voice command</button>
-        <button type="button" onClick={() => void finishRef.current?.()}>Done speaking</button>
-        <button type="button" onClick={() => { cancelListen.current = true; finishRef.current = null; stopAll(); }}>Stop</button>
-        <button type="button" onClick={() => void testMic()}>Test mic</button>
-        <button type="button" onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
-      </div>
+      <form aria-label="Request" onSubmit={(event) => { event.preventDefault(); void send(text, "typed"); }}>
+        <label htmlFor="agent-request">Request</label>
+        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request. Voice uses the same assistant." style={fieldStyle} />
+        <div className="row">
+          <button type="submit" style={buttonStyle} disabled={auth !== "open"}>Send</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void listen()}>Voice command</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void finishRef.current?.()}>Done speaking</button>
+          <button type="button" style={buttonStyle} onClick={() => { cancelListen.current = true; finishRef.current = null; stopAll(); }}>Stop</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void testMic()}>Test mic</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
+        </div>
+      </form>
       {missing.length > 0 && (
         <section>
           <h2>Still needed</h2>

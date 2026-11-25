@@ -39,13 +39,19 @@ export const ASSISTANT_CAPABILITIES: AssistantCapability[] = [
     id: "newsletters",
     label: "Newsletters",
     status: "not-available",
-    note: "Newsletters are not available in this preview.",
+    note: "Newsletters are not available in this preview. Nothing is sent.",
   },
   {
     id: "scheduling",
     label: "Scheduling",
     status: "not-available",
-    note: "Scheduling is not available in this preview. Nothing is booked.",
+    note: "Scheduling, calendars, and Zoom are not available in this preview. Nothing is booked.",
+  },
+  {
+    id: "email",
+    label: "Read mail and draft replies",
+    status: "not-available",
+    note: "Mailbox access is not connected. Nothing is read or sent. A later milestone must use the advisor's own Microsoft or Google account, and a draft is not a send.",
   },
   {
     id: "approved-save",

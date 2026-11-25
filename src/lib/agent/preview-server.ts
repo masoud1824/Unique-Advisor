@@ -226,7 +226,19 @@ type Body = {
   decision?: string;
   payload?: DraftPayload;
   line?: string;
+  intent?: string;
 };
+
+export async function previewOpen(body: Body) {
+  const gate = await gateAdvisor(body.slug || "", body.code || "", body.sessionToken || "");
+  if (!gate.ok) return { ok: false as const, calledModel: false as const, error: gate.error };
+  return {
+    ok: true as const,
+    calledModel: false as const,
+    sessionToken: gate.sessionToken,
+    reply: "Signed in. Type a request and press Send.",
+  };
+}
 
 async function openScope(body: Body) {
   const gate = await gateAdvisor(body.slug || "", body.code || "", body.sessionToken || "");
@@ -249,6 +261,7 @@ function publicResult(result: Awaited<ReturnType<typeof runDraftTurn>>, sessionT
 }
 
 export async function previewTurn(body: Body) {
+  if (body.intent === "open") return previewOpen(body);
   const opened = await openScope(body);
   if (!opened.ok) return opened;
   const model = await serverModel();

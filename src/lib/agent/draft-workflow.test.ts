@@ -8,6 +8,7 @@ import { beginPlayback, browserFallbackAllowed, emptyPlayback, shouldResumeAfter
 import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftScope } from "./draft-agent.ts";
 import { fillMappedDraft } from "./equitable-draft.ts";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "./assistant-capabilities.ts";
+import { AGENT_ROADMAP } from "./roadmap.ts";
 import { acceptSuppliedFacts, missingQuestions, providerMapping, SIGNATURE_FIELDS } from "./equitable-fields.ts";
 import { bareApprovalSpeech, echoesAssistantReply, explicitReplayRunsTools, phaseAfterStop, sameTurnGuard, speechAuthorizesAction } from "./voice-bridge.ts";
 
@@ -258,7 +259,11 @@ describe("equitable draft agent", () => {
     assert.equal(providerMapping("Canada Life change form", "https://www.canadalife.com/form.pdf"), "");
     assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "newsletters" && item.status === "not-available"));
     assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "scheduling" && item.status === "not-available"));
-    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "client-reviews" && item.status === "not-available"));
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "email" && item.status === "not-available"));
+    const email = AGENT_ROADMAP.find((item) => item.id === "email");
+    assert.equal(email?.status, "not-implemented");
+    assert.match(email?.requirements.join(" ") || "", /draft is not a send/);
+    assert.match(email?.requirements.join(" ") || "", /must not mark it read/);
     assert.match(SOURCE, /Unique Advisor AI Assistant/);
     assert.doesNotMatch(SOURCE, /name: "Equitable draft manager"/);
     const unmapped = await runDraftTurn({
