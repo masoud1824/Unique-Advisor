@@ -381,7 +381,40 @@ export type DraftTurn = {
   dropbox: { connected: boolean; uploaded: false; reason: string };
   unsigned: true;
   code?: string;
+  usage?: MeasuredUsage;
 };
+
+export type MeasuredUsage = {
+  requestedModel: string;
+  returnedModel: string;
+  inputTokens: number;
+  outputTokens: number;
+  requestIds: string[];
+  source: "provider" | "unavailable";
+};
+
+export function readRunUsage(result: { rawResponses?: Array<{ usage?: { inputTokens?: number; outputTokens?: number }; requestId?: string; providerData?: { model?: string } }> }, requestedModel: string): MeasuredUsage {
+  const responses = result.rawResponses || [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const requestIds: string[] = [];
+  const models: string[] = [];
+  for (const response of responses) {
+    inputTokens += Number(response.usage?.inputTokens || 0);
+    outputTokens += Number(response.usage?.outputTokens || 0);
+    if (response.requestId) requestIds.push(response.requestId);
+    const model = String(response.providerData?.model || "");
+    if (model) models.push(model);
+  }
+  return {
+    requestedModel,
+    returnedModel: models.at(-1) || "",
+    inputTokens,
+    outputTokens,
+    requestIds,
+    source: inputTokens + outputTokens > 0 ? "provider" : "unavailable",
+  };
+}
 
 const NOT_UPLOADED = "Dropbox is not connected. Nothing was uploaded.";
 
@@ -424,6 +457,7 @@ export async function runDraftTurn(input: {
   request: string;
   source: "typed" | "voice";
   model: Model;
+  requestedModel?: string;
   runId: string;
 }): Promise<DraftTurn> {
   const request = String(input.request || "").replace(/\s+/g, " ").trim();
@@ -482,7 +516,7 @@ export async function runDraftTurn(input: {
   }
   existing.messages.push({ role: "assistant", text: reply, source: "system" });
   input.store.save(existing);
-  return view(existing, { calledModel: true, reply });
+  return view(existing, { calledModel: true, reply, usage: readRunUsage(result, input.requestedModel || "") });
 }
 
 function approvalFrom(interruption: { rawItem?: unknown }, record: DraftRecord): DraftApproval {

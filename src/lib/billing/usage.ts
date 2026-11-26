@@ -1,121 +1,101 @@
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 
-/** Test commercial settings. These are not a published price and do not charge a card. */
-export const TEST_FX_NOTE = "Test conversion only: 1 USD = 1.40 CAD. This is not a live exchange rate.";
-export const TEST_TAX_NOTE = "Test tax only: 13% labelled as HST. This is not a filed tax charge.";
-
-export const TEST_RATES = {
-  label: "Test metering rates, not an OpenAI price list",
-  textInputUsdMicrosPerMillion: 2_500_000,
-  textOutputUsdMicrosPerMillion: 10_000_000,
-  speechUsdMicrosPerMillionChars: 15_000_000,
-  toolUsdMicros: 10_000,
-  jobUsdMicros: 20_000,
-};
+/** Published commercial settings. Prices, currency, and allowances stay unset until Masoud approves them. */
+export const TEST_TAX_NOTE = "Tax is not configured.";
 
 export type PlanDocument = {
   version: number;
   id: string;
   label: string;
-  currency: "CAD";
-  subscriptionCadCents: number;
-  includedUsdMicros: number;
+  pricesApproved: boolean;
+  currency: "CAD" | null;
+  baseWithoutAiCadCents: number | null;
+  subscriptionCadCents: number | null;
+  includedTokens: number;
   packId: string;
-  packCadCents: number;
-  packUsdMicros: number;
+  packCadCents: number | null;
+  packTokens: number;
   packValidityDays: number;
-  taxRate: number;
+  taxRate: number | null;
   warnAt: number[];
   formFill: false;
+  premiumModel: false;
   effectiveAt: string;
 };
 
+/** The plan the app serves. It contains no price, currency, or top-up offer. */
 export const TEST_PLAN: PlanDocument = {
   version: 1,
-  id: "ua-v1-test",
-  label: "TEST PLAN — not a final subscription price",
-  currency: "CAD",
-  subscriptionCadCents: 2500,
-  includedUsdMicros: 6_000_000,
-  packId: "ua-extra-test",
-  packCadCents: 800,
-  packUsdMicros: 3_000_000,
-  packValidityDays: 365,
-  taxRate: 0.13,
+  id: "unset",
+  label: "Pricing is not set",
+  pricesApproved: false,
+  currency: null,
+  baseWithoutAiCadCents: null,
+  subscriptionCadCents: null,
+  includedTokens: 2_000_000,
+  packId: "unset",
+  packCadCents: null,
+  packTokens: 0,
+  packValidityDays: 0,
+  taxRate: null,
   warnAt: [0.8, 1],
   formFill: false,
+  premiumModel: false,
   effectiveAt: "2026-11-26T00:00:00.000Z",
 };
 
-export type UsageExample = {
-  turns: number;
-  inputTokens: number;
-  outputTokens: number;
-  speeches: number;
-  speechChars: number;
-  toolCalls: number;
-  jobs: number;
-};
-
-/** A modest v1 month used to size the included allowance. */
-export const SAMPLE_MONTH: UsageExample = {
-  turns: 200,
-  inputTokens: 1200,
-  outputTokens: 350,
-  speeches: 40,
-  speechChars: 600,
-  toolCalls: 80,
-  jobs: 20,
-};
-
-export function providerCostUsdMicros(example: UsageExample, rates = TEST_RATES) {
-  const input = example.turns * example.inputTokens;
-  const output = example.turns * example.outputTokens;
-  const speech = example.speeches * example.speechChars;
-  return Math.round(input / 1_000_000 * rates.textInputUsdMicrosPerMillion)
-    + Math.round(output / 1_000_000 * rates.textOutputUsdMicrosPerMillion)
-    + Math.round(speech / 1_000_000 * rates.speechUsdMicrosPerMillionChars)
-    + example.toolCalls * rates.toolUsdMicros
-    + example.jobs * rates.jobUsdMicros;
-}
-
-export function recommendAllowance(plan = TEST_PLAN, example = SAMPLE_MONTH) {
-  const providerUsdMicros = providerCostUsdMicros(example);
-  const providerCadCents = Math.ceil(providerUsdMicros / 1_000_000 * 1.4 * 100);
-  const includedCadCents = Math.ceil(plan.includedUsdMicros / 1_000_000 * 1.4 * 100);
-  const paymentFeeCadCents = Math.ceil(plan.subscriptionCadCents * 0.029) + 30;
-  const hostingCadCents = 400;
-  const roomCadCents = plan.subscriptionCadCents - paymentFeeCadCents - hostingCadCents - includedCadCents;
+export function planPrices(plan = TEST_PLAN) {
+  if (!plan.pricesApproved) {
+    return {
+      pricing: "unset" as const,
+      checkout: "disabled" as const,
+      currency: null,
+      subscription: null,
+      topUp: null,
+      providerDollarCost: null,
+      note: "Pricing, currency, and the included allowance are not set. Checkout is off. Nothing can be charged.",
+    };
+  }
   return {
-    providerUsdMicros,
-    providerCadCents,
-    includedUsdMicros: plan.includedUsdMicros,
-    includedCadCents,
+    pricing: "configured" as const,
+    checkout: "disabled" as const,
+    currency: plan.currency,
     subscriptionCadCents: plan.subscriptionCadCents,
-    paymentFeeCadCents,
-    hostingCadCents,
-    roomCadCents,
-    fx: TEST_FX_NOTE,
-    rates: TEST_RATES.label,
-    fitsSample: providerUsdMicros <= plan.includedUsdMicros,
-    leavesRoom: roomCadCents > 0,
+    topUpCadCents: plan.packCadCents,
+    providerDollarCost: null,
+    note: "A plan document exists for admin configuration. Checkout stays off until payment setup is approved.",
   };
 }
 
 export function packQuote(plan = TEST_PLAN) {
+  if (!plan.pricesApproved || plan.packCadCents == null || plan.taxRate == null || plan.currency == null) {
+    return {
+      checkout: "disabled" as const,
+      quantity: 0,
+      packId: plan.packId,
+      currency: null,
+      priceCadCents: null,
+      taxCadCents: null,
+      totalCadCents: null,
+      tokens: null,
+      validityDays: null,
+      note: "Pricing is not set. Checkout is off. No pack is offered.",
+    };
+  }
   const taxCadCents = Math.round(plan.packCadCents * plan.taxRate);
   return {
-    testValues: true,
+    checkout: "disabled" as const,
     quantity: 1,
     packId: plan.packId,
     currency: plan.currency,
     priceCadCents: plan.packCadCents,
     taxCadCents,
     totalCadCents: plan.packCadCents + taxCadCents,
-    usdMicros: plan.packUsdMicros,
+    tokens: plan.packTokens,
     validityDays: plan.packValidityDays,
     taxNote: TEST_TAX_NOTE,
-    fx: TEST_FX_NOTE,
+    providerDollarCost: null,
+    note: "Checkout stays off until payment setup is approved.",
   };
 }
 
@@ -125,20 +105,20 @@ export type Account = {
   status: "active" | "canceled";
   periodStart: string;
   periodEnd: string;
-  includedUsdMicros: number;
-  includedUsedUsdMicros: number;
-  purchasedUsdMicros: number;
-  purchasedUsedUsdMicros: number;
+  includedTokens: number;
+  includedUsedTokens: number;
+  purchasedTokens: number;
+  purchasedUsedTokens: number;
   purchasedExpires: string;
-  reservedUsdMicros: number;
+  reservedTokens: number;
 };
 
 export type Operation = {
   operationId: string;
   kind: string;
   status: "reserved" | "reconciled" | "canceled" | "refunded";
-  estimateUsdMicros: number;
-  actualUsdMicros: number;
+  estimateTokens: number;
+  actualTokens: number;
   providerRequestId: string;
   usageSource: "provider" | "estimate";
 };
@@ -152,28 +132,28 @@ export function openAccount(advisorId: string, now: Date, plan = TEST_PLAN): Acc
     status: "active",
     periodStart: start,
     periodEnd: end,
-    includedUsdMicros: plan.includedUsdMicros,
-    includedUsedUsdMicros: 0,
-    purchasedUsdMicros: 0,
-    purchasedUsedUsdMicros: 0,
+    includedTokens: plan.includedTokens,
+    includedUsedTokens: 0,
+    purchasedTokens: 0,
+    purchasedUsedTokens: 0,
     purchasedExpires: start,
-    reservedUsdMicros: 0,
+    reservedTokens: 0,
     };
 }
 
-export function remainingUsdMicros(account: Account, now = new Date()) {
+export function remainingTokens(account: Account, now = new Date()) {
   const included = account.status === "canceled" && now.toISOString() >= account.periodEnd
     ? 0
-    : Math.max(0, account.includedUsdMicros - account.includedUsedUsdMicros);
+    : Math.max(0, account.includedTokens - account.includedUsedTokens);
   const purchased = now.toISOString() < account.purchasedExpires
-    ? Math.max(0, account.purchasedUsdMicros - account.purchasedUsedUsdMicros)
+    ? Math.max(0, account.purchasedTokens - account.purchasedUsedTokens)
     : 0;
-  return Math.max(0, included + purchased - account.reservedUsdMicros);
+  return Math.max(0, included + purchased - account.reservedTokens);
 }
 
 export function usageRatio(account: Account) {
-  const included = Math.max(1, account.includedUsdMicros);
-  return account.includedUsedUsdMicros / included;
+  const included = Math.max(1, account.includedTokens);
+  return account.includedUsedTokens / included;
 }
 
 export function usageWarnings(account: Account, plan = TEST_PLAN) {
@@ -187,21 +167,21 @@ export type Ledger = {
   providerIds: Map<string, string>;
 };
 
-export function reserve(ledger: Ledger, input: { operationId: string; kind: string; estimateUsdMicros: number }, now = new Date()) {
+export function reserve(ledger: Ledger, input: { operationId: string; kind: string; estimateTokens: number }, now = new Date()) {
   const existing = ledger.operations.get(input.operationId);
   if (existing) return { ok: true as const, duplicate: true, operation: existing, account: ledger.account };
   rollPeriod(ledger.account, now);
-  if (input.estimateUsdMicros < 1) return { ok: false as const, code: "empty" as const, account: ledger.account };
-  if (remainingUsdMicros(ledger.account, now) < input.estimateUsdMicros) {
+  if (input.estimateTokens < 1) return { ok: false as const, code: "empty" as const, account: ledger.account };
+  if (remainingTokens(ledger.account, now) < input.estimateTokens) {
     return { ok: false as const, code: "allowance-exhausted" as const, account: ledger.account };
   }
-  ledger.account.reservedUsdMicros += input.estimateUsdMicros;
+  ledger.account.reservedTokens += input.estimateTokens;
   const operation: Operation = {
     operationId: input.operationId,
     kind: input.kind,
     status: "reserved",
-    estimateUsdMicros: input.estimateUsdMicros,
-    actualUsdMicros: 0,
+    estimateTokens: input.estimateTokens,
+    actualTokens: 0,
     providerRequestId: "",
     usageSource: "estimate",
   };
@@ -213,20 +193,20 @@ function consume(account: Account, amount: number, now: Date) {
   let left = amount;
   const includedLeft = account.status === "canceled" && now.toISOString() >= account.periodEnd
     ? 0
-    : Math.max(0, account.includedUsdMicros - account.includedUsedUsdMicros);
+    : Math.max(0, account.includedTokens - account.includedUsedTokens);
   const fromIncluded = Math.min(includedLeft, left);
-  account.includedUsedUsdMicros += fromIncluded;
+  account.includedUsedTokens += fromIncluded;
   left -= fromIncluded;
   if (left > 0 && now.toISOString() < account.purchasedExpires) {
-    const purchasedLeft = Math.max(0, account.purchasedUsdMicros - account.purchasedUsedUsdMicros);
+    const purchasedLeft = Math.max(0, account.purchasedTokens - account.purchasedUsedTokens);
     const fromPurchased = Math.min(purchasedLeft, left);
-    account.purchasedUsedUsdMicros += fromPurchased;
+    account.purchasedUsedTokens += fromPurchased;
     left -= fromPurchased;
   }
   return left;
 }
 
-export function reconcile(ledger: Ledger, input: { operationId: string; actualUsdMicros: number; providerRequestId?: string; usageSource?: "provider" | "estimate" }, now = new Date()) {
+export function reconcile(ledger: Ledger, input: { operationId: string; actualTokens: number; providerRequestId?: string; usageSource?: "provider" | "estimate" }, now = new Date()) {
   const providerRequestId = String(input.providerRequestId || "");
   if (providerRequestId && ledger.providerIds.has(providerRequestId)) {
     return { ok: true as const, duplicate: true, operation: ledger.operations.get(ledger.providerIds.get(providerRequestId) || "") };
@@ -235,14 +215,14 @@ export function reconcile(ledger: Ledger, input: { operationId: string; actualUs
   if (!operation) return { ok: false as const, code: "unknown-operation" as const };
   if (operation.status === "reconciled") return { ok: true as const, duplicate: true, operation };
   if (operation.status !== "reserved") return { ok: false as const, code: "not-reserved" as const };
-  ledger.account.reservedUsdMicros = Math.max(0, ledger.account.reservedUsdMicros - operation.estimateUsdMicros);
-  const unpaid = consume(ledger.account, input.actualUsdMicros, now);
-  operation.actualUsdMicros = input.actualUsdMicros - unpaid;
+  ledger.account.reservedTokens = Math.max(0, ledger.account.reservedTokens - operation.estimateTokens);
+  const unpaid = consume(ledger.account, input.actualTokens, now);
+  operation.actualTokens = input.actualTokens - unpaid;
   operation.status = "reconciled";
   operation.providerRequestId = providerRequestId;
   operation.usageSource = input.usageSource || "estimate";
   if (providerRequestId) ledger.providerIds.set(providerRequestId, input.operationId);
-  return { ok: true as const, duplicate: false, operation, unbilledUsdMicros: unpaid };
+  return { ok: true as const, duplicate: false, operation, unbilledTokens: unpaid };
 }
 
 export function cancelReservation(ledger: Ledger, operationId: string) {
@@ -250,7 +230,7 @@ export function cancelReservation(ledger: Ledger, operationId: string) {
   if (!operation) return { ok: false as const, code: "unknown-operation" as const };
   if (operation.status === "canceled") return { ok: true as const, duplicate: true };
   if (operation.status !== "reserved") return { ok: false as const, code: "not-reserved" as const };
-  ledger.account.reservedUsdMicros = Math.max(0, ledger.account.reservedUsdMicros - operation.estimateUsdMicros);
+  ledger.account.reservedTokens = Math.max(0, ledger.account.reservedTokens - operation.estimateTokens);
   operation.status = "canceled";
   return { ok: true as const, duplicate: false };
 }
@@ -260,22 +240,22 @@ export function refundOperation(ledger: Ledger, operationId: string) {
   if (!operation) return { ok: false as const, code: "unknown-operation" as const };
   if (operation.status === "refunded") return { ok: true as const, duplicate: true };
   if (operation.status !== "reconciled") return { ok: false as const, code: "not-reconciled" as const };
-  let left = operation.actualUsdMicros;
-  const fromPurchased = Math.min(ledger.account.purchasedUsedUsdMicros, left);
-  ledger.account.purchasedUsedUsdMicros -= fromPurchased;
+  let left = operation.actualTokens;
+  const fromPurchased = Math.min(ledger.account.purchasedUsedTokens, left);
+  ledger.account.purchasedUsedTokens -= fromPurchased;
   left -= fromPurchased;
-  ledger.account.includedUsedUsdMicros = Math.max(0, ledger.account.includedUsedUsdMicros - left);
+  ledger.account.includedUsedTokens = Math.max(0, ledger.account.includedUsedTokens - left);
   operation.status = "refunded";
   return { ok: true as const, duplicate: false };
 }
 
 export function rollPeriod(account: Account, now: Date, plan = TEST_PLAN) {
   if (now.toISOString() < account.periodEnd) return false;
-  account.includedUsedUsdMicros = 0;
-  account.reservedUsdMicros = 0;
+  account.includedUsedTokens = 0;
+  account.reservedTokens = 0;
   account.periodStart = account.periodEnd;
   account.periodEnd = new Date(new Date(account.periodEnd).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  account.includedUsdMicros = plan.includedUsdMicros;
+  account.includedTokens = plan.includedTokens;
   return true;
 }
 
@@ -286,7 +266,7 @@ export type Purchase = {
   priceCadCents: number;
   taxCadCents: number;
   totalCadCents: number;
-  usdMicros: number;
+  tokens: number;
   expiresAt: string;
   status: "agreed" | "paid" | "canceled" | "refunded";
   termsVersion: number;
@@ -326,7 +306,7 @@ export function applyPaymentEvent(input: {
     if (purchase.status === "paid") return { ok: true as const, duplicate: true, credited: false };
     if (purchase.status !== "agreed") return { ok: false as const, code: "not-agreed" as const, credited: false };
     purchase.status = "paid";
-    input.account.purchasedUsdMicros += purchase.usdMicros;
+    input.account.purchasedTokens += purchase.tokens;
     input.account.purchasedExpires = purchase.expiresAt;
     return { ok: true as const, duplicate: false, credited: true };
   }
@@ -335,18 +315,21 @@ export function applyPaymentEvent(input: {
     return { ok: true as const, duplicate: false, credited: false };
   }
   if (purchase.status !== "paid") return { ok: true as const, duplicate: false, credited: false, pending: true };
-  const unused = Math.max(0, input.account.purchasedUsdMicros - input.account.purchasedUsedUsdMicros);
-  const remove = Math.min(unused, purchase.usdMicros);
-  input.account.purchasedUsdMicros -= remove;
+  const unused = Math.max(0, input.account.purchasedTokens - input.account.purchasedUsedTokens);
+  const remove = Math.min(unused, purchase.tokens);
+  input.account.purchasedTokens -= remove;
   purchase.status = "refunded";
-  return { ok: true as const, duplicate: false, credited: false, refundedUsdMicros: remove };
+  return { ok: true as const, duplicate: false, credited: false, refundedTokens: remove };
 }
 
 export function agreePurchase(advisorId: string, plan = TEST_PLAN, now = new Date()): Purchase | { ok: false; error: string } {
+  const quote = packQuote(plan);
+  if (!plan.pricesApproved || quote.priceCadCents == null || quote.taxCadCents == null || quote.totalCadCents == null || quote.tokens == null || !quote.validityDays) {
+    return { ok: false, error: "Pricing is not set. Checkout is off. No purchase was created." };
+  }
   if (!paymentConfigured()) {
     return { ok: false, error: "No payment provider is configured. The test adapter is implemented but not turned on. No purchase was created." };
   }
-  const quote = packQuote(plan);
   const expires = new Date(now.getTime() + plan.packValidityDays * 24 * 60 * 60 * 1000).toISOString();
   return {
     id: `test_${randomUUID()}`,
@@ -355,7 +338,7 @@ export function agreePurchase(advisorId: string, plan = TEST_PLAN, now = new Dat
     priceCadCents: quote.priceCadCents,
     taxCadCents: quote.taxCadCents,
     totalCadCents: quote.totalCadCents,
-    usdMicros: quote.usdMicros,
+    tokens: quote.tokens,
     expiresAt: expires,
     status: "agreed",
     termsVersion: plan.version,
@@ -376,11 +359,11 @@ export function schedulePlanChange(current: PlanDocument, next: Partial<PlanDocu
   return {
     version: current.version + 1,
     effectiveAt,
-    document: { ...current, ...next, version: current.version + 1, effectiveAt, formFill: false },
+    document: { ...current, ...next, version: current.version + 1, effectiveAt, formFill: false, premiumModel: false },
   };
 }
 
-export const ALLOWANCE_STOP = "The included AI allowance is used up. Drafts and the desk stay available. AI replies, voice, and scheduled automation are paused. No extra charge was made.";
+export const ALLOWANCE_STOP = "A technical safety limit paused new AI replies. Drafts and the desk stay available. Pricing is not set, checkout is off, and nothing was charged.";
 
 type BillingSql = {
   query: <T = Record<string, unknown>>(text: string, values?: unknown[]) => Promise<T[]>;
@@ -415,10 +398,18 @@ function asStored(value: unknown): Stored {
 }
 
 function toLedger(stored: Stored): Ledger {
+  const account = stored.account;
+  if (typeof account.includedTokens !== "number") {
+    const fresh = openAccount(account.advisorId || "advisor", new Date());
+    fresh.status = account.status === "canceled" ? "canceled" : "active";
+    fresh.periodStart = account.periodStart || fresh.periodStart;
+    fresh.periodEnd = account.periodEnd || fresh.periodEnd;
+    stored = { ...stored, account: fresh };
+  }
   return {
     account: stored.account,
-    operations: new Map(stored.operations.map((item) => [item.operationId, item])),
-    providerIds: new Map(stored.providerIds),
+    operations: new Map((stored.operations || []).map((item) => [item.operationId, item])),
+    providerIds: new Map(stored.providerIds || []),
   };
 }
 
@@ -472,25 +463,20 @@ export async function withBilling<T>(sql: BillingSql, advisorId: string, now: Da
 }
 
 export function accountView(account: Account, plan = TEST_PLAN, now = new Date()) {
-  const quote = packQuote(plan);
   return {
-    testValues: true,
-    planLabel: plan.label,
-    currency: plan.currency,
-    subscriptionCadCents: plan.subscriptionCadCents,
-    includedUsdMicros: account.includedUsdMicros,
-    usedUsdMicros: account.includedUsedUsdMicros,
-    remainingUsdMicros: remainingUsdMicros(account, now),
-    purchasedUsdMicros: Math.max(0, account.purchasedUsdMicros - account.purchasedUsedUsdMicros),
-    purchasedExpires: account.purchasedExpires,
-    periodStart: account.periodStart,
-    resetAt: account.periodEnd,
+    pricing: plan.pricesApproved ? "configured" as const : "unset" as const,
+    checkout: "disabled" as const,
+    planLabel: plan.pricesApproved ? plan.label : "Pricing is not set",
+    currency: null,
+    subscription: null,
+    topUp: null,
+    measuredTokens: account.includedUsedTokens,
+    stopped: remainingTokens(account, now) <= 0,
     warnings: usageWarnings(account, plan),
-    stopped: remainingUsdMicros(account, now) <= 0,
-    quote,
+    resetAt: account.periodEnd,
     charging: false,
-    paymentConfigured: paymentConfigured(),
-    paymentNote: paymentConfigured() ? "Test payment adapter only. No live charge." : "No payment provider is configured. No purchase can be completed.",
+    paymentConfigured: false,
+    paymentNote: "Pricing, currency, and the included allowance are not set. Checkout is off. Nothing can be charged.",
   };
 }
 

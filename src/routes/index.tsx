@@ -1,7 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import type { CSSProperties } from "react";
 import { getCorporateSite } from "@/lib/advisor.functions";
-import { SETUP_FEES, type SiteFonts } from "@/lib/site-types";
+import { PRICING_APPROVED, type SiteFonts } from "@/lib/site-types";
 
 export const Route = createFileRoute("/")({
   loader: () => getCorporateSite(),
@@ -9,11 +9,7 @@ export const Route = createFileRoute("/")({
   component: Home,
 });
 
-function setupFor(name: string) {
-  const key = name.toLowerCase();
-  if (key.includes("starter")) return SETUP_FEES.starter;
-  if (key.includes("professional")) return SETUP_FEES.professional;
-  if (key.includes("team")) return SETUP_FEES.team;
+function setupFor(_name: string) {
   return 0;
 }
 
@@ -99,10 +95,11 @@ function Home() {
                   <article key={plan.name + plan.price} className={plan.featured ? "m-price-card featured" : "m-price-card"}>
                     {plan.name && <h3 style={paint("planName")}>{plan.name}</h3>}
                     {plan.note && <p className="m-plan-note" style={paint("planNote")}>{plan.note}</p>}
-                    {plan.price && <div className="m-price" style={paint("price")}>{plan.price}<span style={paint("planList")}>/month</span></div>}
-                    {setup > 0 && <p className="m-plan-note" style={{ textTransform: "none", letterSpacing: 0, fontSize: 16, color: "#14324f" }}>One-time setup fee ${setup.toLocaleString()}</p>}
+                    {PRICING_APPROVED && plan.price && <div className="m-price" style={paint("price")}>{plan.price}<span style={paint("planList")}>/month</span></div>}
+                    {PRICING_APPROVED && setup > 0 && <p className="m-plan-note" style={{ textTransform: "none", letterSpacing: 0, fontSize: 16, color: "#14324f" }}>One-time setup fee ${setup.toLocaleString()}</p>}
+                    {!PRICING_APPROVED && <p className="m-plan-note" style={paint("planNote")}>Pricing is not set</p>}
                     <ul style={paint("planList")}>
-                      {plan.points.split("\n").map((point) => point.trim()).filter((point) => Boolean(point) && !/^one-time setup/i.test(point)).map((point) => <li key={point}>{point}</li>)}
+                      {plan.points.split("\n").map((point) => point.trim()).filter((point) => Boolean(point) && !/^one-time setup/i.test(point) && !/\$/.test(point)).map((point) => <li key={point}>{point}</li>)}
                     </ul>
                     {plan.button && <Link to="/signup" className="m-btn" style={trialButton}>{plan.button}</Link>}
                   </article>

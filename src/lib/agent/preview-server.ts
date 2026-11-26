@@ -305,7 +305,7 @@ export async function previewTurn(body: Body) {
   const operationId = `turn:${runId}:${crypto.randomUUID()}`;
   let held = false;
   try {
-    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "model", estimateUsdMicros: 50_000 }));
+    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "model", estimateTokens: 8_000 }));
     if (!reservation.ok) return { ok: false, calledModel: false, code: reservation.code, reply: ALLOWANCE_STOP, sessionToken: opened.gate.sessionToken };
     held = true;
   } catch (error) {
@@ -321,12 +321,19 @@ export async function previewTurn(body: Body) {
       request: String(body.text || ""),
       source: body.source === "voice" ? "voice" : "typed",
       model: model.model,
+      requestedModel: model.modelId,
       runId,
     });
     const saved = store.load(runId, opened.scope.advisorId);
     if (saved) await writeRun(opened.sql, opened.gate.row.id, saved);
-    await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualUsdMicros: 50_000, usageSource: "estimate" }));
-    return publicResult(result, opened.gate.sessionToken);
+    const measured = result.usage?.source === "provider" ? result.usage.inputTokens + result.usage.outputTokens : 8_000;
+    await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, {
+      operationId,
+      actualTokens: measured,
+      providerRequestId: result.usage?.requestIds?.[0] || "",
+      usageSource: result.usage?.source === "provider" ? "provider" : "estimate",
+    }));
+    return { ...publicResult(result, opened.gate.sessionToken), requestedModel: model.modelId, returnedModel: result.usage?.returnedModel || "" };
   } catch (error) {
     if (held) await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => cancelReservation(state.ledger, operationId)).catch(() => undefined);
     const reason = redactPrivate(error instanceof Error ? error.message : "The agent run failed.");
@@ -379,9 +386,9 @@ export async function previewSpeech(body: Body) {
   if (!voice) return { ok: false as const, error: "No voice is selected. A different voice was not used." };
   const segments = speechSegments(line);
   const operationId = `speech:${crypto.randomUUID()}`;
-  const estimate = Math.max(10_000, Math.round(line.length / 1_000_000 * 15_000_000));
+  const estimate = Math.max(200, line.length);
   try {
-    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "speech", estimateUsdMicros: estimate }));
+    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "speech", estimateTokens: estimate }));
     if (!reservation.ok) return { ok: false as const, error: ALLOWANCE_STOP };
   } catch (error) {
     return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "Usage metering is not available. Nothing was spoken.") };
@@ -397,6 +404,6 @@ export async function previewSpeech(body: Body) {
     await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => cancelReservation(state.ledger, operationId)).catch(() => undefined);
     return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready."), voice };
   }
-  await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualUsdMicros: estimate, usageSource: "estimate" }));
+  await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualTokens: estimate, usageSource: "estimate" }));
   return { ok: true as const, voice, parts };
 }

@@ -2673,8 +2673,8 @@ function PricingTab() {
 		children: ([
 			[
 				"Starter",
-				"$49",
-				"$100",
+				"",
+				"",
 				[
 					"Up to 500 contacts",
 					"E-cards",
@@ -2684,8 +2684,8 @@ function PricingTab() {
 			],
 			[
 				"Professional",
-				"$249",
-				"$500",
+				"",
+				"",
 				[
 					"Unlimited contacts",
 					"AI assistant",
@@ -2695,8 +2695,8 @@ function PricingTab() {
 			],
 			[
 				"Team",
-				"$299",
-				"$1,000",
+				"",
+				"",
 				[
 					"Everything in Professional",
 					"AI assistant for each advisor",
@@ -2713,14 +2713,14 @@ function PricingTab() {
 				/* @__PURE__ */ jsxs("p", {
 					className: "my-2 text-3xl font-bold",
 					style: { color: "#0f4c81" },
-					children: [price, /* @__PURE__ */ jsx("span", {
+					children: price ? [price, /* @__PURE__ */ jsx("span", {
 						className: "text-base font-medium",
 						children: "/mo"
-					})]
+					})] : "Pricing is not set"
 				}),
-				/* @__PURE__ */ jsxs("p", {
+				/* @__PURE__ */ jsx("p", {
 					className: "mb-3 text-xl font-bold",
-					children: ["One-time setup fee ", setup]
+					children: setup ? `One-time setup fee ${setup}` : "Setup fee is not set. Checkout is off."
 				}),
 				/* @__PURE__ */ jsx("ul", {
 					className: "text-sm",

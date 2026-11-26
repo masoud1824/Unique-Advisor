@@ -27,7 +27,7 @@ import {
   setSubscriberStatus,
   updatePlatformCard,
 } from "@/lib/advisor.functions";
-import { DEFAULT_PLATFORM, FONT_LABELS, PLAN_LABELS, PLANS, SETUP_FEES, discountLabel, monthlyPrice, type PlanId, type PlatformSettings, type Promotion, type Subscriber } from "@/lib/site-types";
+import { DEFAULT_PLATFORM, FONT_LABELS, PLAN_LABELS, PLANS, PRICING_APPROVED, discountLabel, monthlyPrice, type PlanId, type PlatformSettings, type Promotion, type Subscriber } from "@/lib/site-types";
 import { FileDrop } from "@/components/file-drop";
 import { loadAssistantSettings, saveAssistantSettings, loadOpenAiAccount, connectOpenAiAccount, disconnectOpenAiAccount, testOpenAiAccount, loadAssistantDiagnostics, loadDefaultRules, saveDefaultRules, loadOperatingInstructions, saveOperatingInstructions } from "@/lib/assistant.functions";
 import { DEFAULT_ASSISTANT, type AssistantSettings } from "@/lib/assistant-policy";
@@ -412,8 +412,8 @@ function Admin() {
   }
 
   const active = subscribers.filter((item) => item.status === "active").length;
-  const due = (item: Subscriber) => monthlyPrice(item.plan, item.promoKind, item.promoAmount);
-  const mrr = subscribers.reduce((sum, item) => (item.status === "active" ? sum + due(item) : sum), 0);
+  const due = (item: Subscriber) => monthlyPrice(item.plan, item.promoKind, item.promoAmount) ?? 0;
+  const mrr = PRICING_APPROVED ? subscribers.reduce((sum, item) => (item.status === "active" ? sum + due(item) : sum), 0) : null;
   const menus: [Panel, string][] = [
     ["overview", "Overview"],
     ["openai", "OpenAI"],
@@ -563,7 +563,7 @@ function Admin() {
               <div className="stat"><div className="num">{active}</div><div>Active</div></div>
               <div className="stat"><div className="num">{subscribers.length - active}</div><div>Paused</div></div>
               <div className="stat"><div className="num">{openTickets}</div><div>Open tickets</div></div>
-              <div className="stat"><div className="num">${mrr}</div><div>Monthly Recurring</div></div>
+              <div className="stat"><div className="num">{mrr == null ? "Not set" : `$${mrr}`}</div><div>Monthly Recurring</div></div>
             </div>
             <p style={{ color: "#5a6a7a" }}>Use the sidebar to manage subscribers, view payment history, and change plans.</p>
             <button type="button" className="btn-sm btn-primary" style={{ marginTop: 16 }} onClick={() => setPanel("openai")}>OpenAI key</button>
@@ -690,11 +690,8 @@ function Admin() {
                     <td>{new Date(item.createdAt).toLocaleDateString()}</td>
                     <td>{item.advisorName}</td>
                     <td>{PLAN_LABELS[item.plan]}</td>
-                    <td>
-                      ${due(item)}
-                      {item.promoCode ? <span style={{ color: "#5a6a7a" }}> · {item.promoCode}</span> : null}
-                    </td>
-                    <td>{item.setupWaived ? "Waived" : `$${item.setupFee ?? SETUP_FEES[item.plan]} once`}</td>
+                    <td>{PRICING_APPROVED ? `$${due(item)}` : "Not set"}{item.promoCode ? <span style={{ color: "#5a6a7a" }}> · {item.promoCode}</span> : null}</td>
+                    <td>{PRICING_APPROVED ? (item.setupWaived ? "Waived" : "Set") : "Not set"}</td>
                     <td>{item.status === "active" ? "Paid" : "Paused"}</td>
                     <td>Card</td>
                   </tr>
@@ -709,9 +706,7 @@ function Admin() {
             <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 640, marginBottom: 16 }}>
               <h3 style={{ marginBottom: 8 }}>One-time setup fee</h3>
               <p style={{ color: "#5a6a7a", marginBottom: 8 }}>Charged once when the advisor joins. It is not added to the monthly price.</p>
-              <p>Starter: ${SETUP_FEES.starter}</p>
-              <p>Professional: ${SETUP_FEES.professional}</p>
-              <p>Team: ${SETUP_FEES.team}</p>
+              <p>Pricing is not set. Checkout is off until prices, currency, and allowances are approved.</p>
             </div>
             <div style={{ background: "#fff", padding: 24, borderRadius: 12, maxWidth: 500 }}>
               <h3 style={{ marginBottom: 16 }}>Change Subscriber Plan</h3>
@@ -1534,7 +1529,7 @@ function Admin() {
                 <div key={`plan-${index}`} style={{ marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid #eee" }}>
                   <input value={plan.name} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="Plan name" style={{ marginBottom: 8 }} />
                   <input value={plan.note} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, note: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="Short note" style={{ marginBottom: 8 }} />
-                  <input value={plan.price} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, price: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="$49" style={{ marginBottom: 8 }} />
+                  <input value={plan.price} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, price: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="Not set" style={{ marginBottom: 8 }} />
                   <textarea value={plan.points} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, points: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="One benefit on each line" style={{ minHeight: 80, marginBottom: 8 }} />
                   <input value={plan.button} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, button: event.target.value } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} placeholder="Button" style={{ marginBottom: 8 }} />
                   <label style={{ display: "block", marginBottom: 8 }}><input type="checkbox" checked={plan.featured} onChange={(event) => { setSiteSave("idle"); const plans = settings.site.plans.map((item, itemIndex) => itemIndex === index ? { ...item, featured: event.target.checked } : item); setSettings({ ...settings, site: { ...settings.site, plans } }); }} /> Highlight this plan</label>

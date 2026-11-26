@@ -228,16 +228,18 @@ export const PLAN_LABELS: Record<PlanId, string> = {
   team: "Team",
 };
 
-export const PLAN_PRICES: Record<PlanId, number> = {
-  starter: 49,
-  professional: 249,
-  team: 299,
+export const PRICING_APPROVED = false;
+
+export const PLAN_PRICES: Record<PlanId, number | null> = {
+  starter: null,
+  professional: null,
+  team: null,
 };
 
-export const SETUP_FEES: Record<PlanId, number> = {
-  starter: 100,
-  professional: 500,
-  team: 1000,
+export const SETUP_FEES: Record<PlanId, number | null> = {
+  starter: null,
+  professional: null,
+  team: null,
 };
 
 export type PromoKind = "percent" | "amount";
@@ -270,14 +272,17 @@ export function percentOff(base: number, percent?: number) {
   return Math.max(0, Math.round((base * (100 - value)) / 100));
 }
 
-export function monthlyPrice(plan: PlanId, kind?: string, amount?: number, applies?: string, monthlyPercent?: number) {
-  if (monthlyPercent != null && monthlyPercent >= 0) return percentOff(PLAN_PRICES[plan], monthlyPercent);
-  if (applies === "setup") return PLAN_PRICES[plan];
-  return priced(PLAN_PRICES[plan], kind, amount);
+export function monthlyPrice(plan: PlanId, kind?: string, amount?: number, applies?: string, monthlyPercent?: number): number | null {
+  const base = PLAN_PRICES[plan];
+  if (!PRICING_APPROVED || base == null) return null;
+  if (monthlyPercent != null && monthlyPercent >= 0) return percentOff(base, monthlyPercent);
+  if (applies === "setup") return base;
+  return priced(base, kind, amount);
 }
 
-export function setupPrice(plan: PlanId, kind?: string, amount?: number, applies?: string, setupPercent?: number) {
+export function setupPrice(plan: PlanId, kind?: string, amount?: number, applies?: string, setupPercent?: number): number | null {
   const base = SETUP_FEES[plan];
+  if (!PRICING_APPROVED || base == null) return null;
   if (setupPercent != null && setupPercent >= 0) return percentOff(base, setupPercent);
   if (applies === "setup" || applies === "both") return priced(base, kind, amount);
   return base;
@@ -299,9 +304,9 @@ export function discountLabel(kind?: string, amount?: number, applies?: string, 
 }
 
 export const PLAN_DETAILS: Record<PlanId, string> = {
-  starter: "E-cards, newsletters, and drip campaigns. One-time setup fee $100. The AI assistant is not included.",
-  professional: "Starter, plus your own tags, e-cards, and newsletters. One-time setup fee $500.",
-  team: "The same tools as Professional. One-time setup fee $1,000. Super admin shows the plan as Team.",
+  starter: "E-cards, newsletters, and drip campaigns. The AI assistant is not included. Pricing is not set.",
+  professional: "Starter, plus your own tags, e-cards, and newsletters. Pricing is not set.",
+  team: "The same tools as Professional. Super admin shows the plan as Team. Pricing is not set.",
 };
 
 export const INTEREST_LABELS: Record<Interest, string> = {
@@ -496,9 +501,9 @@ export const DEFAULT_PLATFORM: PlatformSettings = {
     pricingKicker: "Pricing",
     pricingTitle: "Clear plans. No surprise fees.",
     plans: [
-      { name: "Starter", note: "Marketing tools only", price: "$49", points: "One-time setup $100\nUp to 500 contacts\nE-cards\nNewsletters\nDrip campaigns", button: "Start free trial", featured: false },
-      { name: "Professional", note: "Recommended", price: "$249", points: "One-time setup $500\nUnlimited contacts\nPrivate AI assistant\nBirthday cards and newsletters\nYour coverage website", button: "Start free trial", featured: true },
-      { name: "Team", note: "Up to 5 advisors", price: "$299", points: "One-time setup $1,000\nEverything in Professional\nA separate AI assistant for each advisor\nEach book of clients stays private", button: "Start free trial", featured: false },
+      { name: "Starter", note: "Marketing tools only", price: "", points: "Up to 500 contacts\nE-cards\nNewsletters\nDrip campaigns", button: "Start free trial", featured: false },
+      { name: "Professional", note: "Recommended", price: "", points: "Unlimited contacts\nPrivate AI assistant\nBirthday cards and newsletters\nYour coverage website", button: "Start free trial", featured: true },
+      { name: "Team", note: "Up to 5 advisors", price: "", points: "Everything in Professional\nA separate AI assistant for each advisor\nEach book of clients stays private", button: "Start free trial", featured: false },
     ],
     footer: "© 2026 Unique Advisor. The AI assistant for financial advisors.",
     footerLinks: [

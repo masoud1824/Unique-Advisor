@@ -68,7 +68,7 @@ function AgentPreview() {
   const [lines, setLines] = useState<Line[]>([]);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [note, setNote] = useState("");
-  const [usage, setUsage] = useState<{ planLabel?: string; subscriptionCadCents?: number; usedUsdMicros?: number; includedUsdMicros?: number; remainingUsdMicros?: number; resetAt?: string; warnings?: number[]; stopped?: boolean; paymentNote?: string; quote?: { priceCadCents: number; taxCadCents: number; totalCadCents: number; currency: string } } | null>(null);
+  const [usage, setUsage] = useState<{ planLabel?: string; measuredTokens?: number; stopped?: boolean; warnings?: number[]; paymentNote?: string; checkout?: string } | null>(null);
   const [turn, setTurn] = useState<Turn | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const phaseRef = useRef<VoicePhase>("idle");
@@ -462,13 +462,10 @@ function AgentPreview() {
       </ul>
       {auth === "open" && usage && (
         <section className="caps" aria-label="Usage and billing">
-          <h2>Usage & Billing</h2>
-          <p>{usage.planLabel} Test subscription ${((usage.subscriptionCadCents || 0) / 100).toFixed(2)} CAD. Not a live charge.</p>
-          <p>Included provider allowance ${((usage.includedUsdMicros || 0) / 1_000_000).toFixed(2)} USD. Used ${((usage.usedUsdMicros || 0) / 1_000_000).toFixed(2)}. Remaining ${((usage.remainingUsdMicros || 0) / 1_000_000).toFixed(2)}. Resets {usage.resetAt ? new Date(usage.resetAt).toLocaleDateString() : "with the billing period"}.</p>
-          {usage.warnings?.includes(0.8) && <p>80% of the included allowance has been used.</p>}
-          {usage.stopped && <p>The included allowance is used up. The desk stays open. AI replies are paused. No automatic top-up.</p>}
+          <h2>Usage</h2>
           <p>{usage.paymentNote}</p>
-          {usage.quote && <p>Extra pack, if you agree later: ${ (usage.quote.priceCadCents / 100).toFixed(2) } {usage.quote.currency} plus ${ (usage.quote.taxCadCents / 100).toFixed(2) } tax, total ${ (usage.quote.totalCadCents / 100).toFixed(2) }. No card is collected here.</p>}
+          <p>Measured tokens this period: {usage.measuredTokens ?? 0}. This is not a price or an allowance.</p>
+          {usage.stopped && <p>A technical safety limit paused new AI replies. The desk stays open. Checkout is off, and nothing is charged.</p>}
         </section>
       )}
       <div className="log" aria-live="polite">

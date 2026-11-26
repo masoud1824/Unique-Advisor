@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { getCorporateSite, checkPromotion, signupAdvisor } from "@/lib/advisor.functions";
+import { getCorporateSite, signupAdvisor } from "@/lib/advisor.functions";
 import { browserPublicUrl } from "@/lib/preview-path-prefix";
-import { PLAN_LABELS, PLAN_PRICES, SETUP_FEES, discountLabel, monthlyPrice, setupPrice, type PlanId } from "@/lib/site-types";
+import { PLAN_LABELS, PLANS, PRICING_APPROVED, type PlanId } from "@/lib/site-types";
 
 export const Route = createFileRoute("/signup")({
   loader: () => getCorporateSite(),
@@ -59,24 +59,12 @@ function Signup() {
     await navigate({ to: "/a/$slug/desk", params: { slug: result.slug } });
   }
 
-  const price = monthlyPrice(plan, promo?.kind, promo?.amount, promo?.applies, promo?.monthlyPercent);
-  const setup = setupPrice(plan, promo?.kind, promo?.amount, promo?.applies, promo?.setupPercent);
-
   async function applyCode() {
     setError("");
     setPromo(null);
     setPromoNote("");
     if (!promoCode.trim()) return;
-    const result = await checkPromotion({ data: { code: promoCode, plan } });
-    if (!result.ok) {
-      setPromoNote(result.error);
-      return;
-    }
-    setPromo({ code: result.code, kind: result.kind, amount: result.amount, applies: result.applies || "monthly", monthlyPercent: result.monthlyPercent, setupPercent: result.setupPercent });
-    setPromoCode(result.code);
-    const next = monthlyPrice(plan, result.kind, result.amount, result.applies, result.monthlyPercent);
-    const nextSetup = setupPrice(plan, result.kind, result.amount, result.applies, result.setupPercent);
-    setPromoNote(`${result.code} takes ${discountLabel(result.kind, result.amount, result.applies, result.monthlyPercent, result.setupPercent)}. ${PLAN_LABELS[plan]} is $${next}/mo and $${nextSetup} setup.`);
+    setPromoNote("Pricing is not set, so a promotion code cannot change a price. Checkout is off.");
   }
 
   return (
@@ -108,31 +96,24 @@ function Signup() {
           Plan
           <select
             value={plan}
-            onChange={(event) => {
-              const nextPlan = event.target.value as PlanId;
-              setPlan(nextPlan);
-              if (!promo) return;
-              const next = monthlyPrice(nextPlan, promo.kind, promo.amount, promo.applies, promo.monthlyPercent);
-              const nextSetup = setupPrice(nextPlan, promo.kind, promo.amount, promo.applies, promo.setupPercent);
-              setPromoNote(`${promo.code} takes ${discountLabel(promo.kind, promo.amount, promo.applies, promo.monthlyPercent, promo.setupPercent)}. ${PLAN_LABELS[nextPlan]} is $${next}/mo and $${nextSetup} setup.`);
-            }}
+            onChange={(event) => setPlan(event.target.value as PlanId)}
           >
-            {(Object.keys(PLAN_PRICES) as PlanId[]).map((id) => (
+            {PLANS.map((id) => (
               <option key={id} value={id}>
-                {PLAN_LABELS[id]} — ${PLAN_PRICES[id]}/mo + ${SETUP_FEES[id]} one-time setup
+                {PLAN_LABELS[id]} — pricing is not set
               </option>
             ))}
           </select>
         </label>
         <label>
           Promotion code
-          <input value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setPromo(null); }} placeholder="Optional" />
+          <input value={promoCode} onChange={(event) => { setPromoCode(event.target.value.toUpperCase()); setPromo(null); }} placeholder="Optional" disabled={!PRICING_APPROVED} />
         </label>
-        <button type="button" onClick={() => void applyCode()} style={{ marginBottom: 12 }}>
+        <button type="button" onClick={() => void applyCode()} style={{ marginBottom: 12 }} disabled={!PRICING_APPROVED}>
           Apply code
         </button>
-        {promoNote && <p className="subtitle" style={{ color: promo ? "#0d7a4f" : "#b42318", fontWeight: 700 }}>{promoNote}</p>}
-        <p className="subtitle">Monthly: ${price}. One-time setup fee: ${setup}. The setup fee is charged once and is not added to the monthly price.</p>
+        {promoNote && <p className="subtitle" style={{ color: "#b42318", fontWeight: 700 }}>{promoNote}</p>}
+        <p className="subtitle">Pricing is not set. No monthly fee or setup fee is offered. Checkout is off.</p>
         <label>
           Password
           <input name="password" type="password" required minLength={6} autoComplete="new-password" />
