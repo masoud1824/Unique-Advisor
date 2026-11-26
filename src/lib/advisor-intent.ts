@@ -247,7 +247,7 @@ export type CardCorrection =
  */
 export function resolveCardCorrection(text: string): CardCorrection | null {
   const clauses = cardClauses(text);
-  const preview = isPreviewRequest(text);
+  const preview = isPreviewRequest(text) || (holdsDelivery(text) && /\b(?:draft|write|prepare|compose|greeting)\b/i.test(tidyHeard(text)));
   const cardish = isCardAsk(text) || clauses.some((clause) => isCardAsk(clause)) || (preview && /\b(?:e-?cards?|thank(?:\s+you)?|birthday|holiday|welcome|anniversary)\s+cards?\b/i.test(text));
   if (!cardish) return null;
   const pieces = clauses.map((clause) => clauseIntent(clause, preview));

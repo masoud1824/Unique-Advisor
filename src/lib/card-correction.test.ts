@@ -42,6 +42,7 @@ describe("card recipient correction", () => {
     const stopped = resolveCardCorrection("Send a birthday card to Jordan Example. Stop.");
     assert.equal(stopped?.kind, "cancelled");
     if (stopped?.kind === "cancelled") assert.match(stopped.reply, /Jordan Example/);
+    assert.equal(resolveCardCorrection("Draft a birthday greeting for Avery Sample. Do not send it."), null);
   });
 
   it("does not keep the first name when two people are named and nobody said stop", () => {
