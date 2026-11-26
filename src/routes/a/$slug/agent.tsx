@@ -418,7 +418,7 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
     <main className={embedded ? "agent-preview agent-embedded" : "agent-preview"}>
       <style>{`
         .agent-preview { min-height: 100vh; box-sizing: border-box; padding: 16px; background: #f4f1ea; color: #1d1b16; font: 16px/1.45 Georgia, serif; }
-        .agent-preview.agent-embedded { min-height: 0; padding: 0; background: transparent; }
+        .agent-preview.agent-embedded { flex: 0 0 auto; min-height: 0; max-height: 280px; overflow: auto; padding: 0; background: #fff; border-bottom: 1px solid #d9d2c5; display: flex; flex-direction: column; }
         .agent-preview * { box-sizing: border-box; }
         .agent-preview h1 { font-size: 1.3rem; margin: 0 0 4px; }
         .agent-preview .eyebrow { margin: 0; font: 600 0.75rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6458; }
@@ -438,9 +438,31 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
         .agent-preview label { display: block; font-weight: 700; margin: 10px 0 4px; }
         .agent-preview iframe { width: 100%; height: 480px; border: 1px solid #d9d2c5; background: white; }
         .agent-preview .you { color: #3d4a3a; }
+        .agent-preview.agent-embedded .agent-embed-compose { order: -1; flex: none; position: sticky; top: 0; z-index: 2; background: #fff; padding: 8px 10px 0; border-bottom: 1px solid #d9d2c5; }
+        .agent-preview.agent-embedded .agent-embed-compose textarea,
+        .agent-preview.agent-embedded .agent-embed-compose input { max-width: none; min-height: 72px; }
+        .agent-preview.agent-embedded .agent-embed-compose .row { margin: 0 0 8px; }
+        .agent-preview.agent-embedded .log { min-height: 0; max-height: 96px; }
+        .agent-preview.agent-embedded .log:empty { display: none; }
+        .agent-preview.agent-embedded .agent-rest { padding: 0 10px 8px; }
       `}</style>
-      <p className="eyebrow">Agent Preview</p>
-      <h1>{ASSISTANT_NAME}</h1>
+      {!embedded && <p className="eyebrow">Agent Preview</p>}
+      {!embedded && <h1>{ASSISTANT_NAME}</h1>}
+      {embedded && (
+      <form className="agent-embed-compose" aria-label="Request" onSubmit={(event) => { event.preventDefault(); void send(text, "typed"); }}>
+        <label htmlFor="agent-request">Ask the AI assistant</label>
+        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request. Voice uses the same assistant." style={fieldStyle} />
+        <div className="row">
+          <button type="submit" style={buttonStyle} disabled={auth !== "open"}>Send</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void listen()}>Voice command</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void finishRef.current?.()}>Done speaking</button>
+          <button type="button" style={buttonStyle} onClick={() => { cancelListen.current = true; finishRef.current = null; stopAll(); }}>Stop</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void testMic()}>Test mic</button>
+          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
+        </div>
+      </form>
+      )}
+      <div className={embedded ? "agent-rest" : undefined}>
       <p className="status" role="status">{auth === "checking" ? "Checking the access code" : auth === "open" ? "Signed in" : auth === "error" ? "Access code was not accepted" : "Locked"}</p>
       <p className="status" aria-live="polite">{phase === "idle" ? "Idle" : phase}</p>
       <p className="note" aria-live="polite">{note}</p>
@@ -475,6 +497,18 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
       </form>
       )}
       <p>{auth === "open" ? "The request box is ready." : embedded ? "Opening the assistant with this desk sign-in." : "The request box is locked until the access code is accepted."}</p>
+      {embedded ? (
+        <details className="caps">
+          <summary>What this assistant can do</summary>
+          <ul>
+            {ASSISTANT_CAPABILITIES.map((item) => (
+              <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
+                <strong>{item.status === "testing" ? "Testing" : item.status === "premium-deferred" ? "Premium, not in v1" : item.status === "connection-required" ? "Connection required" : "Not connected"}: </strong>{item.label}. {item.note}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : (
       <ul className="caps">
         {ASSISTANT_CAPABILITIES.map((item) => (
           <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
@@ -482,6 +516,7 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
           </li>
         ))}
       </ul>
+      )}
       {auth === "open" && usage && (
         <section className="caps" aria-label="Usage and billing">
           <h2>Usage</h2>
@@ -497,6 +532,7 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
           </p>
         ))}
       </div>
+      {!embedded && (
       <form aria-label="Request" onSubmit={(event) => { event.preventDefault(); void send(text, "typed"); }}>
         <label htmlFor="agent-request">Request</label>
         <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request. Voice uses the same assistant." style={fieldStyle} />
@@ -509,6 +545,7 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
           <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
         </div>
       </form>
+      )}
       {missing.length > 0 && (
         <section>
           <h2>Still needed</h2>
@@ -531,6 +568,7 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
         </div>
       )}
       {previewUrl && <iframe title="Draft preview" src={previewUrl} />}
+      </div>
     </main>
   );
 }
