@@ -301,21 +301,16 @@ export function voiceLabel(phase: string, error = "") {
   return "";
 }
 
-function liveMic() {
-  return Boolean(sharedStream?.getAudioTracks().some((track) => track.readyState === "live"));
-}
-
-async function ensureMic() {
-  if (liveMic()) return sharedStream;
-  voiceLog("mic-request");
+async function openCommandMic() {
+  sharedStream?.getTracks().forEach((track) => track.stop());
+  sharedStream = null;
   try {
     sharedStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      audio: { echoCancellation: true, noiseSuppression: true },
     });
   } catch {
     sharedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   }
-  voiceLog("mic-ready");
   return sharedStream;
 }
 
@@ -410,9 +405,8 @@ function takeRecording() {
       resolve(mine.length ? new Blob(mine, { type: current.mimeType || mime }) : null);
     };
     current.addEventListener("stop", () => {
-      window.setTimeout(done, 200);
+      window.setTimeout(done, 50);
     }, { once: true });
-    try { current.requestData(); } catch { /* this browser flushes on stop */ }
     try { current.stop(); } catch { done(); }
   });
 }
@@ -676,7 +670,7 @@ export function startAdvisorSpeech(
       else sendFinal(decision.text);
     };
     if (!blob || bytes < 200) {
-      giveUp("");
+      giveUp(`Nothing was heard. The recording was ${bytes} bytes. Tap Voice command, speak, then tap Stop.`);
       return;
     }
     let settled = false;
@@ -741,7 +735,7 @@ export function startAdvisorSpeech(
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data);
     };
-    try { recorder.start(250); } catch { recorder.start(); }
+    try { recorder.start(); } catch { /* this browser will not record */ }
   };
 
   const armRecognition = (duringSpeech = false) => {
@@ -869,7 +863,7 @@ export function startAdvisorSpeech(
 
   void (async () => {
     try {
-      const stream = await ensureMic();
+      const stream = await openCommandMic();
       if (generation !== speechGeneration || !keepListening || !stream) {
         if (generation === speechGeneration && keepListening) fail("The microphone could not be started.", false);
         return;

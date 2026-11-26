@@ -35,7 +35,7 @@ import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
 import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readApprovedUsefulLink, readPublicHttps, sameLibrarySite, searchPublicFormPages, verifySavedDocument } from "@/lib/form-lookup";
-import { decideTranscript, publicTranscriptionError, sanitizeProviderDetail, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
+import { publicTranscriptionError, sanitizeProviderDetail, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
 import { DOCUMENT_MAIL, REVIEWED_ATTACHMENT, documentMailPreview } from "@/lib/document-mail";
@@ -322,20 +322,18 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   const started = Date.now();
   const names = (Array.isArray(data.names) ? data.names : []).map((name) => String(name || "").trim().slice(0, 50)).filter(Boolean).slice(0, 40);
   const prompt = transcriptionPrompt(names);
-  const retry = "Nothing was heard. Tap Voice command, speak, then tap Stop.";
+  const retry = `Nothing was heard. Recording was ${bytes.length} bytes (${type}). Tap Voice command, speak, then tap Stop.`;
   if (bytes.length < 200) return { ok: false as const, error: publicTranscriptionError({ stage: "empty", mime, bytes: bytes.length }) };
   const fileName = type.includes("mp4") ? "speech.m4a" : type.includes("wav") ? "speech.wav" : "speech.webm";
-  const send = async (model: string, withPrompt: boolean) => {
+  const send = async (model: string) => {
     const form = new FormData();
     form.append("model", model);
-    if (withPrompt && prompt) form.append("prompt", prompt);
-    form.append("language", "en");
     form.append("file", new File([new Uint8Array(bytes)], fileName, { type }), fileName);
     return fetch(`${OPENAI}/audio/transcriptions`, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: form,
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(20000),
     });
   };
   const refused = async (response: Response, model: string) => {
@@ -349,45 +347,36 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
     return publicTranscriptionError({ stage: "provider", status: response.status, model, mime, bytes: bytes.length, detail });
   };
   const readTranscript = async (response: Response) => {
-    const body = await response.json();
+    const body = await response.json() as { text?: string };
     return String(body.text || "").replace(/\s+/g, " ").trim();
   };
+  const accept = (value: string) => {
+    const text = value.replace(/\s+/g, " ").trim();
+    if (!text || transcriptEchoesPrompt(text, prompt, names)) return "";
+    return text;
+  };
   let modelUsed = "gpt-4o-mini-transcribe";
-  let response: Response;
-  try {
-    response = await send(modelUsed, true);
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    console.info(`[voice] stt-error model=${modelUsed} ${name || "failed"} bytes=${bytes.length}`);
-    return { ok: false as const, error: publicTranscriptionError({ stage: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider", model: modelUsed, mime, bytes: bytes.length, detail: name === "TimeoutError" || name === "AbortError" ? "" : "The transcription request did not connect." }) };
-  }
-  if (!response.ok) {
-    const first = await refused(response, modelUsed);
-    modelUsed = "whisper-1";
+  let text = "";
+  let lastError = "";
+  for (const model of ["gpt-4o-mini-transcribe", "whisper-1"]) {
+    modelUsed = model;
     try {
-      response = await send(modelUsed, true);
+      const response = await send(model);
+      if (!response.ok) {
+        lastError = await refused(response, model);
+        continue;
+      }
+      text = accept(await readTranscript(response));
+      if (text) break;
     } catch (error) {
       const name = error instanceof Error ? error.name : "";
-      console.info(`[voice] stt-error model=${modelUsed} ${name || "failed"} bytes=${bytes.length}`);
-      return { ok: false as const, error: name === "TimeoutError" || name === "AbortError" ? publicTranscriptionError({ stage: "timeout", model: modelUsed, mime, bytes: bytes.length }) : first };
+      console.info(`[voice] stt-error model=${model} ${name || "failed"} bytes=${bytes.length}`);
+      lastError = publicTranscriptionError({ stage: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider", model, mime, bytes: bytes.length, detail: name === "TimeoutError" || name === "AbortError" ? "" : "The transcription request did not connect." });
     }
-    if (!response.ok) return { ok: false as const, error: await refused(response, modelUsed) };
   }
-  let text = await readTranscript(response);
-  if (!text || transcriptEchoesPrompt(text, prompt, names)) {
-    try {
-      const again = await send(modelUsed, false);
-      if (again.ok) {
-        const second = await readTranscript(again);
-        if (second && !transcriptEchoesPrompt(second, prompt, names)) text = second;
-      }
-    } catch { /* the first transcript still decides */ }
-  }
-  await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response, { text })]).catch(() => void 0);
-  console.info(`[voice] server-stt ${Date.now() - started}ms chars=${text.length}`);
-  const decision = decideTranscript({ audioBytes: bytes.length, prompt, names, serverText: text, serverOk: Boolean(text), browserText: "" });
-  if (!decision.post || transcriptEchoesPrompt(text, prompt, names)) return { ok: false as const, error: retry };
-  return { ok: true as const, text: decision.text };
+  console.info(`[voice] server-stt ${Date.now() - started}ms chars=${text.length} model=${modelUsed}`);
+  if (!text) return { ok: false as const, error: lastError || retry };
+  return { ok: true as const, text };
 });
 async function latestChat(advisorId: number) {
   await ensureAssistantTables();
