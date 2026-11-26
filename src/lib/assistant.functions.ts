@@ -2566,7 +2566,7 @@ async function wantsCard(advisorId: number, tidy: unknown) {
 }
 async function saveUnsentNewsletter(advisorId: number, text: string) {
   const topics = newsletterArchiveTopics(text);
-  if (topics.length < 1) return { reply: "Tell me the article topics. Nothing was saved or sent.", actions: [] };
+  if (topics.length < 1) return { reply: "Tell me the article topics. Nothing was saved or sent.", actions: [] as DeskAction[], issue: null as NewsletterIssue | null, id: 0 };
   const articles = topics.map((topic) => newsletterArticle(topic));
   const title = /\btest newsletter\b/i.test(text) ? "Test Newsletter" : newsletterTitle(topics);
   const issue: NewsletterIssue = {
@@ -2603,7 +2603,7 @@ async function saveUnsentNewsletter(advisorId: number, text: string) {
     "",
     preview,
   ].join("\n");
-  return { reply, actions: [] };
+  return { reply, actions: [] as DeskAction[], issue, id };
 }
 function audienceChoice(text: string) {
   const pick = coordinatedAudience(text);
@@ -2615,7 +2615,10 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
   if (isOnboardingDemo(tidy)) return preparedWork(onboardingDraft(text));
   if (isNewsletterArchiveAsk(tidy)) {
     const saved = await saveUnsentNewsletter(advisorId, tidy);
-    return preparedWork(saved.reply, saved.actions);
+    if (!saved.issue || !(saved.id > 0)) return preparedWork(saved.reply, saved.actions);
+    const note = saved.reply.split("\n").filter(Boolean).slice(0, 3).join("\n");
+    const shown = await rememberNewsletterPreview(advisorId, slug, code, saved.issue, saved.id, note);
+    return preparedWork(shown.reply, shown.actions);
   }
   if (archiveIntent(tidy)) {
     const sender = slug === "masoud-zangeneh-2" ? "desk@example.invalid" : "";
@@ -2634,7 +2637,10 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     const audience = campaignAudience(tidy);
     if (!isNewsletterDelivery(tidy)) {
       const saved = await saveUnsentNewsletter(advisorId, tidy);
-      return preparedWork(saved.reply, saved.actions);
+      if (!saved.issue || !(saved.id > 0)) return preparedWork(saved.reply, saved.actions);
+      const note = saved.reply.split("\n").filter(Boolean).slice(0, 3).join("\n");
+      const shown = await rememberNewsletterPreview(advisorId, slug, code, saved.issue, saved.id, note);
+      return preparedWork(shown.reply, shown.actions);
     }
     if (isNewsletterDelivery(tidy)) {
       const choice = audienceChoice(tidy);

@@ -1,6 +1,6 @@
 import { hasMeetingWhen, isTimeAgreement } from "./meeting-time.ts";
 import { refersToAppointment } from "./calendar-span.ts";
-import { contentHoldKind, deliveryRequested, withoutNegatedDelivery } from "./workspace-policy.ts";
+import { contentHoldKind, deliveryRequested, isNewNewsletterDraft, withoutNegatedDelivery } from "./workspace-policy.ts";
 import { asksArchiveSearch, asksContactRecord, namedPeople } from "./delivery-audience.ts";
 import { contactDeliveryBlock } from "./desk-workflows.ts";
 import { isSignatureAsk } from "./signature-request.ts";
@@ -1169,7 +1169,7 @@ export function isNewsletterEdit(text: string) {
 
 export function isNewsletterHold(text: string) {
   const tidy = tidyHeard(text);
-  if (asksArchiveSearch(tidy)) return false;
+  if (asksArchiveSearch(tidy) || isNewNewsletterDraft(tidy)) return false;
   if (isNewsletterDelivery(tidy)) return false;
   if (isNewsletterArticleAdd(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterEdit(tidy) || isNewsletterReorder(tidy)) return true;
   return /\bnewsletters?\b/i.test(tidy) && /\b(?:preview|show|save|archive|reopen|open|display|view)\b/i.test(tidy);
@@ -1258,13 +1258,32 @@ export function newsletterTopics(text: string) {
   const about = tidy.match(/\b(?:about|regarding|covering|on)\s+(.+)$/i);
   if (!about) return [];
   const rest = about[1]
+    .replace(/\s*[.?!]\s*(?:show|preview|display|save|do not|don't|without|nothing)\b[\s\S]*$/i, "")
+    .replace(/\s+\b(?:show me|preview|do not send|don't send)\b[\s\S]*$/i, "")
     .replace(/\s+\b(?:and\s+)?(?:send|email|mail)\b[\s\S]*$/i, "")
     .replace(/\s+\b(?:to|for)\s+[A-Z][\s\S]*$/i, "");
-  return rest
+  const topics = rest
     .split(/\s*,\s*|\s+\band\b\s+/i)
     .map((part) => part.replace(/^(?:a|an|the|\d+)\s+/i, "").replace(/[.?!]+$/g, "").trim())
-    .filter((part) => part.length > 2 && !/^(?:articles?|stories|story)$/i.test(part))
+    .filter((part) => part.length > 2 && !/^(?:articles?|stories|story|sections?|parts?)$/i.test(part))
     .slice(0, 8);
+  const sections = requestedSectionCount(tidy);
+  if (topics.length === 1 && sections > 1) return sectionTopics(topics[0], sections);
+  return topics;
+}
+
+function requestedSectionCount(text: string) {
+  const match = text.match(/\b(one|two|three|four|five|six|\d+)\s+(?:short\s+)?(?:sections?|articles?|parts?)\b/i);
+  const words: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+  if (!match) return 0;
+  const value = words[match[1].toLowerCase()] || Number(match[1]);
+  return value >= 1 && value <= 6 ? value : 0;
+}
+
+function sectionTopics(topic: string, count: number) {
+  const angles = ["where things stand", "what has changed", "the next step", "what to check", "what can wait", "when to review it again"];
+  const clean = topic.replace(/[.?!]+$/g, "").trim();
+  return angles.slice(0, count).map((angle) => `${clean}: ${angle}`);
 }
 
 export function newsletterRecipients(text: string) {
@@ -1316,6 +1335,24 @@ export function newsletterArticle(topic: string) {
             "The waiting period and the definition of disability are the parts people forget until they need them.",
             "This note is not a quote and it does not say which contract to buy.",
           ]
+        : /financial goals/.test(key)
+      ? /where things stand/.test(key)
+        ? [
+            "A financial-goal review starts with what the household is aiming at, and what is already in place for those aims.",
+            "The useful check is whether the goals are still the ones the household would name today.",
+            "This note does not rank the goals or say how much should be saved.",
+          ]
+        : /what has changed/.test(key)
+          ? [
+              "A goal that fit last year can be the wrong size after a new child, a home, a business, or a change in income.",
+              "The review looks for those changes before it looks for a new product.",
+              "This note does not say what to buy, sell, or replace.",
+            ]
+          : [
+              "The next step is a short conversation about which goal should be looked at first.",
+              "Reply to this note if you want that review set up.",
+              "Nothing here is a recommendation to buy, sell, or replace a contract.",
+            ]
         : /critical illness|beneficiary|estate|will\b|tfsa|mortgage/.test(key)
           ? [
               `${title} is one of the pieces that should be looked at with the rest of the plan, not on its own.`,

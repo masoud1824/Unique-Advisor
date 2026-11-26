@@ -107,9 +107,18 @@ function isLetterHold(text: string) {
 }
 
 function isNewsletterHoldText(text: string) {
-  if (asksArchiveSearch(text)) return false;
+  if (asksArchiveSearch(text) || isNewNewsletterDraft(text)) return false;
   if (/\bnewsletters?\b/i.test(text)) return true;
   return /\b(?:move|reorder|rearrange|add|shorten|remove)\b/i.test(text) && /\b(?:articles?|positions?)\b/i.test(text);
+}
+
+/** A request to write a new newsletter, including “show me a draft” and “do not send”. */
+export function isNewNewsletterDraft(text: string) {
+  const tidy = String(text || "");
+  if (!/\bnewsletters?\b/i.test(tidy)) return false;
+  if (/\b(?:open|reopen)\b/i.test(tidy) && /\b(?:saved|existing|archive|copy)\b/i.test(tidy)) return false;
+  if (/\b(?:open|reopen)\s+(?:the\s+)?(?:saved\s+)?newsletters?\b/i.test(tidy)) return false;
+  return /\b(?:create|write|make|prepare|draft|build)\b/i.test(tidy);
 }
 
 function asksAudienceList(text: string) {

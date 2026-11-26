@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, yesApplies } from "./advisor-intent.ts";
+import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
 import { SECRETARY_RULES, taskOn } from "./secretary-rules.ts";
 import { orchestrationControl } from "./orchestration.ts";
 import { contactMatchesQuery, resolveSpokenContact } from "./contact-match.ts";
@@ -289,6 +290,17 @@ describe("misheard advisor commands", () => {
     assert.equal(taskKind(line), "newsletter");
     assert.deepEqual(newsletterArchiveTopics(line), ["life insurance", "retirement planning", "keeping beneficiary information updated"]);
     assert.equal(isNewsletterAsk("do not send the holiday card"), false);
+    const draft = "Create a short newsletter with three sections about reviewing financial goals. Show me a draft. Do not send.";
+    assert.equal(isNewNewsletterDraft(draft), true);
+    assert.equal(isNewsletterHold(draft), false);
+    assert.equal(isNewsletterAsk(draft), true);
+    assert.equal(contentHoldKind(draft), "");
+    assert.deepEqual(newsletterTopics(draft), [
+      "reviewing financial goals: where things stand",
+      "reviewing financial goals: what has changed",
+      "reviewing financial goals: the next step",
+    ]);
+    assert.equal(isNewNewsletterDraft("Open the saved Test Newsletter and show its articles. Do not send."), false);
   });
 
   it("shortens only the named second article and leaves the request on the desk", () => {
