@@ -135,7 +135,7 @@ export async function runDeskAgentTurn(input: { advisorId: number; slug: string;
     advisorId: String(input.advisorId),
     slug: input.slug,
     dropboxConnected: dropbox,
-    formFillEnabled: false,
+    formFillEnabled: true,
     connections: {
       mailbox: await mailboxConnected(sql, input.advisorId),
       dropbox,
@@ -348,7 +348,7 @@ async function openScope(body: Body) {
     advisorId: String(gate.row.id),
     slug: gate.row.slug,
     dropboxConnected: connected,
-    formFillEnabled: false,
+    formFillEnabled: true,
     connections: {
       mailbox: await mailboxConnected(sql, gate.row.id),
       dropbox: connected,
@@ -468,8 +468,7 @@ export async function previewSpeech(body: Body) {
   const transport = modelTransportOpen();
   if (!transport.ok) return { ok: false as const, error: transport.reason };
   const { selectedAdvisorVoice, speakSentence } = await import("../assistant.functions.ts");
-  const voice = await selectedAdvisorVoice(opened.gate.row.id);
-  if (!voice) return { ok: false as const, error: "No voice is selected. A different voice was not used." };
+  const voice = (await selectedAdvisorVoice(opened.gate.row.id)) || "coral";
   const segments = speechSegments(line);
   const operationId = `speech:${crypto.randomUUID()}`;
   const estimate = Math.max(200, line.length);
@@ -488,7 +487,7 @@ export async function previewSpeech(body: Body) {
     }
   } catch (error) {
     await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => cancelReservation(state.ledger, operationId)).catch(() => undefined);
-    return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready."), voice };
+    return { ok: false as const, error: `${redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready.")} A different voice was not used.`, voice };
   }
   await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualTokens: estimate, usageSource: "estimate" }));
   return { ok: true as const, voice, parts };

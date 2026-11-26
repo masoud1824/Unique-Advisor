@@ -259,10 +259,10 @@ describe("equitable draft agent", () => {
     assert.equal(providerMapping("Beneficiary Change Request Form (671BCF)", "https://advisor.equitable.ca/671BCF.pdf"), "671BCF");
     assert.equal(providerMapping("Canada Life change form", "https://www.canadalife.com/form.pdf"), "");
     assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "forms-lookup" && item.status === "testing"));
-    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "equitable-671bcf" && item.status === "premium-deferred"));
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "equitable-671bcf" && item.status === "testing"));
     assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "newsletters" && item.status === "not-connected"));
     assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "scheduling" && item.status === "not-connected"));
-    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "email" && item.status === "not-connected"));
+    assert.ok(ASSISTANT_CAPABILITIES.some((item) => item.id === "email" && item.status === "testing"));
     const email = AGENT_ROADMAP.find((item) => item.id === "email");
     assert.equal(email?.status, "not-implemented");
     assert.match(email?.requirements.join(" ") || "", /draft is not a send/);

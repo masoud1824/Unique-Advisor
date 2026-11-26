@@ -1430,8 +1430,8 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         try { recognition?.abort?.(); } catch { /* already closed */ }
         recognition = null;
         setListening(false);
-        if (!spoken || !playableReplyLine(line, content)) return;
-        if (started) {
+        if (!playableReplyLine(line, content)) return;
+        if (spoken && started) {
           setPlayingReply(false);
           return;
         }

@@ -20,8 +20,8 @@ export const ASSISTANT_CAPABILITIES: AssistantCapability[] = [
   {
     id: "equitable-671bcf",
     label: "Fill a form",
-    status: "premium-deferred",
-    note: "Form filling, including the Equitable 671BCF mapping, is kept in the product but turned off for v1. It is reserved for a later premium package. Nothing is filled.",
+    status: "testing",
+    note: "A form can be drafted on screen, including the Equitable 671BCF mapping. Nothing is sent or uploaded.",
   },
   {
     id: "other-provider-forms",
@@ -32,8 +32,8 @@ export const ASSISTANT_CAPABILITIES: AssistantCapability[] = [
   {
     id: "email",
     label: "Read mail and draft replies",
-    status: "not-connected",
-    note: "Desk can prepare an email draft for approval. Live mailbox reading is not implemented, and no mailbox is connected. Nothing is read or sent.",
+    status: "testing",
+    note: "The inbox can be listed. A reply can be drafted on screen for approval. Nothing is sent.",
   },
   {
     id: "cards",
