@@ -12,6 +12,9 @@ export function soundsLikeNoise(text: string) {
   const letters = tidy.replace(/\s/g, "");
   if (/^(?:h|e|a)+$/.test(letters) && letters.length >= 6 && /(?:he|eh|ha|ah)/.test(letters)) return true;
   if (/bzz/.test(letters) && letters.replace(/bzz+/g, "").replace(/z/g, "").length < 3) return true;
+  if (/\bthanks for watching\b/.test(tidy)) return true;
+  if (/^see you next time$/.test(tidy)) return true;
+  if (/\bplease subscribe\b/.test(tidy)) return true;
   const words = tidy.split(" ");
   return words.length >= 3 && words.every((word) => word === words[0]) && /^(?:bzz+|he+|ha+|ah+|eh+|hmm+|um+|uh+)$/.test(words[0]);
 }

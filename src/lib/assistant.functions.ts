@@ -368,7 +368,12 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
         lastError = await refused(response, model);
         continue;
       }
-      const next = accept(await readTranscript(response));
+      const heard = await readTranscript(response);
+      if (soundsLikeNoise(heard)) {
+        lastError = "That was microphone noise, not a command. Tap Voice command and try again.";
+        continue;
+      }
+      const next = accept(heard);
       if (next.split(/\s+/).filter(Boolean).length > text.split(/\s+/).filter(Boolean).length) text = next;
       if (text && !tooShort(text)) break;
     } catch (error) {

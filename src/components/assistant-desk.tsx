@@ -301,56 +301,6 @@ export function voiceLabel(phase: string, error = "") {
   return "";
 }
 
-function wavFromSamples(samples: Float32Array, sampleRate: number) {
-  const buffer = new ArrayBuffer(44 + samples.length * 2);
-  const view = new DataView(buffer);
-  const write = (offset: number, text: string) => {
-    for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
-  };
-  write(0, "RIFF");
-  view.setUint32(4, 36 + samples.length * 2, true);
-  write(8, "WAVE");
-  write(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  write(36, "data");
-  view.setUint32(40, samples.length * 2, true);
-  let offset = 44;
-  for (let index = 0; index < samples.length; index += 1) {
-    const sample = Math.max(-1, Math.min(1, samples[index] || 0));
-    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
-    offset += 2;
-  }
-  return new Blob([buffer], { type: "audio/wav" });
-}
-
-async function webmToWav(blob: Blob | null) {
-  if (!blob || blob.size < 200 || typeof AudioContext === "undefined") return null;
-  const context = new AudioContext();
-  try {
-    await context.resume();
-    const decoded = await context.decodeAudioData(await blob.arrayBuffer());
-    if (!decoded || decoded.length < 1600 || decoded.duration < 0.2) return null;
-    const rate = 16000;
-    const offline = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * rate)), rate);
-    const source = offline.createBufferSource();
-    source.buffer = decoded;
-    source.connect(offline.destination);
-    source.start();
-    const rendered = await offline.startRendering();
-    return wavFromSamples(rendered.getChannelData(0), rate);
-  } catch {
-    return null;
-  } finally {
-    await context.close();
-  }
-}
-
 async function openCommandMic() {
   sharedStream?.getTracks().forEach((track) => track.stop());
   sharedStream = null;
@@ -770,10 +720,7 @@ export function startAdvisorSpeech(
   let stopCapture: (() => Promise<Blob | null>) | null = null;
   const armCapture = (stream: MediaStream) => {
     armRecorder(stream);
-    stopCapture = async () => {
-      const webm = await takeRecording();
-      return await webmToWav(webm) || webm;
-    };
+    stopCapture = () => takeRecording();
   };
   const armRecorder = (stream: MediaStream) => {
     if (recorder && recorder.state === "recording") return;

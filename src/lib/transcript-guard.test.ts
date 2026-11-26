@@ -27,7 +27,8 @@ describe("microphone transcript is not the prompt", () => {
     assert.equal(transcriptEchoesPrompt("call Avery Sample", prompt, names), false);
     assert.equal(soundsLikeNoise("EHEHEHEHEHEHE"), true);
     assert.equal(soundsLikeNoise("Bzzz-bzzz-bzzz-bzzz-bzzz"), true);
-    assert.equal(soundsLikeNoise("create newsletter"), false);
+    assert.equal(soundsLikeNoise("THANKS FOR WATCHING!"), true);
+    assert.equal(soundsLikeNoise("Tell me three things you can help me with"), false);
   });
 
   it("does not post silence, an empty recording, a prompt echo, or a failed capture", () => {
