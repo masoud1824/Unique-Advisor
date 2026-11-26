@@ -111,7 +111,7 @@ function keptNameWords(tail: string) {
     const plain = plainWord(raw);
     if (!plain || SKIP.has(plain) || /^\d/.test(plain) || /^(?:a|p)\.?m\.?$/i.test(plain)) continue;
     if (NOT_NAME.has(plain)) {
-      if (plain === "example" && words.length > 0) words.push(raw);
+      if ((plain === "example" || plain === "sample") && words.length > 0) words.push(raw);
       continue;
     }
     words.push(raw);
@@ -1015,8 +1015,29 @@ export function cardSentLine(title: string, names: string[]) {
 }
 
 function ordinaryBlocked(text: string) {
-  return /\b(?:rewrite|revise|reword|shorten|condense|translate|rephrase|remove|delete)\b/i.test(text)
-    || /\b(?:do not|don't|never)\s+(?:send|mail|email|create|write|draft)\b/i.test(text);
+  if (/\b(?:rewrite|revise|reword|shorten|condense|translate|rephrase|remove|delete)\b/i.test(text)) return true;
+  if (/\b(?:do not|don't|never)\s+(?:create|write|draft)\b/i.test(text)) return true;
+  if (/\b(?:do not|don't|never)\s+(?:send|mail|email)\b/i.test(text)) {
+    const before = text.split(/\b(?:do not|don't|never)\s+(?:send|mail|email)\b/i)[0] || "";
+    return !/\b(?:draft|write|prepare|preview|compose|greeting|show|make)\b/i.test(before);
+  }
+  return false;
+}
+
+/** The request asks for a draft and also says not to send it. */
+export function holdsDelivery(text: string) {
+  return /\b(?:do not|don't|never)\s+(?:send|mail|email)\b/i.test(tidyHeard(text));
+}
+
+/** On-screen greeting. A missing mailbox does not block this, and nothing is sent. */
+export function greetingDraft(text: string, savedMessage = "") {
+  const name = contactPhrase(text) || "there";
+  const title = cardTitleHint(text) || "Greeting";
+  const saved = String(savedMessage || "").replace(/\s+/g, " ").trim();
+  const body = saved || (/\bbirthday\b/i.test(text)
+    ? `Happy birthday, ${name}. Wishing you a good year ahead.`
+    : `Hello ${name}.`);
+  return `${title} for ${name}. Nothing was sent.\n\n${body}`;
 }
 
 export function isNewsletterArticleAdd(text: string) {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { isCalendarAsk, isCardAsk, isEletterAsk, isNewsletterAsk, taskKind } from "./advisor-intent.ts";
+import { isCalendarAsk, isCardAsk, isEletterAsk, isNewsletterAsk, greetingDraft, taskKind } from "./advisor-intent.ts";
 import { decideAction } from "./assistant-policy.ts";
 import { approvalFingerprint, approvalStillValid, chooseForm, claimDelivery, clientFolder, confirmationText, draftPath, factsFromFolder, fillFormDraft, formsFromPage, linksForInsurer, previewFilled, answerClientQuestion, fictionalClients, prepareFormDraft, retrieveDocument, type ClientRecord, type DeliveryPacket, type FormChoice } from "./desk-workflows.ts";
 import { DEFAULT_ASSISTANT } from "./assistant-policy.ts";
@@ -16,6 +16,11 @@ describe("desk workflows", () => {
     assert.equal(isNewsletterAsk("Prepare a newsletter about life insurance"), true);
     assert.equal(isCardAsk("Shorten the greeting and remove the second sentence"), false);
     assert.equal(isCardAsk("Do not send the birthday card"), false);
+    assert.equal(isCardAsk("Draft a birthday greeting for Avery Sample. Do not send it."), true);
+    assert.equal(taskKind("Draft a birthday greeting for Avery Sample. Do not send it."), "e-card");
+    assert.match(greetingDraft("Draft a birthday greeting for Avery Sample. Do not send it."), /Birthday Wishes for Avery Sample/);
+    assert.match(greetingDraft("Draft a birthday greeting for Avery Sample. Do not send it."), /Nothing was sent/);
+    assert.match(greetingDraft("Draft a birthday greeting for Avery Sample. Do not send it."), /Happy birthday, Avery Sample/);
     assert.equal(isEletterAsk("Do not send the letter"), false);
     const calendar = "Show my existing Outlook appointments for Monday, November 16, 2026, in Toronto time.";
     assert.equal(isCalendarAsk(calendar), true);

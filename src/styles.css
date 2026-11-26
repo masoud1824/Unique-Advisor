@@ -596,6 +596,7 @@ body:has(.ua-assistant-lock) {
 }
 .ua-assist-log {
   overscroll-behavior: contain;
+  overflow-anchor: none;
   scroll-behavior: auto;
   flex-direction: column;
   flex: 1 1 0%;

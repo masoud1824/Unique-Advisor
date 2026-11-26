@@ -326,6 +326,12 @@ export function createDraftAgent() {
       const scope = scopeFrom(context as RunContext<DraftScope>);
       scope.record.toolTrace.push(`run_advisor_workflow:${input.kind}`);
       const connections = scope.connections || { mailbox: false, dropbox: scope.dropboxConnected, calendar: false, zoom: false };
+      if (input.kind === "cards") {
+        const { greetingDraft, holdsDelivery, isCardAsk } = await import("../advisor-intent.ts");
+        if (holdsDelivery(scope.userText) || isCardAsk(scope.userText)) {
+          return { live: false, performed: false, sent: false, booked: false, uploaded: false, connection: "draft", notice: greetingDraft(scope.userText) };
+        }
+      }
       if (input.kind === "email" || input.kind === "dropbox" || input.kind === "scheduling") {
         const { readConnectedPreview } = await import("../provider-read.ts");
         const kind = input.kind === "email" ? "inbox" : input.kind === "dropbox" ? "dropbox" : "zoom";
@@ -368,7 +374,7 @@ export function createDraftAgent() {
       "A testing capability may be drafted on screen. Read a list the tool returns. Do not say a message was sent, a meeting was booked, or a file was uploaded.",
       "Form drafts are allowed on screen. Use inspect_form first, and fill a draft only when a field mapping exists. Do not upload the draft.",
       "Never invent a beneficiary, trustee, share, date, relationship, or designation.",
-      "Call run_advisor_workflow for mail, cards, newsletters, drips, Dropbox search, scheduling, a morning brief, or a client review. Read back a list the tool returns. If it says the connection is missing, say that and stop. Do not invent a sent message, a booking, or an upload.",
+      "Call run_advisor_workflow for mail, cards, newsletters, drips, Dropbox search, scheduling, a morning brief, or a client review. If the tool returns a draft, show that draft. A missing mailbox does not block an on-screen draft. Do not invent a sent message, a booking, or an upload.",
       "A named person, a child, or not-a-minor is not the insured-person checkbox. Do not ask again for a fact that is already known, and do not demand a special template.",
       "If a required fact is missing or a tool rejects it as ambiguous, ask one focused question.",
       "A spoken or typed yes is not approval to save. Never say a file was uploaded, mailed, or booked.",

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
 import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, shouldCaptureSpeech, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
@@ -970,6 +970,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const logRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
+  const pinningRef = useRef(false);
   rulesOpenRef.current = rulesOpen;
   chatIdRef.current = chatId;
   phaseRef.current = voicePhase;
@@ -1008,22 +1009,25 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setHeard(said);
   }), []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const log = logRef.current;
     if (!log || !stickRef.current) {
       if (log && log.scrollHeight - log.scrollTop - log.clientHeight > 80) setShowJump(true);
       return;
     }
-    const pin = () => {
-      log.scrollTop = log.scrollHeight;
-      setShowJump(false);
-    };
-    pin();
-    const frame = requestAnimationFrame(pin);
+    pinningRef.current = true;
+    log.scrollTop = log.scrollHeight;
+    setShowJump(false);
+    const frame = requestAnimationFrame(() => {
+      const node = logRef.current;
+      if (node && stickRef.current) node.scrollTop = node.scrollHeight;
+      pinningRef.current = false;
+    });
     return () => cancelAnimationFrame(frame);
   }, [turns, busy, chatId, rulesOpen, actions.length]);
 
   function onLogScroll() {
+    if (pinningRef.current) return;
     const log = logRef.current;
     if (!log) return;
     const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -1393,6 +1397,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     transcriptChoice.current = null;
     nameChoice.current = null;
     setTurns((current) => [...current, { role: "user", content, at: new Date().toISOString() }]);
+    stickRef.current = true;
     if (spoken) setText(content);
     else setText("");
     setBusy(true);
