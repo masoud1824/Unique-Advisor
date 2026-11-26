@@ -276,7 +276,7 @@ export async function refreshAccess(refreshToken: string) {
 }
 
 export async function graphInbox(accessToken: string) {
-  if (outboundBlocked()) return { ok: false as const, error: OUTBOUND_BLOCKED };
+  if (connectionSetupBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
   const response = await fetch("https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages?$top=8&$select=subject,from,bodyPreview,receivedDateTime&$orderby=receivedDateTime desc", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });

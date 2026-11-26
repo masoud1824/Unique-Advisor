@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { beginMicrosoftConnect, getMailSettings, saveMailSettings } from "@/lib/advisor.functions";
-import { beginZoomConnect, checkSignatureStatus, disconnectConnection, listConnectionStatus, loadFileStore, loadSignatureTest, saveFileStore, saveTestSigners } from "@/lib/advisor-links.functions";
+import { beginZoomConnect, checkSignatureStatus, disconnectConnection, listConnectionStatus, loadFileStore, loadSignatureTest, previewConnectedRead, saveFileStore, saveTestSigners } from "@/lib/advisor-links.functions";
 import { browserPublicUrl } from "@/lib/preview-path-prefix";
 import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import type { DeskData } from "@/lib/site-types";
@@ -150,7 +150,7 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
 
       <h3 className="mb-2 font-semibold">Email</h3>
       <p className="mb-3 text-sm" style={{ color: "#5a6a7a" }}>
-        {microsoft ? `Outlook is connected as ${mailFrom}.` : mailFrom ? `Sending address saved as ${mailFrom}.` : "No mailbox is connected yet."} Connect Outlook, Zoom, or Dropbox with that account’s own sign-in. Staging still does not send, book, or upload.
+        {microsoft ? `Outlook is connected as ${mailFrom}.` : mailFrom ? `Sending address saved as ${mailFrom}.` : "No mailbox is connected yet."} Connect Outlook, Zoom, or Dropbox with that account’s own sign-in. Staging can show the inbox, Dropbox files, and Zoom meetings. It still does not send, book, or upload.
       </p>
       <div className="mb-4 flex flex-wrap gap-2">
         <button type="button" className="ua-btn" disabled={busy !== ""} onClick={() => void connectOutlook()}>
@@ -159,6 +159,30 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
         {MAILBOXES.map((item) => (
           <button key={item.id} type="button" className={kind === item.id ? "ua-btn" : "ua-btn-line"} onClick={() => { setKind(item.id); setHost(item.host); setNote(""); }}>
             {item.label}
+          </button>
+        ))}
+      </div>
+      <div className="mb-4 flex flex-wrap gap-2">
+        {([
+          ["inbox", "Show inbox"],
+          ["dropbox", "Show Dropbox files"],
+          ["zoom", "Show Zoom meetings"],
+        ] as const).map(([kindName, label]) => (
+          <button
+            key={kindName}
+            type="button"
+            className="ua-btn-line"
+            disabled={busy !== ""}
+            onClick={() => {
+              setBusy(kindName);
+              setNote("");
+              void previewConnectedRead({ data: { slug: desk.slug, code, kind: kindName } }).then((result) => {
+                setBusy("");
+                setNote(result.ok ? result.text : result.error);
+              });
+            }}
+          >
+            {busy === kindName ? "Reading…" : label}
           </button>
         ))}
       </div>
@@ -274,7 +298,7 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
         ))}
         {links.length === 0 && <p className="text-sm" style={{ color: "#5a6a7a" }}>Zoom and file storage will appear here after the page finishes loading.</p>}
       </div>
-      {note && <p className="mt-3 text-sm font-semibold" style={{ color: note.includes("is connected") ? "#0d7a4f" : "#b42318" }}>{note}</p>}
+      {note && <p className="mt-3 whitespace-pre-wrap text-sm font-semibold" style={{ color: note.includes("Nothing was") ? "#1a1916" : note.includes("is connected") ? "#0d7a4f" : "#b42318" }}>{note}</p>}
     </section>
   );
 }

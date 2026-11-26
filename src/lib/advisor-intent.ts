@@ -83,6 +83,13 @@ export function isZoomAsk(text: string) {
   return /\b(?:book(?:ed)?\s+(?:a\s+)?zoom|book\s+zoom|zoom\s+meeting)\b/i.test(tidy);
 }
 
+export function isDropboxListAsk(text: string) {
+  const tidy = tidyHeard(text);
+  if (!/\bdropbox\b/i.test(tidy)) return false;
+  if (/\b(?:upload|save|send|delete|move|sign)\b/i.test(tidy)) return false;
+  return /\b(?:files?|folders?|list|show|what(?:'s| is)|open|see)\b/i.test(tidy);
+}
+
 const NOT_NAME = new Set(["using", "use", "fictional", "fiction", "test", "testing", "placeholder", "placeholders", "sample", "demo", "demonstrate", "demonstration", "onboarding", "intake", "checklist", "details", "detail", "prepare", "preparation", "request", "requests", "search", "save", "saved", "send", "schedule", "anything", "supplied", "looking", "creating", "without", "conversation", "record", "records", "draft", "drafts", "this", "these", "client", "clients", "contact", "contacts", "not", "do", "what", "when", "where", "who", "why", "how", "which", "is", "are", "was", "it", "that", "those", "time", "appointment", "appointments", "answer", "sentence", "changing", "summarize", "summary", "show", "list", "tell"]);
 
 function plainWord(word: string) {
@@ -1616,6 +1623,7 @@ export function taskKind(text: string) {
   if (isFormAsk(tidy)) return "form";
   if (isClientFileAsk(tidy)) return "client-file";
   if (isInboxAsk(tidy)) return "inbox";
+  if (isDropboxListAsk(tidy)) return "dropbox";
   if (isReviewAsk(tidy)) return "review";
   if (isFileAsk(tidy)) return "file";
   return "";

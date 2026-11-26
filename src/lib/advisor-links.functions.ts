@@ -23,6 +23,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { fileSettings, listDeskNotices, listUpcomingMeetings, clearDeskNotices, saveFileSettings, advisorZone, saveAdvisorZone, cancelBookedMeeting } from "@/lib/zoom-bookings";
 import { previewWritesBlocked } from "@/lib/preview-readonly";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { readConnectedPreview, type ProviderReadKind } from "@/lib/provider-read.ts";
 import { getSql } from "@/lib/db";
 
 export const loadLinkApps = createServerFn({ method: "POST" })
@@ -93,6 +94,17 @@ export const listConnectionStatus = createServerFn({ method: "POST" })
         ready: apps.find((app) => app.provider === link.provider)?.configured ?? false,
       })),
     };
+  });
+
+export const previewConnectedRead = createServerFn({ method: "POST" })
+  .validator((input: { slug: string; code: string; kind: ProviderReadKind }) => input)
+  .handler(async ({ data }) => {
+    const gate = await gateAdvisor(data.slug, data.code);
+    if (!gate.ok) return gate;
+    if (data.kind !== "inbox" && data.kind !== "dropbox" && data.kind !== "zoom") {
+      return { ok: false as const, error: "That read is not available." };
+    }
+    return { ok: true as const, text: await readConnectedPreview(gate.row.id, data.kind) };
   });
 
 export const checkSignatureStatus = createServerFn({ method: "POST" })

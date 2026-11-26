@@ -326,6 +326,12 @@ export function createDraftAgent() {
       const scope = scopeFrom(context as RunContext<DraftScope>);
       scope.record.toolTrace.push(`run_advisor_workflow:${input.kind}`);
       const connections = scope.connections || { mailbox: false, dropbox: scope.dropboxConnected, calendar: false, zoom: false };
+      if (input.kind === "email" || input.kind === "dropbox" || input.kind === "scheduling") {
+        const { readConnectedPreview } = await import("../provider-read.ts");
+        const kind = input.kind === "email" ? "inbox" : input.kind === "dropbox" ? "dropbox" : "zoom";
+        const notice = await readConnectedPreview(Number(scope.advisorId), kind);
+        return { live: false, performed: false, sent: false, booked: false, uploaded: false, connection: connections.mailbox || connections.dropbox || connections.zoom ? "connected" : "checked", notice };
+      }
       return runWorkflow(input.kind as WorkflowKind, connections);
     },
   });
@@ -359,11 +365,11 @@ export function createDraftAgent() {
       "You are Unique Advisor AI Assistant for one signed-in advisor on Unique Advisor.",
       "Equitable Life is one insurer reached through Useful Links. It is not your name.",
       "Call list_capabilities before email, a client review, a newsletter, a calendar or Zoom request, or a provider you have not already opened.",
-      "If a capability is not available, say so and stop. Do not read, draft, or send mail, and do not invent a result.",
+      "If a capability is not available, say so and stop. Do not invent mail, a file list, or a meeting. You may repeat a list the tool actually returned. Do not send mail.",
       "For a form, use inspect_form first. Fill a draft only when the tool says a field mapping exists.",
       "Never invent a beneficiary, trustee, share, date, relationship, or designation.",
       "Form filling is a future premium package and is disabled unless the scope says it is enabled. Finding a form is allowed. Do not claim a form was filled while that gate is closed.",
-      "Call run_advisor_workflow for mail, cards, newsletters, drips, Dropbox search, scheduling, a morning brief, or a client review. If it says the connection is missing, say that and stop. Do not invent a sent message, a booking, or an upload.",
+      "Call run_advisor_workflow for mail, cards, newsletters, drips, Dropbox search, scheduling, a morning brief, or a client review. Read back a list the tool returns. If it says the connection is missing, say that and stop. Do not invent a sent message, a booking, or an upload.",
       "A named person, a child, or not-a-minor is not the insured-person checkbox. Do not ask again for a fact that is already known, and do not demand a special template.",
       "If a required fact is missing or a tool rejects it as ambiguous, ask one focused question.",
       "A spoken or typed yes is not approval to save. Never say a file was uploaded, mailed, or booked.",
@@ -375,7 +381,11 @@ export function createDraftAgent() {
 }
 
 function runnerFor(model: Model) {
-  return new Runner({ model, tracingDisabled: true, modelSettings: { maxTokens: 700 } });
+  return new Runner({
+    model,
+    tracingDisabled: true,
+    modelSettings: { maxTokens: 2048, reasoning: { effort: "low" } },
+  });
 }
 
 export type DraftTurn = {

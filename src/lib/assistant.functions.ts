@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK, isolatedProviderNotice } from "@/lib/isolated-test-desk";
+import { connectionSetupBlocked, externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK, isolatedProviderNotice } from "@/lib/isolated-test-desk";
 import { modelTransportOpen, outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 import { archiveMessages, listDrips, saveDrip, sendApprovedAdvisorMail, startDrip } from "@/lib/advisor.functions";
 import { createCalendarEvent, createZoomMeeting, ensureLinkTables, accessToken, readCalendars, readDropbox, readZoom, saveDropboxNote, storedAdvisorLink, storedMailboxLink } from "@/lib/advisor-links";
@@ -68,6 +68,9 @@ import {
   requestedTag,
   shouldReplacePreview,
 } from "@/lib/delivery-audience";
+import { readConnectedPreview } from "@/lib/provider-read.ts";
+import { solChatCompletionBody } from "@/lib/agent/sol-request.ts";
+import { isDropboxListAsk } from "@/lib/advisor-intent.ts";
 import { contentHoldKind, holdNote } from "@/lib/workspace-policy";
 import { holdCampaign as persistCampaignControl, runQueuedCampaign as deliverCampaign, sendProposedNewsletter as deliverNewsletter, sendQueuedCard as deliverCard, sendQueuedEletter as deliverLetter, cancelPendingDesk, type DeliveryIo } from "@/lib/desk-handlers";
 import type { CancelStore } from "@/lib/workflow-entry";
@@ -2348,7 +2351,7 @@ async function calendarBrief(advisorId: number, text = "") {
   }
   const paused = await taskReady(advisorId, "meetings");
   if (paused) return paused;
-  if (externalSideEffectsBlocked()) {
+  if (connectionSetupBlocked()) {
     await discardPreviewActions(advisorId, true);
     return [
       "This isolated test copy did not contact Outlook or any other calendar provider.",
@@ -2385,7 +2388,7 @@ async function calendarBrief(advisorId: number, text = "") {
   }
   const note = "error" in calendar && calendar.error ? String(calendar.error) : "";
   const reply = presentCalendar(span, items);
-  return [reply, note].filter(Boolean).join("\n");
+  return [reply, note, "Nothing was booked."].filter(Boolean).join("\n");
 }
 async function inboxBrief(advisorId: number) {
   const paused = await taskReady(advisorId, "inbox");
@@ -2798,6 +2801,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     }]);
   }
   if (isInboxAsk(tidy)) return preparedWork(await inboxBrief(advisorId));
+  if (isDropboxListAsk(tidy)) return preparedWork(await readConnectedPreview(advisorId, "dropbox"));
   if (isFileAsk(tidy)) {
     const name = fileSubject(tidy);
     if (name.length < 2) return preparedWork("Which contact should I open?");
@@ -3534,12 +3538,12 @@ Advisor said: ${text.slice(0, 800)}`;
     const response = await fetch(`${OPENAI}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
+      body: JSON.stringify(solChatCompletionBody({
         model: advisorChatModel(),
-        temperature: 0,
-        max_tokens: 300,
+        max_completion_tokens: 800,
+        reasoning_effort: "low",
         messages: [{ role: "system", content: system }, { role: "user", content: user }]
-      }),
+      })),
       signal: AbortSignal.timeout(2e4)
     });
     if (!response.ok) return null;

@@ -1,4 +1,6 @@
 import { OpenAIProvider } from "@openai/agents-openai";
+import OpenAI from "openai";
+import { solAwareFetch } from "./sol-request.ts";
 import { gateAdvisor } from "../advisor-db.ts";
 import { getSql } from "../db.ts";
 import {
@@ -71,7 +73,10 @@ async function serverModel() {
   const apiKey = String(row?.openai_api_key || "").trim() || String(process.env.OPENAI_API_KEY || "").trim();
   const verified = await verifyModelAccess(apiKey);
   if (!verified.ok) return { ok: false as const, calledModel: false, reason: verified.blocker, model: verified.model };
-  const provider = new OpenAIProvider({ apiKey, useResponses: false });
+  const provider = new OpenAIProvider({
+    openAIClient: new OpenAI({ apiKey, fetch: solAwareFetch(globalThis.fetch.bind(globalThis)) }),
+    useResponses: true,
+  });
   try {
     return { ok: true as const, model: await provider.getModel(verified.model), modelId: verified.model };
   } catch (error) {
