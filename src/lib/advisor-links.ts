@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { dbSource, getSql } from "@/lib/db";
 import { PREVIEW_WRITE_BLOCK, previewWritesBlocked } from "@/lib/preview-readonly";
-import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { externalSideEffectsBlocked, connectionSetupBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { loadMicrosoftConfig, openSecret, sealSecret, accessTokenForAdvisor } from "@/lib/microsoft-mail";
 import { safeZone } from "@/lib/meeting-time";
 import { noteLookup } from "@/lib/lookup-log";
@@ -256,7 +256,7 @@ async function takeLinkState(state: string) {
   return rows[0] ?? null;
 }
 async function tokenPost(provider: string, body: URLSearchParams) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   const config = await appConfig(provider);
   if (!config) throw new Error(`${linkLabel(provider)} is not set up yet. Add it in Superadmin first.`);
   if (provider === "dropbox_sign") {
@@ -366,7 +366,7 @@ async function accountLabel(provider: string, accessToken2: string) {
   return json.mail || json.userPrincipalName || "Outlook Calendar";
 }
 async function saveAdvisorLink(input: { refreshToken?: string; provider: string; accessToken?: string; expiresIn?: number; advisorId: number }) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   if (!input.refreshToken) throw new Error(`${linkLabel(input.provider)} did not allow continued access. Connect again and accept every permission.`);
   const label = await accountLabel(input.provider, input.accessToken || "");
   await ensureLinkTables();
@@ -519,7 +519,7 @@ async function zoomAccountToken(advisorId: number) {
   return { token: json.access_token, email };
 }
 async function saveAdvisorZoom(advisorId: number, input: { email: string; accountId: string; clientId: string; clientSecret: string }) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
+  if (connectionSetupBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
   const email = input.email.trim().toLowerCase();
   const accountId = input.accountId.replace(/\s/g, "");
   const clientId = input.clientId.replace(/\s/g, "");
@@ -564,7 +564,7 @@ ${email}`}, ${sealed})
   return { ok: true as const, account: email };
 }
 async function disconnectAdvisorLink(advisorId: number, provider: string) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return;
+  if (connectionSetupBlocked()) return;
   await ensureLinkTables();
   await (await getSql())`delete from advisor_links where advisor_id = ${advisorId} and provider = ${provider}`;
   if (provider === "test_calendar") {
@@ -881,7 +881,7 @@ async function prepareLink(provider: string) {
   return config;
 }
 async function createLinkAuthorization(input: { provider: string; redirectUri: string; request: Request; advisorId: number; slug: string }) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
+  if (connectionSetupBlocked()) return { ok: false as const, error: ISOLATED_EXTERNAL_BLOCK };
   if (!isLinkProvider(input.provider)) return { ok: false as const, error: "That connection is not available." };
   let config;
   try {

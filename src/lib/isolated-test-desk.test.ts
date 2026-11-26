@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 import {
   ISOLATED_TEST_DIR,
+  connectionSetupBlocked,
   externalSideEffectsBlocked,
   isolatedProviderNotice,
   refusePreviewDataDir,
@@ -64,6 +65,7 @@ describe("isolated test desk gate", () => {
     delete process.env.VERCEL_ENV;
     process.env.UA_HOST_ENV = "staging";
     assert.equal(externalSideEffectsBlocked(), true);
+    assert.equal(connectionSetupBlocked(), false);
     delete process.env.UA_HOST_ENV;
     process.env.VERCEL_ENV = "production";
     process.env.UA_HOST_ENV = "production";

@@ -158,7 +158,9 @@ describe("model access", () => {
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.match(result.blocker, /No fallback model was used/);
-      assert.equal(result.model, process.env.UA_AGENT_MODEL || "gpt-6.2-sol");
+      const chosen = String(process.env.UA_AGENT_MODEL || "").trim();
+      const expected = chosen === "gpt-6.2-sol" || chosen.startsWith("gpt-6.2-sol-") ? chosen : "gpt-6.2-sol";
+      assert.equal(result.model, expected);
     }
   });
 });

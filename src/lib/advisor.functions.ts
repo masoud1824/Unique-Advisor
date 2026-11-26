@@ -18,7 +18,7 @@ import {
 } from "@/lib/microsoft-mail";
 import { getSql, dbSource } from "@/lib/db";
 import { PREVIEW_WRITE_BLOCK, previewWritesBlocked } from "@/lib/preview-readonly";
-import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { externalSideEffectsBlocked, connectionSetupBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { hashCode, codesMatch } from "@/lib/codes";
 import { CARDS, personalize, TAGS } from "@/lib/catalog";
 import { contactDeliveryBlock } from "@/lib/desk-workflows";
@@ -2035,7 +2035,7 @@ export const getMicrosoftAppStatus = createServerFn({ method: "POST" }).validato
 export const beginMicrosoftConnect = createServerFn({ method: "POST" }).validator((input) => input).handler(async ({ data }): Promise<any> => {
 	const gate = await gateAdvisor(data.slug, data.code, String(data.sessionToken || ""));
 	if (!gate.ok) return gate;
-	if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
+	if (connectionSetupBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
 	if (!(await microsoftAppStatus()).configured) return {
 		ok: false,
 		error: "Microsoft sign-in is not ready yet. Register the app in Entra, then save the Application (client) ID and secret Value below."
@@ -2080,7 +2080,7 @@ export const beginMicrosoftConnect = createServerFn({ method: "POST" }).validato
 export const disconnectMicrosoft = createServerFn({ method: "POST" }).validator((input) => input).handler(async ({ data }): Promise<any> => {
 	const gate = await gateAdvisor(data.slug, data.code, String(data.sessionToken || ""));
 	if (!gate.ok) return gate;
-	if (previewWritesBlocked() || externalSideEffectsBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
+	if (connectionSetupBlocked()) return { ok: false, error: ISOLATED_EXTERNAL_BLOCK };
 	await (await getSql())`
       update advisors
       set mail_provider = '',

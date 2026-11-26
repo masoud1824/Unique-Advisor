@@ -150,7 +150,7 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
 
       <h3 className="mb-2 font-semibold">Email</h3>
       <p className="mb-3 text-sm" style={{ color: "#5a6a7a" }}>
-        {microsoft ? `Outlook is connected as ${mailFrom}.` : mailFrom ? `Sending from ${mailFrom}.` : "No mailbox is connected yet."} Connect Outlook and Connect Microsoft Email still ask for Mail.Send, Mail.Read, and Calendars.ReadWrite, because sending cards and creating events use those. Do not use them for the read-only calendar test. Use Calendar, then Sign in with Microsoft. This preview blocks sending and booking either way.
+        {microsoft ? `Outlook is connected as ${mailFrom}.` : mailFrom ? `Sending address saved as ${mailFrom}.` : "No mailbox is connected yet."} Connect Outlook, Zoom, or Dropbox with that account’s own sign-in. Staging still does not send, book, or upload.
       </p>
       <div className="mb-4 flex flex-wrap gap-2">
         <button type="button" className="ua-btn" disabled={busy !== ""} onClick={() => void connectOutlook()}>
@@ -240,7 +240,6 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
               <button type="button" className="ua-btn" style={{ padding: "6px 10px", width: "fit-content" }} disabled={busy === "zoom"} onClick={() => void connectZoom()}>{busy === "zoom" ? "Opening Zoom…" : "Sign in with Zoom"}</button>
             )}
             {(link.provider === "dropbox" || link.provider === "dropbox_sign") && (!link.connected || link.provider === "dropbox") && (
-              link.ready ? (
               <form method="post" action={browserPublicUrl("/api/link/start")}>
                 <input type="hidden" name="slug" value={desk.slug} />
                 <input type="hidden" name="code" value={code} />
@@ -250,7 +249,6 @@ export function ConnectionsDesk({ code, desk, home }: { code: string; desk: Desk
                   {link.connected ? "Sign in again" : `Sign in with ${link.label}`}
                 </button>
               </form>
-              ) : <p className="text-xs" style={{ color: "#5a6a7a" }}>Not ready. Save this app in Superadmin first. A sign-in button is not a connection.</p>
             )}
             {link.provider === "dropbox_sign" && (
               <button

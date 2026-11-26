@@ -3,7 +3,8 @@ export const V1_MAIN_MODEL = "gpt-6.2-sol";
 
 export function configuredModelId() {
   const chosen = String(process.env.UA_AGENT_MODEL || "").trim();
-  return chosen || V1_MAIN_MODEL;
+  if (chosen === V1_MAIN_MODEL || chosen.startsWith(`${V1_MAIN_MODEL}-`)) return chosen;
+  return V1_MAIN_MODEL;
 }
 
 

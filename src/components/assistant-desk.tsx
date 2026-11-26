@@ -2128,6 +2128,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               {micTest && <p className="ua-playback-note" data-mic-test-result>{micTest}</p>}
               {playbackNote && <p className="ua-playback-note" data-playback-note>{playbackNote}</p>}
               <div className="ua-command-row">
+                <span className="text-sm font-extrabold" style={{ color: "#0f4c81" }}>OpenAI Sol</span>
                 {playableLine && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => { if (playingReply) cancelPlayback(); else void replaySpoken(); }}>{playingReply ? "Playing…" : "Play reply"}</button>}
                 <button type="button" className="ua-btn ua-voice-command" data-voice-command style={{ background: listening || speaking ? "#b42318" : undefined }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
                 <button type="button" className="ua-btn-line" data-mic-test style={{ padding: "8px 12px" }} onClick={() => void runMicTest()}>Test mic</button>

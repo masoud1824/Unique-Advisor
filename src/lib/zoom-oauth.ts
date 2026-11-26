@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { ensureLinkTables, saveAdvisorLink } from "@/lib/advisor-links";
 import { openSecret, signingKey } from "@/lib/microsoft-mail";
-import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
+import { connectionSetupBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { configuredPublicOrigin, zoomRedirectUri } from "@/lib/public-origin";
 
 async function zoomApp() {
@@ -95,7 +95,7 @@ export async function completeZoomSignIn(request: Request) {
   try {
     const app = await zoomApp();
     if (!app) return redirectDesk(saved.slug, "error", "Add the Zoom app in Superadmin first.");
-    if (outboundBlocked()) return redirectDesk(saved.slug, "error", OUTBOUND_BLOCKED);
+    if (connectionSetupBlocked()) return redirectDesk(saved.slug, "error", ISOLATED_EXTERNAL_BLOCK);
     const body = new URLSearchParams({ grant_type: "authorization_code", code, redirect_uri: redirectUri });
     const response = await fetch("https://zoom.us/oauth/token", {
       method: "POST",

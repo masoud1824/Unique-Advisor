@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { getSql } from "@/lib/db";
 import { previewWritesBlocked, PREVIEW_WRITE_BLOCK } from "@/lib/preview-readonly";
-import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
+import { connectionSetupBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { outboundBlocked, OUTBOUND_BLOCKED } from "@/lib/outbound-guard";
 
 const MAIL_SCOPES = "offline_access Mail.Send User.Read Calendars.ReadWrite";
@@ -214,7 +214,7 @@ export function assertCallbackUrl(candidate: string, request: Request) {
 }
 
 async function tokenRequest(body: URLSearchParams) {
-  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -248,7 +248,7 @@ export async function exchangeCode(input: { code: string; verifier: string; redi
 }
 
 export async function refreshAccess(refreshToken: string) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   const config = await loadMicrosoftConfig();
   if (!config) throw new Error("Microsoft sign-in is not configured. Add the Entra application ID and secret first.");
   const base = new URLSearchParams({
@@ -294,7 +294,7 @@ export async function graphInbox(accessToken: string) {
 }
 
 export async function graphMe(accessToken: string) {
-  if (outboundBlocked()) throw new Error(OUTBOUND_BLOCKED);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   const response = await fetch("https://graph.microsoft.com/v1.0/me?$select=displayName,mail,userPrincipalName", {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -388,7 +388,7 @@ export async function saveMicrosoftConnection(input: {
   refreshToken: string;
   expiresIn: number;
 }) {
-  if (previewWritesBlocked() || externalSideEffectsBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
+  if (connectionSetupBlocked()) throw new Error(ISOLATED_EXTERNAL_BLOCK);
   if (!input.refreshToken) {
     throw new Error("Microsoft did not return a refresh token. Connect again and accept offline access.");
   }

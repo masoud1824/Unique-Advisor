@@ -95,6 +95,27 @@ async function linkConnected(sql: Sql, advisorId: number, providers: string[]) {
   return Boolean(rows[0]);
 }
 
+async function advisorAccount(sql: Sql, advisorId: number) {
+  const rows = await sql.query<{ ms_refresh: string; mail_provider: string; mail_from: string }>(
+    `select coalesce(ms_refresh, '') as ms_refresh, coalesce(mail_provider, '') as mail_provider, coalesce(mail_from, '') as mail_from
+     from advisors where id = $1 limit 1`,
+    [advisorId],
+  );
+  return rows[0] || { ms_refresh: "", mail_provider: "", mail_from: "" };
+}
+
+async function mailboxConnected(sql: Sql, advisorId: number) {
+  if (await linkConnected(sql, advisorId, ["microsoft", "google", "gmail", "outlook"])) return true;
+  const account = await advisorAccount(sql, advisorId);
+  return account.ms_refresh.length > 0 || (account.mail_from.includes("@") && account.mail_provider.length > 0);
+}
+
+async function calendarConnected(sql: Sql, advisorId: number) {
+  if (await linkConnected(sql, advisorId, ["microsoft", "google", "outlook_calendar"])) return true;
+  const account = await advisorAccount(sql, advisorId);
+  return account.ms_refresh.length > 0;
+}
+
 export async function runDeskAgentTurn(input: { advisorId: number; slug: string; text: string; source?: "typed" | "voice" }) {
   const sql = await getSql();
   await ensurePreviewTables(sql);
@@ -111,9 +132,9 @@ export async function runDeskAgentTurn(input: { advisorId: number; slug: string;
     dropboxConnected: dropbox,
     formFillEnabled: false,
     connections: {
-      mailbox: await linkConnected(sql, input.advisorId, ["microsoft", "google"]),
+      mailbox: await mailboxConnected(sql, input.advisorId),
       dropbox,
-      calendar: await linkConnected(sql, input.advisorId, ["microsoft", "google"]),
+      calendar: await calendarConnected(sql, input.advisorId),
       zoom: await linkConnected(sql, input.advisorId, ["zoom"]),
     },
     loadForm: (query: string) => loadForm(sql, input.advisorId, query),
@@ -324,9 +345,9 @@ async function openScope(body: Body) {
     dropboxConnected: connected,
     formFillEnabled: false,
     connections: {
-      mailbox: await linkConnected(sql, gate.row.id, ["microsoft", "google"]),
+      mailbox: await mailboxConnected(sql, gate.row.id),
       dropbox: connected,
-      calendar: await linkConnected(sql, gate.row.id, ["microsoft", "google"]),
+      calendar: await calendarConnected(sql, gate.row.id),
       zoom: await linkConnected(sql, gate.row.id, ["zoom"]),
     },
     loadForm: (query: string) => loadForm(sql, gate.row.id, query),

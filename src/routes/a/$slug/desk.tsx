@@ -78,7 +78,6 @@ import { clearPhoneLogin, readPhoneLogin, savePhoneLogin } from "@/lib/phone-app
 
 installDeskSessionFetch();
 import { AssistantDesk } from "@/components/assistant-desk";
-import { DeskAssistant } from "@/routes/a/$slug/agent";
 import { TodayBirthdays } from "@/components/today-birthdays";
 import { InstallPhone } from "@/components/install-phone";
 import { DeskDrawer } from "@/components/desk-drawer";
@@ -568,7 +567,6 @@ function DeskApp({ code, desk, reload, signOut }: { code: string; desk: DeskData
 						code,
 						slug: desk.slug
 					}),
-					tab === "assistant" && /* @__PURE__ */ jsx(DeskAssistant, { slug: desk.slug, code }),
 					tab === "assistant" && ai && /* @__PURE__ */ jsx(AssistantDesk, {
 						code,
 						desk,

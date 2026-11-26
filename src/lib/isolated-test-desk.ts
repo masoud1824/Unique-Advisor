@@ -16,7 +16,12 @@ export function isolatedDataDir() {
   return (process.env.PGLITE_DATA_DIR || "").trim().replace(/\/+$/, "");
 }
 
-/** True only when this process was started as the isolated test desk. */
+/** Staging may store an advisor's own sign-in. Sends, bookings, and uploads stay blocked. */
+export function connectionSetupBlocked() {
+  return isolatedTestRequested() && isolatedDataDir() === ISOLATED_TEST_DIR;
+}
+
+/** True only when this process was started as the isolated test desk, or when this host must not call providers. */
 export function externalSideEffectsBlocked() {
   if (process.env.UA_OUTBOUND_BLOCK === "1") return true;
   const release = process.env.UA_RELEASE_ENV;
