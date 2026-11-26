@@ -76,6 +76,39 @@ export function missingQuestions(facts: DraftFacts) {
   return REQUIRED_QUESTIONS.filter((item) => !String(facts[item.key] || "").trim()).map((item) => item.ask);
 }
 
+export function isCapabilityQuestion(text: string) {
+  return /\b(what can you|what do you do|your capabilities|which tasks)\b/i.test(text);
+}
+
+/** A request for the saved link, not a request to fill the form. */
+export function isLinkOnly(text: string) {
+  if (isCapabilityQuestion(text)) return false;
+  const asksLink = /\b(find|show|link|url)\b/i.test(text);
+  const asksFill = /\b(fill|prepare|complete|open a draft|draft the|draft this|named person|not a minor)\b/i.test(text)
+    || /\bbeneficiary\s+(?:is|name)\b/i.test(text)
+    || /\brelationship\s+[a-z]+\b/i.test(text)
+    || /\bshare\s+\d/i.test(text)
+    || /\d{1,3}\s*(?:%|percent)\b/i.test(text);
+  return asksLink && !asksFill;
+}
+
+export function isDraftRequest(text: string) {
+  if (isCapabilityQuestion(text) || isLinkOnly(text)) return false;
+  return /\b(fill|prepare|complete|open a draft|draft the|draft this)\b/i.test(text)
+    || /\b(named person|not a minor)\b/i.test(text)
+    || /\bbeneficiary\s+(?:is|name)\b/i.test(text)
+    || /\brelationship\s+[a-z]+\b/i.test(text)
+    || /\bshare\s+\d/i.test(text)
+    || /\d{1,3}\s*(?:%|percent)\b/i.test(text);
+}
+
+/** Missing-field questions belong only to an active draft, not a link or a capability answer. */
+export function shouldShowDraft(request: string, record: { draftActive?: boolean }) {
+  if (!record.draftActive) return false;
+  if (isCapabilityQuestion(request) || isLinkOnly(request)) return false;
+  return true;
+}
+
 export function factsHash(facts: DraftFacts) {
   return createHash("sha256").update(JSON.stringify(facts)).digest("hex");
 }
@@ -139,7 +172,12 @@ function properNames(text: string) {
 }
 
 function percentages(text: string) {
-  return [...new Set([...String(text || "").matchAll(/\b(\d{1,3})\s*(?:%|percent)\b/gi)].map((match) => String(Number(match[1]))))];
+  const found = new Set<string>();
+  for (const match of String(text || "").matchAll(/\b(\d{1,3})\s*(?:%|percent|per cent)\b/gi)) found.add(String(Number(match[1])));
+  for (const match of String(text || "").matchAll(/\bshare(?:\s+percentage)?\s*(?:is|of|:)?\s*(\d{1,3})\b/gi)) found.add(String(Number(match[1])));
+  const bare = String(text || "").trim().match(/^(\d{1,3})\s*%?$/);
+  if (bare) found.add(String(Number(bare[1])));
+  return [...found];
 }
 
 export type FactRejection = { field: string; reason: string };
@@ -181,16 +219,19 @@ export function acceptSuppliedFacts(current: DraftFacts, incoming: DraftFacts, u
   });
   consider("designation", incoming.designation, () => {
     const value = String(incoming.designation || "");
-    if (value !== "named" && value !== "policy-owners" && value !== "insured") return "Pass the designation as named, policy-owners, or insured.";
+    if (value !== "named" && value !== "policy-owners" && value !== "insured") return "The designation was not a form checkbox.";
     const choices = designationPhrases(text);
-    if (choices.length !== 1) return choices.length > 1 ? "The designation is ambiguous. Say named beneficiary, policy owners, or the insured person." : "The designation was not stated.";
+    if (current.designation && choices[0] && choices[0] !== current.designation) {
+      return designationConflict(current, choices[0]);
+    }
+    if (choices.length !== 1) return choices.length > 1 ? designationConflict(current, choices[1] || choices[0]) : "The designation was not stated.";
     if (choices[0] !== value) return "That designation was not what the message said.";
     return "";
   });
   consider("trustee", incoming.trustee, () => {
     const value = String(incoming.trustee || "").trim();
     if (norm(value) === "none") {
-      return /\b(no trustee|not a minor|there is no trustee)\b/i.test(text) ? "" : "Say no trustee if there is not one. I did not assume that.";
+      return /\b(no trustee|not a minor|there is no trustee|is an adult)\b/i.test(text) ? "" : "Say there is no trustee if the beneficiary is not a minor. I did not assume that.";
     }
     return userSaid(text, value) && !negated(text, value) ? "" : "The trustee name was not stated.";
   });
@@ -205,10 +246,64 @@ export function acceptSuppliedFacts(current: DraftFacts, incoming: DraftFacts, u
 
 function designationPhrases(text: string): Designation[] {
   const found: Designation[] = [];
-  if (/\b(named beneficiary|following beneficiar)/i.test(text)) found.push("named");
-  if (/\bpolicy owners?\b/i.test(text)) found.push("policy-owners");
-  if (/\binsured person\b|\bthe insured\b/i.test(text)) found.push("insured");
+  if (/\b(named beneficiary|named person|following beneficiar)\b/i.test(text)) found.push("named");
+  if (/\bpolicy owners?\b/i.test(text) && /\b(beneficiar|designat)\b/i.test(text)) found.push("policy-owners");
+  if (/\b(designation\s*:\s*insured|designate the insured|the insured person)\b/i.test(text)) found.push("insured");
   return [...new Set(found)];
+}
+
+export function designationConflict(current: DraftFacts, next: Designation) {
+  const nextLabel = next === "insured" ? "the insured person" : next === "policy-owners" ? "the policy owners" : "a named person";
+  if (!current.designation) return `This message names more than one box on form 671BCF. Which one should I use: the named person, the policy owners, or the insured person?`;
+  const kept = current.designation === "insured"
+    ? "the insured person"
+    : current.designation === "policy-owners"
+      ? "the policy owners"
+      : `the named person${current.beneficiaryName ? ` ${current.beneficiaryName}` : ""}`;
+  return `The form already uses ${kept}. This message says ${nextLabel}. Those are different boxes on form 671BCF. Which one should I use?`;
+}
+
+export function applyUtterance(current: DraftFacts, text: string, previous = "", conflictPending = "") {
+  const incoming = factsFromUtterance(current, text, previous);
+  const choices = designationPhrases(text);
+  if (choices.length > 1) {
+    return { facts: current, accepted: [] as string[], rejected: [] as FactRejection[], changed: false, conflict: designationConflict(current, choices[1] || choices[0]) };
+  }
+  if (conflictPending && incoming.designation) {
+    const applied = acceptSuppliedFacts({ ...current, designation: undefined }, incoming, text);
+    applied.facts.designation = incoming.designation;
+    return { ...applied, changed: true, conflict: "" };
+  }
+  if (current.designation && incoming.designation && incoming.designation !== current.designation) {
+    const applied = acceptSuppliedFacts(current, { ...incoming, designation: undefined }, text);
+    return { ...applied, conflict: designationConflict(current, incoming.designation) };
+  }
+  return { ...acceptSuppliedFacts(current, incoming, text), conflict: "" };
+}
+
+const RELATIONSHIPS = ["child", "son", "daughter", "spouse", "sibling", "parent", "brother", "sister", "wife", "husband"];
+
+/** Read natural language into draft facts. A named person is not the insured-person checkbox. */
+export function factsFromUtterance(current: DraftFacts, text: string, previous = "") {
+  const incoming: DraftFacts = {};
+  const source = String(text || "");
+  const name = source.match(/\bbeneficiary(?:'s name| name)?\s+(?:is\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/);
+  if (name && norm(name[1]) !== norm(current.clientName || "") && norm(name[1]) !== norm(current.owner || "")) incoming.beneficiaryName = name[1];
+  const relationship = source.match(/\brelationship\s+(?:is\s+)?([a-z]+)\b/i);
+  const knownRelationship = RELATIONSHIPS.find((item) => new RegExp(`\\b${item}\\b`, "i").test(source));
+  if (relationship && RELATIONSHIPS.includes(relationship[1].toLowerCase())) incoming.relationship = relationship[1].toLowerCase();
+  else if (knownRelationship && /\b(relationship|my|is a|is my)\b/i.test(source)) incoming.relationship = knownRelationship;
+  const shares = percentages(source);
+  const previousAskedShare = /share percentage/i.test(previous);
+  if (shares.length === 1 && (/\b(share|%|percent)\b/i.test(source) || previousAskedShare || /^\d{1,3}\s*%?$/.test(source.trim()))) incoming.sharePercent = shares[0];
+  const choices = designationPhrases(source);
+  const numbered = source.trim().match(/^(?:number\s*)?([123])\b/);
+  if (choices.length === 1) incoming.designation = choices[0];
+  else if (numbered && /named person|insured person|policy owner/i.test(previous)) {
+    incoming.designation = numbered[1] === "1" ? "named" : numbered[1] === "2" ? "policy-owners" : "insured";
+  }
+  if (/\b(no trustee|not a minor|there is no trustee|is an adult)\b/i.test(source)) incoming.trustee = "none";
+  return incoming;
 }
 
 const DESIGNATION_FIELD: Record<Designation, string> = {

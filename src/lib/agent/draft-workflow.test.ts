@@ -10,7 +10,7 @@ import { fillMappedDraft } from "./equitable-draft.ts";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "./assistant-capabilities.ts";
 import { AGENT_ROADMAP } from "./roadmap.ts";
 import { acceptSuppliedFacts, missingQuestions, providerMapping, SIGNATURE_FIELDS } from "./equitable-fields.ts";
-import { bareApprovalSpeech, echoesAssistantReply, explicitReplayRunsTools, phaseAfterStop, sameTurnGuard, speechAuthorizesAction } from "./voice-bridge.ts";
+import { bareApprovalSpeech, echoesAssistantReply, explicitReplayRunsTools, phaseAfterStop, sameTurnGuard, speechAuthorizesAction, speechSegments } from "./voice-bridge.ts";
 
 const SOURCE = readFileSync(new URL("./draft-agent.ts", import.meta.url), "utf8");
 const SERVER = readFileSync(new URL("./preview-server.ts", import.meta.url), "utf8");
@@ -282,6 +282,94 @@ describe("equitable draft agent", () => {
     assert.equal(unmapped.preview, false);
     assert.equal(unmapped.formHref, "https://www.canadalife.com/form.pdf");
     assert.deepEqual(unmapped.readBack, {});
+  });
+
+  it("does not show draft questions for a link or a capability, and keeps natural facts", async () => {
+    const link = await runDraftTurn({
+      store: new MemoryDraftStore(),
+      scope: scope("7", "staging-practice"),
+      request: "Find the Equitable change of beneficiary form and show me the link.",
+      source: "typed",
+      runId: "link-only",
+      model: new ScriptedModel([
+        [functionCall("inspect_form", { query: "Equitable beneficiary" }, { callId: "link" })],
+        [assistantMessage("Beneficiary Change Request Form (671BCF)\nhttps://advisor.equitable.ca/671BCF.pdf")],
+      ]),
+    });
+    assert.deepEqual(link.missing, []);
+    assert.equal(link.preview, false);
+    assert.match(link.reply, /671BCF/);
+
+    const bytes = new Uint8Array(await readFile("/tmp/eq-form/671BCF.pdf"));
+    const store = new MemoryDraftStore();
+    const base = scope("7", "staging-practice", {
+      loadForm: async () => ({ ok: true, title: "Beneficiary Change Request Form (671BCF)", href: "https://advisor.equitable.ca/671BCF.pdf", bytes, notice: "671BCF" }),
+    });
+    const first = await runDraftTurn({
+      store,
+      scope: base,
+      request: "Please prepare the Equitable beneficiary form. The beneficiary is Riley Example, relationship child, a named person and not a minor.",
+      source: "typed",
+      runId: "natural",
+      model: new ScriptedModel([
+        [functionCall("inspect_form", { query: "Equitable 671BCF" }, { callId: "open" })],
+        [assistantMessage("What share percentage should this beneficiary receive? Use the exact format.")],
+      ]),
+    });
+    assert.deepEqual(first.missing, ["What share percentage should this beneficiary receive?"]);
+    assert.equal(first.readBack["Name first middle lastRow1"], "Riley Example");
+    assert.equal(first.readBack["RelationshipRow1"], "child");
+    assert.doesNotMatch(first.reply, /exact format/);
+    const second = await runDraftTurn({
+      store,
+      scope: base,
+      request: "100%",
+      source: "typed",
+      runId: "natural",
+      model: new ScriptedModel([[assistantMessage("What share percentage should this beneficiary receive? Use the exact format.")]]),
+    });
+    assert.deepEqual(second.missing, []);
+    assert.equal(second.readBack["Share Row1"], "100");
+    assert.equal(second.preview, true);
+    assert.match(second.reply, /ready for review/);
+    assert.doesNotMatch(second.reply, /share percentage/);
+    const conflict = await runDraftTurn({
+      store,
+      scope: base,
+      request: "designation: insured",
+      source: "voice",
+      runId: "natural",
+      model: new ScriptedModel([[assistantMessage("Say the designation as insured.")]]),
+    });
+    assert.equal(store.loadRaw("natural")?.facts.designation, "named");
+    assert.match(conflict.reply, /different boxes on form 671BCF/);
+    assert.doesNotMatch(conflict.reply, /exact format/);
+    const caps = await runDraftTurn({
+      store,
+      scope: base,
+      request: "What can you do?",
+      source: "typed",
+      runId: "natural",
+      model: new ScriptedModel([[assistantMessage("I can look up forms. Newsletters are not available. Scheduling is not available either.")]]),
+    });
+    assert.deepEqual(caps.missing, []);
+    assert.equal(caps.preview, false);
+    assert.match(caps.reply, /Newsletters are not available/);
+  });
+
+  it("speaks a long reply through the end with one selected voice", () => {
+    const long = `${"Forms are in testing. ".repeat(30)}Newsletters are not available. The rest of the answer keeps going after newsletters.`;
+    const parts = speechSegments(long, 500);
+    assert.equal(parts.join(" "), long);
+    assert.match(parts[parts.length - 1] || "", /after newsletters/);
+    assert.ok(parts.every((part) => part.length <= 500));
+    const page = readFileSync(new URL("../../routes/a/$slug/agent.tsx", import.meta.url), "utf8");
+    const speech = readFileSync(new URL("./preview-server.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(page, /speechSynthesis\.speak/);
+    assert.doesNotMatch(page, /slice\(0, 500\)/);
+    assert.doesNotMatch(speech, /line\.slice\(0, 500\)/);
+    assert.match(speech, /selectedAdvisorVoice/);
+    assert.match(speech, /A different voice was not used/);
   });
 
   it("reports a tool failure instead of a successful save", async () => {

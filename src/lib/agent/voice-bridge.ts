@@ -32,3 +32,31 @@ export function sameTurnGuard(input: { busy: boolean; previous: string; text: st
   if (isDuplicateTranscript(input.previous, input.text, input.elapsedMs)) return { accept: false as const, reason: "duplicate" as const };
   return { accept: true as const, reason: "ok" as const };
 }
+
+/** Split a reply into spoken pieces without dropping the ending. */
+export function speechSegments(text: string, limit = 700) {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return [];
+  const sentences = clean.split(/(?<=[.!?])\s+/);
+  const chunks: string[] = [];
+  let current = "";
+  const push = (piece: string) => {
+    const value = piece.trim();
+    if (value) chunks.push(value);
+  };
+  for (const sentence of sentences) {
+    if (sentence.length > limit) {
+      push(current);
+      current = "";
+      for (let index = 0; index < sentence.length; index += limit) push(sentence.slice(index, index + limit));
+      continue;
+    }
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (next.length > limit) {
+      push(current);
+      current = sentence;
+    } else current = next;
+  }
+  push(current);
+  return chunks;
+}

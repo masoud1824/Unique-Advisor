@@ -163,6 +163,13 @@ async function savedAdvisorVoice(advisorId: number) {
   const row = (await (await getSql())<{ assistant_voice: string }>`select assistant_voice from advisors where id = ${advisorId}`)[0];
   return openAiVoice(row?.assistant_voice);
 }
+export async function selectedAdvisorVoice(advisorId: number) {
+  await ensureAssistantTables();
+  if (!(advisorId > 0)) return "";
+  const row = (await (await getSql())<{ assistant_voice: string }>`select assistant_voice from advisors where id = ${advisorId}`)[0];
+  const raw = String(row?.assistant_voice || "").trim().toLowerCase();
+  return raw && openAiVoice(raw) === raw ? raw : "";
+}
 function noteProvider(calls: ProviderCall[], facts: Partial<ProviderCall> | null | undefined) {
   if (!facts) return;
   if (!facts.provider && !facts.model && !facts.requestId && facts.promptTokens == null && facts.completionTokens == null && facts.totalTokens == null && facts.status == null) return;
@@ -245,14 +252,14 @@ export async function warmVoiceLink() {
   }
   return voiceWarmed;
 }
-export async function speakSentence(text: string, onChunk: (chunk: Buffer) => void, advisorId = 0) {
+export async function speakSentence(text: string, onChunk: (chunk: Buffer) => void, advisorId = 0, voiceOverride = "") {
   const model = modelTransportOpen();
   if (!model.ok) throw new Error(model.reason);
   const apiKey = await companyApiKey();
   if (!apiKey) throw new Error("No voice key.");
   const started = Date.now();
   console.info(`[voice] tts-start chars=${text.length}`);
-  const voice = await savedAdvisorVoice(advisorId);
+  const voice = voiceOverride || await savedAdvisorVoice(advisorId);
   let response: Response;
   try {
     response = await fetch(`${OPENAI}/audio/speech`, {

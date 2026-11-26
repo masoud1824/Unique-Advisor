@@ -12,9 +12,9 @@ import {
 } from "../form-lookup.ts";
 import { redactPrivate } from "../hosted-runtime.ts";
 import { modelTransportOpen } from "../outbound-guard.ts";
-import type { DraftPayload } from "./equitable-fields.ts";
+import { FORM_CODE, type DraftPayload } from "./equitable-fields.ts";
 import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
-import { FORM_CODE } from "./equitable-fields.ts";
+import { speechSegments } from "./voice-bridge.ts";
 
 type Sql = Awaited<ReturnType<typeof getSql>>;
 
@@ -38,6 +38,8 @@ export function ensurePreviewTables(sql: Sql) {
       form_title text not null default '',
       form_href text not null default '',
       form_code text not null default '',
+      draft_active boolean not null default false,
+      designation_conflict text not null default '',
       read_back jsonb not null default '{}'::jsonb,
       stale_hashes jsonb not null default '[]'::jsonb,
       slug text not null default '',
@@ -46,6 +48,8 @@ export function ensurePreviewTables(sql: Sql) {
     );
     create index if not exists agent_preview_runs_advisor_idx on agent_preview_runs (advisor_id, updated_at desc);
     alter table agent_preview_runs add column if not exists form_code text not null default '';
+    alter table agent_preview_runs add column if not exists draft_active boolean not null default false;
+    alter table agent_preview_runs add column if not exists designation_conflict text not null default '';
     create table if not exists agent_form_templates (
       form_code text primary key,
       source_url text not null default '',
@@ -96,7 +100,7 @@ function asJson<T>(value: unknown, fallback: T): T {
 async function readRun(sql: Sql, advisorId: number, runId: string): Promise<DraftRecord | null> {
   const rows = await sql.query<Record<string, unknown>>(
     `select id, advisor_id, slug, messages, facts, pending, consumed_hashes, stale_hashes, approval_status,
-            serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, read_back
+            serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, draft_active, designation_conflict, read_back
      from agent_preview_runs where id = $1 and advisor_id = $2`,
     [runId, advisorId],
   );
@@ -119,6 +123,8 @@ async function readRun(sql: Sql, advisorId: number, runId: string): Promise<Draf
     formTitle: String(row.form_title || ""),
     formHref: String(row.form_href || ""),
     formCode: String(row.form_code || ""),
+    draftActive: row.draft_active === true || row.draft_active === "t" || row.draft_active === "true",
+    designationConflict: String(row.designation_conflict || ""),
     toolTrace: asJson(row.tool_trace, []),
     dropboxConnected: false,
     dropboxUploaded: false,
@@ -129,8 +135,8 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
   await sql.query(
     `insert into agent_preview_runs
       (id, advisor_id, slug, status, messages, facts, pending, consumed_hashes, stale_hashes, approval_status,
-       serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, read_back, updated_at)
-     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18::jsonb, now())
+       serialized, pdf, template_pdf, tool_trace, form_title, form_href, form_code, draft_active, designation_conflict, read_back, updated_at)
+     values ($1,$2,$3,$4,$5::jsonb,$6::jsonb,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20::jsonb, now())
      on conflict (id) do update set
        status = excluded.status,
        messages = excluded.messages,
@@ -146,6 +152,8 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
        form_title = excluded.form_title,
        form_href = excluded.form_href,
        form_code = excluded.form_code,
+       draft_active = excluded.draft_active,
+       designation_conflict = excluded.designation_conflict,
        read_back = excluded.read_back,
        updated_at = now()
      where agent_preview_runs.advisor_id = excluded.advisor_id`,
@@ -167,6 +175,8 @@ async function writeRun(sql: Sql, advisorId: number, record: DraftRecord) {
       record.formTitle,
       record.formHref,
       record.formCode,
+      record.draftActive,
+      record.designationConflict || "",
       JSON.stringify(record.readBack),
     ],
   );
@@ -325,15 +335,22 @@ export async function previewSpeech(body: Body) {
   const record = await readRun(opened.sql, opened.gate.row.id, String(body.runId || ""));
   const line = String(body.line || "").replace(/\s+/g, " ").trim();
   const last = [...(record?.messages || [])].reverse().find((message) => message.role === "assistant")?.text.replace(/\s+/g, " ").trim() || "";
-  if (!line || !last || (line !== last && !last.includes(line))) return { ok: false as const, error: "That line is not the reply on screen. Nothing was run again." };
+  if (!line || line !== last) return { ok: false as const, error: "That line is not the reply on screen. Nothing was run again." };
   const transport = modelTransportOpen();
   if (!transport.ok) return { ok: false as const, error: transport.reason };
-  const { speakSentence } = await import("../assistant.functions.ts");
-  const parts: Buffer[] = [];
+  const { selectedAdvisorVoice, speakSentence } = await import("../assistant.functions.ts");
+  const voice = await selectedAdvisorVoice(opened.gate.row.id);
+  if (!voice) return { ok: false as const, error: "No voice is selected. A different voice was not used." };
+  const segments = speechSegments(line);
+  const parts: string[] = [];
   try {
-    await speakSentence(line.slice(0, 500), (chunk) => parts.push(chunk), opened.gate.row.id);
+    for (const segment of segments) {
+      const chunks: Buffer[] = [];
+      await speakSentence(segment, (chunk) => chunks.push(chunk), opened.gate.row.id, voice);
+      parts.push(Buffer.concat(chunks).toString("base64"));
+    }
   } catch (error) {
-    return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready.") };
+    return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready."), voice };
   }
-  return { ok: true as const, audio: Buffer.concat(parts) };
+  return { ok: true as const, voice, parts };
 }

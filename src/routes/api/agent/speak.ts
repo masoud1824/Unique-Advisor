@@ -7,10 +7,7 @@ export const Route = createFileRoute("/api/agent/speak")({
       POST: async ({ request }) => {
         const body = await request.json().catch(() => ({}));
         const result = await previewSpeech(body);
-        if (!result.ok) return Response.json(result);
-        return new Response(result.audio, {
-          headers: { "content-type": "audio/mpeg", "cache-control": "no-store" },
-        });
+        return Response.json(result);
       },
     },
   },

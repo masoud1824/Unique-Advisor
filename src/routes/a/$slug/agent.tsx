@@ -4,7 +4,7 @@ import { transcribeAssistant } from "@/lib/assistant.functions";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "@/lib/agent/assistant-capabilities";
 import { echoesAssistantReply, phaseAfterStop, sameTurnGuard, type VoicePhase } from "@/lib/agent/voice-bridge";
 import { decideTranscript, microphoneTestReport, transcriptionPrompt } from "@/lib/transcript-guard";
-import { beginPlayback, browserFallbackAllowed, emptyPlayback, shouldCaptureSpeech, shouldResumeAfterSpeech, stopPlayback, type PlaybackState } from "@/lib/voice-desk";
+import { beginPlayback, emptyPlayback, shouldCaptureSpeech, shouldResumeAfterSpeech, stopPlayback, type PlaybackState } from "@/lib/voice-desk";
 
 type Approval = { hash: string; payload: { advisorId: string; clientName: string; formCode: string; destination: string; factsHash: string } };
 type Turn = {
@@ -128,44 +128,44 @@ function AgentPreview() {
     playRef.current = next.state;
     if (!next.accept) return;
     const owner = next.owner;
+    audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
     setLive("preparing");
-    let serverStarted = false;
+    setNote("");
     try {
       const response = await fetch("/api/agent/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ slug, code, sessionToken, runId, line: spoken.slice(0, 500) }),
+        body: JSON.stringify({ slug, code, sessionToken, runId, line: spoken }),
       });
+      const result = (await response.json()) as { ok?: boolean; error?: string; voice?: string; parts?: string[] };
       if (playRef.current.owner !== owner) return;
-      if ((response.headers.get("content-type") || "").includes("audio")) {
-        const url = URL.createObjectURL(await response.blob());
-        const audio = new Audio(url);
-        audioRef.current = audio;
-        serverStarted = true;
-        setLive("speaking");
-        audio.onended = () => {
-          if (playRef.current.owner === owner) setLive("idle");
-        };
-        await audio.play();
+      if (!response.ok || result.ok === false || !result.parts?.length) {
+        setNote(result.error || "The selected voice did not finish. Press Play reply. A different voice was not used.");
+        setLive("error");
         return;
       }
-    } catch {
-      serverStarted = false;
-    }
-    if (!browserFallbackAllowed({ owner, activeOwner: playRef.current.owner, serverStarted }) || !window.speechSynthesis) {
-      setNote("The reply is on screen. Press Play reply to hear it.");
-      setLive("idle");
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(spoken.slice(0, 500));
-    utter.lang = "en-CA";
-    utter.onend = () => {
+      for (const part of result.parts) {
+        if (playRef.current.owner !== owner) return;
+        const bytes = Uint8Array.from(atob(part), (char) => char.charCodeAt(0));
+        const url = URL.createObjectURL(new Blob([bytes], { type: "audio/mpeg" }));
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        setLive("speaking");
+        await new Promise<void>((resolve, reject) => {
+          audio.onended = () => resolve();
+          audio.onerror = () => reject(new Error("The selected voice stopped before the reply finished."));
+          audio.play().catch(reject);
+        });
+        URL.revokeObjectURL(url);
+      }
       if (playRef.current.owner === owner) setLive("idle");
-    };
-    setNote("A browser English voice is speaking because the saved voice clip was not ready. The full reply is on screen.");
-    setLive("speaking");
-    window.speechSynthesis.speak(utter);
+    } catch (error) {
+      if (playRef.current.owner !== owner) return;
+      audioRef.current?.pause();
+      setNote(error instanceof Error ? error.message : "The selected voice did not finish. Press Play reply. A different voice was not used.");
+      setLive("error");
+    }
   }
 
   async function openAssistant(event?: FormEvent) {

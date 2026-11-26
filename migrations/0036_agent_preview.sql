@@ -38,5 +38,7 @@ alter table agent_preview_runs add column if not exists stale_hashes jsonb not n
 alter table agent_preview_runs add column if not exists form_title text not null default '';
 alter table agent_preview_runs add column if not exists form_href text not null default '';
 alter table agent_preview_runs add column if not exists form_code text not null default '';
+alter table agent_preview_runs add column if not exists draft_active boolean not null default false;
+alter table agent_preview_runs add column if not exists designation_conflict text not null default '';
 alter table agent_preview_runs add column if not exists read_back jsonb not null default '{}'::jsonb;
 alter table agent_preview_runs add column if not exists template_pdf bytea;
