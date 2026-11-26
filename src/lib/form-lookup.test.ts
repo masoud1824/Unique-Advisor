@@ -14,12 +14,16 @@ import {
   readPublicHttps,
   sameLibrarySite,
   savedLinkBlockedNote,
+  declinedSavedLink,
+  foundFormNote,
+  officialFormWebSearch,
   searchPublicFormPages,
   verifySavedDocument,
   webSearchBlockedNote,
 } from "./form-lookup.ts";
 import { chooseForm, formsFromPage } from "./desk-workflows.ts";
 import { isFormAsk } from "./advisor-intent.ts";
+import { asksContactRecord, asksExplicitWebFormSearch } from "./delivery-audience.ts";
 import { contentHoldKind } from "./workspace-policy.ts";
 
 describe("useful links before the web", () => {
@@ -128,5 +132,49 @@ describe("useful links before the web", () => {
     else process.env.UA_OUTBOUND_BLOCK = previousBlock;
     if (previousRelease === undefined) delete process.env.UA_RELEASE_ENV;
     else process.env.UA_RELEASE_ENV = previousRelease;
+  });
+});
+
+describe("explicit provider form web search", () => {
+  const manulife = "Search the web for Manulife Canada’s official individual life insurance beneficiary-change form. Do not use the saved Equitable link. Return the official form link and the source page where you found it. If web search is unavailable, say so.";
+  const samples = [
+    manulife,
+    "Look online for Sun Life's change of beneficiary form. Do not use a saved link.",
+    "Find the official Canada Life beneficiary form on the web and give me the source page.",
+    "Search the internet for the iA Financial individual life beneficiary-change form.",
+  ];
+
+  it("does not treat a provider form search as a contact lookup", () => {
+    for (const line of samples) {
+      assert.equal(asksExplicitWebFormSearch(line), true, line);
+      assert.equal(asksContactRecord(line), false, line);
+      assert.equal(isFormAsk(line), true, line);
+    }
+    assert.equal(asksExplicitWebFormSearch("Do not search the web for the Manulife form."), false);
+    assert.equal(asksContactRecord("Show the saved contact record for Casey Sample, including email and phone."), true);
+    assert.equal(declinedSavedLink(manulife, "Equitable forms"), true);
+    assert.equal(declinedSavedLink(manulife, "Manulife forms"), false);
+    assert.doesNotMatch(foundFormNote("Equitable forms", "https://example.test/eq", "Beneficiary"), /verified/);
+    assert.match(foundFormNote("Equitable forms", "https://example.test/eq", "Beneficiary", true), /stored Useful Link/);
+    assert.match(foundFormNote("Equitable forms", "https://example.test/eq", "Beneficiary", true), /not a new web search/);
+  });
+
+  it("reports a blocked web search instead of a saved link or a contact", async () => {
+    const previous = process.env.UA_RELEASE_ENV;
+    process.env.UA_RELEASE_ENV = "staging";
+    let called = false;
+    const reply = await officialFormWebSearch(manulife, (() => {
+      called = true;
+      return Promise.resolve(new Response("no"));
+    }) as typeof fetch);
+    assert.equal(called, false);
+    assert.match(reply, /Web search is unavailable/);
+    assert.match(reply, /was not searched/);
+    assert.doesNotMatch(reply, /contacts table/);
+    assert.doesNotMatch(reply, /Equitable/);
+    const follow = await officialFormWebSearch("yes, search the web", (() => Promise.resolve(new Response("no"))) as typeof fetch);
+    assert.equal(follow, "");
+    if (previous === undefined) delete process.env.UA_RELEASE_ENV;
+    else process.env.UA_RELEASE_ENV = previous;
   });
 });

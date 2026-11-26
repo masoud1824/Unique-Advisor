@@ -20,11 +20,13 @@ describe("today's birthday report", () => {
     });
     assert.equal(report.date, "2026-11-23");
     assert.deepEqual(report.people.map((person) => [person.name, person.card]), [
-      ["Ada Sample", "sent"],
+      ["Ada Sample", "accepted"],
       ["Cal Sample", "failed"],
     ]);
     assert.equal(birthdayCardReport(null), "not sent");
-    assert.equal(birthdayCardReport("claimed"), "unavailable");
+    assert.equal(birthdayCardReport("claimed"), "uncertain");
+    assert.equal(birthdayCardReport("unknown"), "uncertain");
+    assert.equal(birthdayCardReport("delivered"), "delivered");
     const nextDay = todaysBirthdayReport({ advisorId: 7, people, claims: [], now: new Date("2026-11-24T15:00:00Z"), timeZone: "America/Toronto", feb29: "skip" });
     assert.equal(nextDay.people.length, 0);
   });

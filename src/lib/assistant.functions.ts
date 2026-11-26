@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
@@ -34,7 +34,7 @@ import { taskOn, taskPaused } from "@/lib/secretary-rules";
 import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
-import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readApprovedUsefulLink, readPublicHttps, sameLibrarySite, searchPublicFormPages, verifySavedDocument } from "@/lib/form-lookup";
+import { blockedReadNote, declinedSavedLink, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, officialFormWebSearch, pendingFormRequest, readApprovedUsefulLink, readPublicHttps, sameLibrarySite, searchPublicFormPages, verifySavedDocument } from "@/lib/form-lookup";
 import { publicTranscriptionError, sanitizeProviderDetail, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
@@ -48,6 +48,7 @@ import {
   asksCampaignControl,
   asksSavedCampaignReview,
   asksContactRecord,
+  asksExplicitWebFormSearch,
   asksDeliveryAudience,
   asksEmailThreadStatus,
   asksIssueDates,
@@ -1915,14 +1916,12 @@ async function reviseSavedNewsletterArticle(advisorId: number, slug: string, cod
     const atNumber = articles[target.index]?.title || "that article";
     return { reply: `Article ${target.index + 1} is “${atNumber}”, not “${target.name}”. Nothing was changed or sent.`, actions: [] };
   }
-  if (!target.sentences) return { reply: "How many sentences should that article be? Nothing was saved or sent.", actions: [] };
+  if (!target.sentences && !/\bshorter\b/i.test(text)) return { reply: "How many sentences should that article be? Nothing was saved or sent.", actions: [] };
   const article = articles[index];
   if (!article) return { reply: `That article is not in “${chosen.issue.title}”. Nothing was changed or sent.`, actions: [] };
-  const shortened = firstSentences(article.body, target.sentences);
-  if (sentenceCount(shortened) !== target.sentences) {
-    return { reply: `“${article.title}” does not have ${target.sentences} sentences to keep. Nothing was changed or sent.`, actions: [] };
-  }
-  const next = articles.map((item, itemIndex) => itemIndex === index ? { ...item, body: shortened } : item);
+  const revised = reviseSectionBody(article.body, text);
+  if (!revised.ok) return { reply: revised.reason, actions: [] };
+  const next = articles.map((item, itemIndex) => itemIndex === index ? { ...item, body: revised.body } : item);
   const unchanged = next.every((item, itemIndex) => itemIndex === index || item.body === articles[itemIndex].body);
   if (!unchanged) return { reply: "The other articles were not left as they were. Nothing was saved or sent.", actions: [] };
   const issue = { ...chosen.issue, articles: next };
@@ -2125,7 +2124,7 @@ async function formBrief(advisorId: number, text: string) {
   } catch {
     return "Useful Links could not be read. That is an access failure, not a missing form. I did not search the web.";
   }
-  const saved = links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") }));
+  const saved = links.map((row) => ({ label: String(row.label || ""), url: String(row.url || "") })).filter((link) => !declinedSavedLink(text, link.label));
   const matched = matchSavedFormLinks(saved, text);
   if (!matched.length || matched.length > 1) return explainFormLookup({ links: saved, request: text });
   const pageUrl = matched[0].url;
@@ -2139,7 +2138,7 @@ async function formBrief(advisorId: number, text: string) {
     if (/\.pdf(?:$|\?)/i.test(pageUrl)) {
       const verified = await verifySavedDocument(pageUrl);
       if (!verified.ok) return `Saved Useful Link: ${matched[0].label}\n${pageUrl}\n${verified.access} I did not search online. Nothing was filled, saved, or uploaded.`;
-      return foundFormNote(matched[0].label, verified.href, matched[0].label);
+      return foundFormNote(matched[0].label, verified.href, matched[0].label, true);
     }
     const preview = explainFormLookup({ links: [matched[0]], request: text });
     if (preview) return preview;
@@ -2156,7 +2155,7 @@ async function formBrief(advisorId: number, text: string) {
     }
     const verified = await verifySavedDocument(form.href);
     if (!verified.ok) return `Saved Useful Link: ${matched[0].label}\n${read.finalUrl}\nForm listed: ${form.title}\n${form.href}\n${verified.access} I did not search online. Nothing was filled, saved, or uploaded.`;
-    return foundFormNote(matched[0].label, verified.href, form.title);
+    return foundFormNote(matched[0].label, verified.href, form.title, true);
   }
   const choice = chooseForm(forms, text);
   if (choice.kind === "none") return formWebPrompt(text);
@@ -3204,6 +3203,10 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
   const lastAssistant = [...thread].reverse().find((turn) => turn.role === "assistant")?.content || "";
   if (isFormWebAgreement(tidy, lastAssistant)) {
     return replyWith(advisorId, chatId, await searchPublicFormPages(pendingFormRequest(lastAssistant)), onDelta);
+  }
+  if (asksExplicitWebFormSearch(command) || asksExplicitWebFormSearch(text)) {
+    await discardPreviewActions(advisorId, true);
+    return replyWith(advisorId, chatId, await officialFormWebSearch(asksExplicitWebFormSearch(command) ? command : text), onDelta, []);
   }
   if (isBareRefusal(tidy) || /\bcancel the pending approval\b/i.test(tidy)) {
     const facts = await cancellationFacts(advisorId);

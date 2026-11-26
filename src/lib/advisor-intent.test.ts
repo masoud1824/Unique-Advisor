@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, yesApplies } from "./advisor-intent.ts";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, yesApplies } from "./advisor-intent.ts";
 import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
 import { SECRETARY_RULES, taskOn } from "./secretary-rules.ts";
 import { orchestrationControl } from "./orchestration.ts";
@@ -301,6 +301,15 @@ describe("misheard advisor commands", () => {
       "reviewing financial goals: the next step",
     ]);
     assert.equal(isNewNewsletterDraft("Open the saved Test Newsletter and show its articles. Do not send."), false);
+    const follow = "Make the second section shorter and add a closing invitation to book a review. Keep it as a draft.";
+    assert.equal(isNewsletterArticleRevision(follow), true);
+    assert.equal(isNewsletterAsk(follow), false);
+    const edited = reviseSectionBody("The goals are named. A change in income can make last year's target the wrong size. The next conversation should pick one goal.", follow);
+    assert.equal(edited.ok, true);
+    if (edited.ok) {
+      assert.match(edited.body, /book a review/);
+      assert.equal(edited.body.includes("The next conversation"), false);
+    }
   });
 
   it("shortens only the named second article and leaves the request on the desk", () => {

@@ -1115,7 +1115,7 @@ export function newsletterMoveTarget(text: string) {
 
 export function isNewsletterArticleRevision(text: string) {
   const tidy = tidyHeard(text);
-  if (!/\b(?:shorten|condense|rewrite|reword|rephrase|trim)\b/i.test(tidy)) return false;
+  if (!/\b(?:shorten|shorter|condense|rewrite|reword|rephrase|trim)\b/i.test(tidy)) return false;
   if (/\b(?:article|part|section|story)\b/i.test(tidy)) return true;
   if (!/\bto\s+(?:\d+|one|two|three|four|a|an|single)\s+sentences?\b/i.test(tidy)) return false;
   if (/\b(?:e-?cards?|thank you|birthday|holiday|welcome|anniversary)\b/i.test(tidy) && !/\bnewsletters?\b/i.test(tidy)) return false;
@@ -1150,6 +1150,21 @@ export function newsletterArticleTarget(text: string) {
   const wordCount: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, a: 1, an: 1, single: 1 };
   const sentences = count ? wordCount[count[1].toLowerCase()] || Number(count[1]) : null;
   return { index, name: resolvedName, sentences };
+}
+
+export function reviseSectionBody(body: string, instruction: string) {
+  const target = newsletterArticleTarget(instruction);
+  const shorter = /\bshorter\b/i.test(instruction) && !target.sentences;
+  if (!target.sentences && !shorter) return { ok: false as const, reason: "How many sentences should that article be? Nothing was saved or sent." };
+  const keep = target.sentences || Math.max(1, sentenceCount(body) - 1);
+  let next = firstSentences(body, keep);
+  if (target.sentences && sentenceCount(next) !== target.sentences) {
+    return { ok: false as const, reason: `That section does not have ${target.sentences} sentences to keep. Nothing was changed or sent.` };
+  }
+  if (/\b(?:closing invitation|book a review)\b/i.test(instruction) && !/book a review/i.test(next)) {
+    next = `${next} Please reply if you would like to book a review.`.trim();
+  }
+  return { ok: true as const, body: next };
 }
 
 export function sentenceCount(text: string) {

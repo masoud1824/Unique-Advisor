@@ -231,12 +231,14 @@ export function summarizeAdvisorNotice(recipients: Array<{ name: string; outcome
   return `Birthday check: ${accepted} accepted by the provider, ${failed} not accepted. Accepted is not confirmed delivery. ${lines.join("; ")}`;
 }
 
-export type BirthdayCardReport = "sent" | "not sent" | "failed" | "unavailable";
+export type BirthdayCardReport = "accepted" | "delivered" | "failed" | "uncertain" | "not sent" | "unavailable";
 
 export function birthdayCardReport(status: string | null | undefined): BirthdayCardReport {
   if (status == null || status === "" || status === "skipped") return "not sent";
-  if (status === "accepted") return "sent";
+  if (status === "accepted") return "accepted";
+  if (status === "delivered") return "delivered";
   if (status === "failed") return "failed";
+  if (status === "unknown" || status === "claimed") return "uncertain";
   return "unavailable";
 }
 

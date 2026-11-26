@@ -13,7 +13,7 @@ function msUntilZoneMidnight(timeZone: string) {
   const left = ((23 - num("hour")) * 3600 + (59 - num("minute")) * 60 + (60 - num("second"))) * 1000;
   return Math.min(Math.max(left, 1000), 24 * 60 * 60 * 1000);
 }
-type Row = { contactId: string; name: string; card: "sent" | "not sent" | "failed" | "unavailable" };
+type Row = { contactId: string; name: string; card: "accepted" | "delivered" | "failed" | "uncertain" | "not sent" | "unavailable" };
 type Report = { date: string; timeZone: string; records: "read" | "unavailable"; people: Row[] };
 
 export function TodayBirthdays({ slug, code, onSettings }: { slug: string; code: string; onSettings?: () => void }) {

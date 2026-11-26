@@ -1,4 +1,5 @@
 import { lookup } from "node:dns/promises";
+import { asksExplicitWebFormSearch } from "./delivery-audience.ts";
 import { OUTBOUND_BLOCKED, outboundBlocked } from "./outbound-guard.ts";
 import type { FormChoice, SavedLink } from "./desk-workflows.ts";
 import { chooseSavedLink, formsFromPage } from "./desk-workflows.ts";
@@ -318,19 +319,35 @@ export function blockedReadNote() {
 }
 
 export function webSearchBlockedNote() {
-  return "The wider web was not searched. Outbound reads are blocked in this environment. Nothing was opened.";
+  return "Web search is unavailable. Outbound page reads are blocked in this environment, so the public web was not searched, no page was opened, and no form link was retrieved. This is an access limit, not a missing form. Saved contacts were not used. Nothing was sent.";
 }
 
-export function foundFormNote(label: string, href: string, title: string) {
-  return `Saved Useful Link: ${label}\nForm: ${title}\n${href}\nThis is the verified form link from that library. Nothing was filled, saved, uploaded, or sent.`;
+export function declinedSavedLink(request: string, label: string) {
+  const name = String(label || "").toLowerCase();
+  const providers = ["equitable", "manulife", "canada life", "sun life", "ivari", "assumption", "empire life", "rbc insurance", "desjardins", "industrial alliance"];
+  return providers.some((provider) => name.includes(provider) && new RegExp(`\\b(?:do not|don't|never|without)\\s+use\\b[^.]{0,80}\\b${provider.replace(/\s+/g, "\\s+")}\\b`, "i").test(request));
+}
+
+export function foundFormNote(label: string, href: string, title: string, checked = false) {
+  const proof = checked
+    ? "The saved address was opened just now. This is a stored Useful Link, not a new web search, and the file itself was not called a newly verified official form."
+    : "This address is stored in Useful Links. It was not checked just now and it was not found by a web search.";
+  return `Saved Useful Link: ${label}\nForm: ${title}\n${href}\n${proof} Nothing was filled, saved, uploaded, or sent.`;
 }
 
 export function webResultsNote(request: string, links: Array<{ title: string; href: string }>) {
-  if (!links.length) return `The public search ran for “${request}” and returned no form page. Nothing was opened.`;
+  if (!links.length) return `The public search ran just now for “${request}” and returned no form page. Nothing was opened. This was not a saved Useful Link.`;
   return [
-    `Public pages for “${request}”. Nothing was sent or uploaded.`,
-    ...links.map((link) => `- ${link.title} — ${link.href}`),
+    `Provenance: public web search just now for “${request}”. These are source pages from that search, not a saved Useful Link, and the form file was not marked verified.`,
+    ...links.map((link) => `Source page: ${link.href}\nTitle: ${link.title}`),
+    "Nothing was sent or uploaded.",
   ].join("\n");
+}
+
+export async function officialFormWebSearch(request: string, fetchImpl: typeof fetch = fetch) {
+  if (!asksExplicitWebFormSearch(request)) return "";
+  if (outboundBlocked()) return webSearchBlockedNote();
+  return searchPublicFormPages(request, fetchImpl);
 }
 
 export async function searchPublicFormPages(request: string, fetchImpl: typeof fetch = fetch) {

@@ -112,8 +112,20 @@ export function asksIssueDates(text: string) {
   return aboutDates && aboutPolicies;
 }
 
+export function asksExplicitWebFormSearch(text: string) {
+  const tidy = String(text || "");
+  if (/\b(?:do not|don't|never|without)\s+(?:search|look|check)\b[^.]{0,40}\b(?:web|online|internet)\b/i.test(tidy)) return false;
+  const web = /\b(?:search|look|check)\s+(?:the\s+)?(?:web|online|internet)\b/i.test(tidy)
+    || /\b(?:web search|search online|search the internet)\b/i.test(tidy)
+    || /\b(?:on|from)\s+the\s+(?:web|internet)\b/i.test(tidy);
+  const form = /\b(?:forms?|applications?|beneficiary[-\s]?change|change of beneficiary)\b/i.test(tidy);
+  return web && form;
+}
+
 export function asksContactRecord(text: string) {
   const tidy = String(text || "");
+  if (asksExplicitWebFormSearch(tidy)) return false;
+  if (/\b(?:forms?|applications?|beneficiary[-\s]?change)\b/i.test(tidy) && /\b(?:search|find|look|get|official|useful links?)\b/i.test(tidy)) return false;
   const people = namedPeople(tidy);
   if (people.length < 1 || people.length > 3) return false;
   if (/\b(?:newsletters?|e-?letters?|e-?cards?|drips?|campaigns?)\b/i.test(tidy) && !/\bcontacts?\b/i.test(tidy)) return false;

@@ -91,15 +91,11 @@ export function BirthdayDesk({ slug, code, ping }: { slug: string; code: string;
           <option value="march1">Use March 1 in a year that is not a leap year</option>
         </select>
       </label>
-      <label>Card
+      <label>Existing birthday card
         <select aria-label="Birthday card" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)}>
-          <option value="">Choose a card</option>
+          <option value="">Choose a saved card</option>
           {desk.cards.map((card) => <option key={card.id} value={card.message}>{card.title}</option>)}
-          {cardTitle && !desk.cards.some((card) => card.message === cardTitle) && <option value={cardTitle}>Current wording</option>}
         </select>
-      </label>
-      <label>Card wording
-        <textarea aria-label="Card wording" value={cardTitle} onChange={(event) => setCardTitle(event.target.value)} rows={3} />
       </label>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "12px 0" }}>
         <button type="button" onClick={() => void save()}>Save settings</button>
