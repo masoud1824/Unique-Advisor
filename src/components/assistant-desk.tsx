@@ -7,7 +7,6 @@ import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
 import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
-import { AdvisorVoiceChooser } from "@/components/advisor-voice";
 import { emptyTurn, pushRecognition, readVoiceAutoSend, shouldAutoSend, turnText, voiceDebugEnabled, type TurnState } from "@/lib/voice-turn";
 import { appendVoiceLog } from "@/lib/voice-log.functions";
 import { previewCanSend, previewTitle, trayOffers } from "@/lib/chat-previews";
@@ -1454,6 +1453,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         }
       };
       const offerSpeech = async (line: string) => {
+        if (!spoken) return;
         showReply(line);
         voiceSending = false;
         keepListening = false;
@@ -1664,7 +1664,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   useEffect(() => {
     if (!voiceCue || voiceSeen.current === voiceCue) return;
     voiceSeen.current = voiceCue;
-    listen();
   }, [voiceCue]);
 
   async function removeChat(id: number) {
@@ -2132,8 +2131,6 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                 </div>
               )}
               {pageCue && <p className="text-sm" style={{ color: "#5a6a7a" }}>Opened from {pageCue}.</p>}
-              {heard && <p className="text-sm" style={{ color: "#5a6a7a" }}>You said: {heard}</p>}
-              <AdvisorVoiceChooser slug={desk.slug} code={code} />
               <textarea
                 id="ai-assistant-input"
                 value={text}
@@ -2157,13 +2154,9 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                 className="ua-field font-normal"
               />
               {error && <p className="ua-assist-note text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
-              {micTest && <p className="ua-playback-note" data-mic-test-result>{micTest}</p>}
               {playbackNote && <p className="ua-playback-note" data-playback-note>{playbackNote}</p>}
               <div className="ua-command-row">
                 <span className="text-sm font-extrabold" style={{ color: "#0f4c81" }}>OpenAI Sol</span>
-                {playableLine && <button type="button" className="ua-btn" data-play-reply style={{ padding: "8px 12px" }} onClick={() => { if (playingReply) cancelPlayback(); else void replaySpoken(); }}>{playingReply ? "Playing…" : "Play reply"}</button>}
-                <button type="button" className="ua-btn ua-voice-command" data-voice-command style={{ background: listening || speaking ? "#b42318" : undefined }} onClick={() => listen()}>{listening || speaking ? "Stop" : "Voice command"}</button>
-                <button type="button" className="ua-btn-line" data-mic-test style={{ padding: "8px 12px" }} onClick={() => void runMicTest()}>Test mic</button>
                 <button type="submit" className="ua-btn ua-ask" data-ask disabled={busy}>{busy ? "Thinking…" : "Ask"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "8px 12px" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
               </div>

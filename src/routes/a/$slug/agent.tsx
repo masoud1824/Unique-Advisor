@@ -451,14 +451,9 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
       {embedded && (
       <form className="agent-embed-compose" aria-label="Request" onSubmit={(event) => { event.preventDefault(); void send(text, "typed"); }}>
         <label htmlFor="agent-request">Ask the AI assistant</label>
-        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request. Voice uses the same assistant." style={fieldStyle} />
+        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request." style={fieldStyle} />
         <div className="row">
           <button type="submit" style={buttonStyle} disabled={auth !== "open"}>Send</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void listen()}>Voice command</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void finishRef.current?.()}>Done speaking</button>
-          <button type="button" style={buttonStyle} onClick={() => { cancelListen.current = true; finishRef.current = null; stopAll(); }}>Stop</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void testMic()}>Test mic</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
         </div>
       </form>
       )}
@@ -535,14 +530,9 @@ function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string
       {!embedded && (
       <form aria-label="Request" onSubmit={(event) => { event.preventDefault(); void send(text, "typed"); }}>
         <label htmlFor="agent-request">Request</label>
-        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request. Voice uses the same assistant." style={fieldStyle} />
+        <textarea id="agent-request" aria-label="Typed request" value={text} disabled={auth !== "open"} onChange={(event) => setText(event.target.value)} onKeyDown={onRequestKeyDown} placeholder="Type a request." style={fieldStyle} />
         <div className="row">
           <button type="submit" style={buttonStyle} disabled={auth !== "open"}>Send</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void listen()}>Voice command</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void finishRef.current?.()}>Done speaking</button>
-          <button type="button" style={buttonStyle} onClick={() => { cancelListen.current = true; finishRef.current = null; stopAll(); }}>Stop</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void testMic()}>Test mic</button>
-          <button type="button" style={buttonStyle} disabled={auth !== "open"} onClick={() => void playLine([...lines].reverse().find((line) => line.role === "assistant")?.text || "", true)}>Play reply</button>
         </div>
       </form>
       )}
