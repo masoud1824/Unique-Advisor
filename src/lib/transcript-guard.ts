@@ -5,6 +5,17 @@ export function transcriptionPrompt(names: string[]) {
   return `Financial advisor. Contact names: ${list.join(", ")}.`.slice(0, 800);
 }
 
+/** Buzz and laughter are not commands. They are what a noisy clip gets transcribed as. */
+export function soundsLikeNoise(text: string) {
+  const tidy = String(text || "").toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
+  if (!tidy) return false;
+  const letters = tidy.replace(/\s/g, "");
+  if (/^(?:h|e|a)+$/.test(letters) && letters.length >= 6 && /(?:he|eh|ha|ah)/.test(letters)) return true;
+  if (/bzz/.test(letters) && letters.replace(/bzz+/g, "").replace(/z/g, "").length < 3) return true;
+  const words = tidy.split(" ");
+  return words.length >= 3 && words.every((word) => word === words[0]) && /^(?:bzz+|he+|ha+|ah+|eh+|hmm+|um+|uh+)$/.test(words[0]);
+}
+
 export function normalizeSpeech(value: string) {
   return String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
 }

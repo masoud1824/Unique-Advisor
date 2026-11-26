@@ -8,6 +8,7 @@ import {
   publicTranscriptionError,
   sanitizeProviderDetail,
   speechToSubmit,
+  soundsLikeNoise,
   transcriptEchoesPrompt,
   transcriptionPrompt,
 } from "./transcript-guard.ts";
@@ -24,6 +25,9 @@ describe("microphone transcript is not the prompt", () => {
     assert.equal(transcriptEchoesPrompt(echoed, prompt, names), true);
     assert.equal(transcriptEchoesPrompt("hello", prompt, names), false);
     assert.equal(transcriptEchoesPrompt("call Avery Sample", prompt, names), false);
+    assert.equal(soundsLikeNoise("EHEHEHEHEHEHE"), true);
+    assert.equal(soundsLikeNoise("Bzzz-bzzz-bzzz-bzzz-bzzz"), true);
+    assert.equal(soundsLikeNoise("create newsletter"), false);
   });
 
   it("does not post silence, an empty recording, a prompt echo, or a failed capture", () => {

@@ -35,7 +35,7 @@ import { DRIP_INTERVALS, cleanSteps, dripLabel } from "@/lib/drips";
 import { NEWSLETTER_DESIGNS, articlesMatch, emptySocial, packNewsletter, plainNewsletter, renderNewsletter, unpackNewsletter, type NewsletterDesign, type NewsletterIssue } from "@/lib/newsletter";
 import { ASSISTANT_TEST_FOLDER, acceptanceFormFallback, answerClientQuestion, approvalFingerprint, audienceTag, chooseForm, chooseOpenNewsletter, chooseSavedLink, clientLookupQuery, contactDeliveryBlock, factsFromFolder, fictionalClients, formsFromPage, isAcceptanceFixture, prepareFormDraft, retrieveDocument, confirmationText, newsletterCopyAmbiguity, newsletterCopyQuestion, reviseNamedParagraph, type DeliveryPacket, type FormChoice } from "@/lib/desk-workflows";
 import { blockedReadNote, explainFormLookup, formWebPrompt, formsOnSavedPage, foundFormNote, isFormWebAgreement, linksForFormRequest, matchSavedFormLinks, pendingFormRequest, readApprovedUsefulLink, readPublicHttps, sameLibrarySite, searchPublicFormPages, verifySavedDocument } from "@/lib/form-lookup";
-import { publicTranscriptionError, sanitizeProviderDetail, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
+import { publicTranscriptionError, sanitizeProviderDetail, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { CARD_APPROVAL, chooseCardDesign, planCardPreview, rememberedCardRequest, rememberCardRequest, simulateCardDelivery, cardSimulationStore } from "@/lib/card-preview";
 import { NEWSLETTER_APPROVAL, advisorArchive, archiveIntent, newsletterArchiveTurn, rememberAdvisorArchive } from "@/lib/newsletter-archive";
 import { DOCUMENT_MAIL, REVIEWED_ATTACHMENT, documentMailPreview } from "@/lib/document-mail";
@@ -352,7 +352,7 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   };
   const accept = (value: string) => {
     const text = value.replace(/\s+/g, " ").trim();
-    if (!text || transcriptEchoesPrompt(text, prompt, names)) return "";
+    if (!text || transcriptEchoesPrompt(text, prompt, names) || soundsLikeNoise(text)) return "";
     return text;
   };
   const seconds = type.includes("wav") ? Math.max(0, (bytes.length - 44) / 32000) : 0;
