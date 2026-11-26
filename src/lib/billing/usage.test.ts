@@ -1,0 +1,138 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { verifyModelAccess } from "../agent/model-config.ts";
+import {
+  TEST_PLAN,
+  agreePurchase,
+  alterPurchaseTerms,
+  applyPaymentEvent,
+  browserReturnCreditsBalance,
+  cancelReservation,
+  openAccount,
+  packQuote,
+  paymentConfigured,
+  recommendAllowance,
+  reconcile,
+  refundOperation,
+  reserve,
+  rollPeriod,
+  schedulePlanChange,
+  signatureMatches,
+  testSignature,
+  type Ledger,
+  type Purchase,
+} from "./usage.ts";
+
+function ledger(now = new Date("2026-11-26T00:00:00.000Z")): Ledger {
+  return { account: openAccount("advisor-7", now), operations: new Map(), providerIds: new Map() };
+}
+
+describe("usage allowance", () => {
+  it("sizes a test allowance inside a $25 CAD subscription without a live charge", () => {
+    const advice = recommendAllowance();
+    assert.equal(advice.fitsSample, true);
+    assert.equal(advice.leavesRoom, true);
+    assert.equal(advice.subscriptionCadCents, 2500);
+    assert.match(advice.fx, /1 USD = 1.40 CAD/);
+    assert.match(advice.rates, /not an OpenAI price list/);
+    const quote = packQuote();
+    assert.equal(quote.totalCadCents, quote.priceCadCents + quote.taxCadCents);
+    assert.equal(quote.taxCadCents, 104);
+  });
+
+  it("stops a second reservation that would pass the allowance", () => {
+    const book = ledger();
+    const first = reserve(book, { operationId: "a", kind: "model", estimateUsdMicros: 4_000_000 });
+    const second = reserve(book, { operationId: "b", kind: "model", estimateUsdMicros: 4_000_000 });
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, false);
+    if (!second.ok) assert.equal(second.code, "allowance-exhausted");
+    assert.equal(reserve(book, { operationId: "a", kind: "model", estimateUsdMicros: 4_000_000 }).ok, true);
+  });
+
+  it("reconciles once, refunds, and does not roll purchased balance into a new period", () => {
+    const now = new Date("2026-11-26T00:00:00.000Z");
+    const book = ledger(now);
+    reserve(book, { operationId: "job", kind: "model", estimateUsdMicros: 100_000 });
+    const done = reconcile(book, { operationId: "job", actualUsdMicros: 80_000, providerRequestId: "req-1", usageSource: "provider" });
+    assert.equal(done.ok, true);
+    assert.equal(book.account.includedUsedUsdMicros, 80_000);
+    assert.equal(book.account.reservedUsdMicros, 0);
+    const again = reconcile(book, { operationId: "other", actualUsdMicros: 80_000, providerRequestId: "req-1", usageSource: "provider" });
+    assert.equal(again.ok, true);
+    if (again.ok) assert.equal(again.duplicate, true);
+    assert.equal(book.account.includedUsedUsdMicros, 80_000);
+    assert.equal(refundOperation(book, "job").ok, true);
+    assert.equal(book.account.includedUsedUsdMicros, 0);
+    book.account.purchasedUsdMicros = 50_000;
+    book.account.purchasedExpires = "2027-11-26T00:00:00.000Z";
+    rollPeriod(book.account, new Date(book.account.periodEnd));
+    assert.equal(book.account.includedUsedUsdMicros, 0);
+    assert.equal(book.account.purchasedUsdMicros, 50_000);
+  });
+
+  it("cancels a reservation without charging and isolates advisors", () => {
+    const book = ledger();
+    reserve(book, { operationId: "voice", kind: "speech", estimateUsdMicros: 20_000 });
+    assert.equal(cancelReservation(book, "voice").ok, true);
+    assert.equal(book.account.reservedUsdMicros, 0);
+    assert.equal(book.account.includedUsedUsdMicros, 0);
+    const other = ledger();
+    other.account.advisorId = "advisor-8";
+    reserve(other, { operationId: "voice", kind: "speech", estimateUsdMicros: 20_000 });
+    assert.equal(book.account.reservedUsdMicros, 0);
+    assert.equal(other.account.reservedUsdMicros, 20_000);
+  });
+
+  it("credits a pack only from a signed paid event", () => {
+    const previous = process.env.BILLING_PAYMENT_PROVIDER;
+    process.env.BILLING_PAYMENT_PROVIDER = "test";
+    const now = new Date("2026-11-26T00:00:00.000Z");
+    const book = ledger(now);
+    const agreed = agreePurchase("advisor-7", TEST_PLAN, now);
+    assert.equal("id" in agreed, true);
+    if (!("id" in agreed)) return;
+    const purchases = new Map<string, Purchase>([[agreed.id, agreed]]);
+    const events = new Map<string, string>();
+    const raw = JSON.stringify({ id: "evt-1", type: "paid", purchaseId: agreed.id, advisorId: "advisor-7" });
+    assert.equal(signatureMatches(raw, testSignature(raw)), true);
+    assert.equal(signatureMatches(raw, "nope"), false);
+    assert.equal(browserReturnCreditsBalance(), false);
+    const wrong = applyPaymentEvent({ purchases, events: new Map(), account: book.account, event: { id: "evt-x", type: "paid", purchaseId: agreed.id, advisorId: "advisor-8" }, now });
+    assert.equal(wrong.ok, false);
+    const paid = applyPaymentEvent({ purchases, events, account: book.account, event: { id: "evt-1", type: "paid", purchaseId: agreed.id, advisorId: "advisor-7" }, now });
+    assert.equal(paid.credited, true);
+    assert.equal(book.account.purchasedUsdMicros, agreed.usdMicros);
+    const duplicate = applyPaymentEvent({ purchases, events, account: book.account, event: { id: "evt-1", type: "paid", purchaseId: agreed.id, advisorId: "advisor-7" }, now });
+    assert.equal(duplicate.duplicate, true);
+    assert.equal(book.account.purchasedUsdMicros, agreed.usdMicros);
+    const early = applyPaymentEvent({ purchases, events, account: book.account, event: { id: "evt-2", type: "refunded", purchaseId: agreed.id, advisorId: "advisor-7" }, now });
+    assert.equal(early.ok, true);
+    assert.equal(agreed.status, "refunded");
+    assert.equal(alterPurchaseTerms().ok, false);
+    const next = schedulePlanChange(TEST_PLAN, { subscriptionCadCents: 2900 }, "2026-12-26T00:00:00.000Z");
+    assert.equal(next.version, 2);
+    assert.equal(agreed.priceCadCents, 800);
+    process.env.BILLING_PAYMENT_PROVIDER = previous;
+    assert.equal(paymentConfigured(), previous === "test");
+  });
+
+  it("does not create a purchase when the payment provider is off", () => {
+    const previous = process.env.BILLING_PAYMENT_PROVIDER;
+    delete process.env.BILLING_PAYMENT_PROVIDER;
+    const result = agreePurchase("advisor-7");
+    assert.equal("error" in result, true);
+    process.env.BILLING_PAYMENT_PROVIDER = previous;
+  });
+});
+
+describe("model access", () => {
+  it("reports a missing model and does not substitute another", async () => {
+    const result = await verifyModelAccess("sk-test", (async () => new Response("missing", { status: 404 })) as typeof fetch);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.blocker, /No fallback model was used/);
+      assert.equal(result.model, process.env.UA_AGENT_MODEL || "gpt-6.2-sol");
+    }
+  });
+});

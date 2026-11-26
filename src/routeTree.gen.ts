@@ -20,6 +20,7 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as StudioRouteImport } from './routes/studio'
 import { Route as ApiAcceptanceCheckRouteImport } from './routes/api/acceptance-check'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiBillingWebhookRouteImport } from './routes/api/billing/webhook'
 import { Route as ApiPreviewOperatorRouteImport } from './routes/api/preview-operator'
 import { Route as NTokenRouteImport } from './routes/n/$token'
 import { Route as ASlugIndexRouteImport } from './routes/a/$slug/index'
@@ -103,6 +104,11 @@ const ApiAcceptanceCheckRoute = ApiAcceptanceCheckRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBillingWebhookRoute = ApiBillingWebhookRouteImport.update({
+  id: '/api/billing/webhook',
+  path: '/api/billing/webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPreviewOperatorRoute = ApiPreviewOperatorRouteImport.update({
@@ -263,6 +269,7 @@ export interface FileRoutesByFullPath {
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/agent': typeof ASlugAgentRoute
@@ -305,6 +312,7 @@ export interface FileRoutesByTo {
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/agent': typeof ASlugAgentRoute
@@ -348,6 +356,7 @@ export interface FileRoutesById {
   '/studio': typeof StudioRoute
   '/api/acceptance-check': typeof ApiAcceptanceCheckRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/billing/webhook': typeof ApiBillingWebhookRoute
   '/api/preview-operator': typeof ApiPreviewOperatorRoute
   '/n/$token': typeof NTokenRoute
   '/a/$slug/agent': typeof ASlugAgentRoute
@@ -392,6 +401,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/acceptance-check'
     | '/api/health'
+    | '/api/billing/webhook'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/agent'
@@ -434,6 +444,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/acceptance-check'
     | '/api/health'
+    | '/api/billing/webhook'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/agent'
@@ -476,6 +487,7 @@ export interface FileRouteTypes {
     | '/studio'
     | '/api/acceptance-check'
     | '/api/health'
+    | '/api/billing/webhook'
     | '/api/preview-operator'
     | '/n/$token'
     | '/a/$slug/agent'
@@ -519,6 +531,7 @@ export interface RootRouteChildren {
   StudioRoute: typeof StudioRoute
   ApiAcceptanceCheckRoute: typeof ApiAcceptanceCheckRoute
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiBillingWebhookRoute: typeof ApiBillingWebhookRoute
   ApiPreviewOperatorRoute: typeof ApiPreviewOperatorRoute
   NTokenRoute: typeof NTokenRoute
   ASlugAgentRoute: typeof ASlugAgentRoute
@@ -627,6 +640,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/billing/webhook': {
+      id: '/api/billing/webhook'
+      path: '/api/billing/webhook'
+      fullPath: '/api/billing/webhook'
+      preLoaderRoute: typeof ApiBillingWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/preview-operator': {
@@ -847,6 +867,7 @@ const rootRouteChildren: RootRouteChildren = {
   StudioRoute: StudioRoute,
   ApiAcceptanceCheckRoute: ApiAcceptanceCheckRoute,
   ApiHealthRoute: ApiHealthRoute,
+  ApiBillingWebhookRoute: ApiBillingWebhookRoute,
   ApiPreviewOperatorRoute: ApiPreviewOperatorRoute,
   NTokenRoute: NTokenRoute,
   ASlugAgentRoute: ASlugAgentRoute,

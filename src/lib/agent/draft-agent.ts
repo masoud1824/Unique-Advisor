@@ -62,6 +62,7 @@ export type DraftScope = {
   slug: string;
   userText: string;
   dropboxConnected: boolean;
+  formFillEnabled?: boolean;
   record: DraftRecord;
   loadForm: (query: string) => Promise<FormLoad>;
   searchWeb: (query: string) => Promise<string>;
@@ -230,6 +231,10 @@ export function createDraftAgent() {
     parameters: factArgs,
     execute: async (input, context) => {
       const scope = scopeFrom(context as RunContext<DraftScope>);
+      if (scope.formFillEnabled !== true) {
+        scope.record.toolTrace.push("record_facts:blocked");
+        return { filled: false, reason: "Form filling is in a future premium package. I can look up the form. Nothing was filled." };
+      }
       scope.record.toolTrace.push("record_facts");
       const applied = acceptSuppliedFacts(scope.record.facts, {
         beneficiaryName: input.beneficiaryName,
@@ -344,6 +349,8 @@ export function createDraftAgent() {
       "If a capability is not available, say so and stop. Do not read, draft, or send mail, and do not invent a result.",
       "For a form, use inspect_form first. Fill a draft only when the tool says a field mapping exists.",
       "Never invent a beneficiary, trustee, share, date, relationship, or designation.",
+      "Form filling is a future premium package and is disabled unless the scope says it is enabled. Finding a form is allowed. Do not claim a form was filled while that gate is closed.",
+      "Mailbox, newsletter, drip, Dropbox contact search, and calendar or Zoom tools are not connected. Say so. Do not invent a sent message, a booking, or an upload.",
       "A named person, a child, or not-a-minor is not the insured-person checkbox. Do not ask again for a fact that is already known, and do not demand a special template.",
       "If a required fact is missing or a tool rejects it as ambiguous, ask one focused question.",
       "A spoken or typed yes is not approval to save. Never say a file was uploaded, mailed, or booked.",
@@ -425,15 +432,17 @@ export async function runDraftTurn(input: {
   existing.dropboxConnected = input.scope.dropboxConnected;
   const previous = [...existing.messages].reverse().find((message) => message.role === "assistant")?.text || "";
   existing.messages.push({ role: "user", text: request, source: input.source });
-  if (isDraftRequest(request)) existing.draftActive = true;
+  if (isDraftRequest(request) && input.scope.formFillEnabled === true) existing.draftActive = true;
   const before = factsHash(existing.facts);
-  const absorbed = applyUtterance(existing.facts, request, previous, existing.designationConflict);
-  existing.facts = absorbed.facts;
-  existing.designationConflict = absorbed.conflict || "";
-  if (absorbed.accepted.length) existing.draftActive = true;
-  if (factsHash(existing.facts) !== before) {
-    invalidate(existing);
-    await refreshPdf(existing);
+  if (input.scope.formFillEnabled === true) {
+    const absorbed = applyUtterance(existing.facts, request, previous, existing.designationConflict);
+    existing.facts = absorbed.facts;
+    existing.designationConflict = absorbed.conflict || "";
+    if (absorbed.accepted.length) existing.draftActive = true;
+    if (factsHash(existing.facts) !== before) {
+      invalidate(existing);
+      await refreshPdf(existing);
+    }
   }
   const scope: DraftScope = { ...input.scope, userText: request, record: existing };
   if (existing.pending && bareApprovalSpeech(request)) {

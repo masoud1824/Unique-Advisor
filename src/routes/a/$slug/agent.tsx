@@ -68,6 +68,7 @@ function AgentPreview() {
   const [lines, setLines] = useState<Line[]>([]);
   const [phase, setPhase] = useState<VoicePhase>("idle");
   const [note, setNote] = useState("");
+  const [usage, setUsage] = useState<{ planLabel?: string; subscriptionCadCents?: number; usedUsdMicros?: number; includedUsdMicros?: number; remainingUsdMicros?: number; resetAt?: string; warnings?: number[]; stopped?: boolean; paymentNote?: string; quote?: { priceCadCents: number; taxCadCents: number; totalCadCents: number; currency: string } } | null>(null);
   const [turn, setTurn] = useState<Turn | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const phaseRef = useRef<VoicePhase>("idle");
@@ -193,6 +194,11 @@ function AgentPreview() {
       if (result.sessionToken) setSessionToken(result.sessionToken);
       setAuth("open");
       setNote("Signed in. Type a request and press Send.");
+      void fetch("/api/agent/turn", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ slug, code, sessionToken: result.sessionToken, intent: "usage" }),
+      }).then((item) => item.json()).then((item) => setUsage(item.usage || null)).catch(() => setUsage(null));
     } catch {
       setAuth("error");
       setNote("The access code could not be checked. Nothing was changed.");
@@ -450,10 +456,21 @@ function AgentPreview() {
       <ul className="caps">
         {ASSISTANT_CAPABILITIES.map((item) => (
           <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
-            <strong>{item.status === "testing" ? "Testing" : "Not available"}: </strong>{item.label}. {item.note}
+            <strong>{item.status === "testing" ? "Testing" : item.status === "premium-deferred" ? "Premium, not in v1" : "Not connected"}: </strong>{item.label}. {item.note}
           </li>
         ))}
       </ul>
+      {auth === "open" && usage && (
+        <section className="caps" aria-label="Usage and billing">
+          <h2>Usage & Billing</h2>
+          <p>{usage.planLabel} Test subscription ${((usage.subscriptionCadCents || 0) / 100).toFixed(2)} CAD. Not a live charge.</p>
+          <p>Included provider allowance ${((usage.includedUsdMicros || 0) / 1_000_000).toFixed(2)} USD. Used ${((usage.usedUsdMicros || 0) / 1_000_000).toFixed(2)}. Remaining ${((usage.remainingUsdMicros || 0) / 1_000_000).toFixed(2)}. Resets {usage.resetAt ? new Date(usage.resetAt).toLocaleDateString() : "with the billing period"}.</p>
+          {usage.warnings?.includes(0.8) && <p>80% of the included allowance has been used.</p>}
+          {usage.stopped && <p>The included allowance is used up. The desk stays open. AI replies are paused. No automatic top-up.</p>}
+          <p>{usage.paymentNote}</p>
+          {usage.quote && <p>Extra pack, if you agree later: ${ (usage.quote.priceCadCents / 100).toFixed(2) } {usage.quote.currency} plus ${ (usage.quote.taxCadCents / 100).toFixed(2) } tax, total ${ (usage.quote.totalCadCents / 100).toFixed(2) }. No card is collected here.</p>}
+        </section>
+      )}
       <div className="log" aria-live="polite">
         {lines.map((line, index) => (
           <p key={index} className={line.role === "user" ? "you" : ""}>

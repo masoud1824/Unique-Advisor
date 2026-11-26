@@ -14,7 +14,9 @@ import { redactPrivate } from "../hosted-runtime.ts";
 import { modelTransportOpen } from "../outbound-guard.ts";
 import { FORM_CODE, type DraftPayload } from "./equitable-fields.ts";
 import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
+import { verifyModelAccess } from "./model-config.ts";
 import { speechSegments } from "./voice-bridge.ts";
+import { ALLOWANCE_STOP, accountView, agreePurchase, packQuote, paymentConfigured, reserve, cancelReservation, reconcile, withBilling } from "../billing/usage.ts";
 
 type Sql = Awaited<ReturnType<typeof getSql>>;
 
@@ -66,9 +68,15 @@ async function serverModel() {
   const sql = await getSql();
   const row = (await sql.query<{ openai_api_key: string }>("select openai_api_key from operators where id = 1"))[0];
   const apiKey = String(row?.openai_api_key || "").trim() || String(process.env.OPENAI_API_KEY || "").trim();
-  if (!apiKey) return { ok: false as const, calledModel: false, reason: "The language model key is not configured on the server. No model request was made." };
+  const verified = await verifyModelAccess(apiKey);
+  if (!verified.ok) return { ok: false as const, calledModel: false, reason: verified.blocker, model: verified.model };
   const provider = new OpenAIProvider({ apiKey, useResponses: false });
-  return { ok: true as const, model: await provider.getModel("gpt-4.1") };
+  try {
+    return { ok: true as const, model: await provider.getModel(verified.model), modelId: verified.model };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "unavailable";
+    return { ok: false as const, calledModel: false, model: verified.model, reason: `${verified.model} could not be opened (${detail}). No fallback model was used.` };
+  }
 }
 
 async function dropboxConnected(sql: Sql, advisorId: number) {
@@ -260,6 +268,7 @@ async function openScope(body: Body) {
     advisorId: String(gate.row.id),
     slug: gate.row.slug,
     dropboxConnected: connected,
+    formFillEnabled: false,
     loadForm: (query: string) => loadForm(sql, gate.row.id, query),
     searchWeb: (query: string) => searchPublicFormPages(query),
   };
@@ -274,9 +283,34 @@ export async function previewTurn(body: Body) {
   if (body.intent === "open") return previewOpen(body);
   const opened = await openScope(body);
   if (!opened.ok) return opened;
+  if (body.intent === "usage" || body.intent === "billing-quote" || body.intent === "billing-agree") {
+    try {
+      return await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => {
+        if (body.intent === "billing-quote") return { ok: true, calledModel: false, sessionToken: opened.gate.sessionToken, quote: packQuote(), paymentConfigured: paymentConfigured() };
+        if (body.intent === "billing-agree") {
+          const purchase = agreePurchase(opened.scope.advisorId);
+          if ("error" in purchase) return { ok: false, calledModel: false, sessionToken: opened.gate.sessionToken, error: purchase.error, credited: false };
+          state.purchases.set(purchase.id, purchase);
+          return { ok: true, calledModel: false, sessionToken: opened.gate.sessionToken, purchaseId: purchase.id, quote: packQuote(), credited: false, checkout: "test-webhook", cardStored: false };
+        }
+        return { ok: true, calledModel: false, sessionToken: opened.gate.sessionToken, usage: accountView(state.ledger.account) };
+      });
+    } catch (error) {
+      return { ok: false, calledModel: false, sessionToken: opened.gate.sessionToken, error: redactPrivate(error instanceof Error ? error.message : "Usage metering is not available. No AI request was run.") };
+    }
+  }
   const model = await serverModel();
   if (!model.ok) return { ...model, sessionToken: opened.gate.sessionToken };
   const runId = String(body.runId || "").trim() || crypto.randomUUID();
+  const operationId = `turn:${runId}:${crypto.randomUUID()}`;
+  let held = false;
+  try {
+    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "model", estimateUsdMicros: 50_000 }));
+    if (!reservation.ok) return { ok: false, calledModel: false, code: reservation.code, reply: ALLOWANCE_STOP, sessionToken: opened.gate.sessionToken };
+    held = true;
+  } catch (error) {
+    return { ok: false, calledModel: false, reply: redactPrivate(error instanceof Error ? error.message : "Usage metering is not available. This AI request was not run."), sessionToken: opened.gate.sessionToken };
+  }
   const store = new MemoryDraftStore();
   const existing = await readRun(opened.sql, opened.gate.row.id, runId);
   if (existing) store.save(existing);
@@ -291,8 +325,10 @@ export async function previewTurn(body: Body) {
     });
     const saved = store.load(runId, opened.scope.advisorId);
     if (saved) await writeRun(opened.sql, opened.gate.row.id, saved);
+    await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualUsdMicros: 50_000, usageSource: "estimate" }));
     return publicResult(result, opened.gate.sessionToken);
   } catch (error) {
+    if (held) await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => cancelReservation(state.ledger, operationId)).catch(() => undefined);
     const reason = redactPrivate(error instanceof Error ? error.message : "The agent run failed.");
     return { ok: false, calledModel: true, reason, sessionToken: opened.gate.sessionToken };
   }
@@ -342,6 +378,14 @@ export async function previewSpeech(body: Body) {
   const voice = await selectedAdvisorVoice(opened.gate.row.id);
   if (!voice) return { ok: false as const, error: "No voice is selected. A different voice was not used." };
   const segments = speechSegments(line);
+  const operationId = `speech:${crypto.randomUUID()}`;
+  const estimate = Math.max(10_000, Math.round(line.length / 1_000_000 * 15_000_000));
+  try {
+    const reservation = await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reserve(state.ledger, { operationId, kind: "speech", estimateUsdMicros: estimate }));
+    if (!reservation.ok) return { ok: false as const, error: ALLOWANCE_STOP };
+  } catch (error) {
+    return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "Usage metering is not available. Nothing was spoken.") };
+  }
   const parts: string[] = [];
   try {
     for (const segment of segments) {
@@ -350,7 +394,9 @@ export async function previewSpeech(body: Body) {
       parts.push(Buffer.concat(chunks).toString("base64"));
     }
   } catch (error) {
+    await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => cancelReservation(state.ledger, operationId)).catch(() => undefined);
     return { ok: false as const, error: redactPrivate(error instanceof Error ? error.message : "The spoken reply was not ready."), voice };
   }
+  await withBilling(opened.sql, opened.scope.advisorId, new Date(), (state) => reconcile(state.ledger, { operationId, actualUsdMicros: estimate, usageSource: "estimate" }));
   return { ok: true as const, voice, parts };
 }
