@@ -26,19 +26,19 @@ export function BirthdayDesk({ slug, code, ping }: { slug: string; code: string;
   useEffect(() => { void load(); }, [slug, code]);
 
   async function save() {
-    const result = await saveBirthdayDesk({ data: { slug, code, source, sourceRef, timezone, feb29, cardTitle, enabled: false } });
+    const result = await saveBirthdayDesk({ data: { slug, code, source, sourceRef, timezone, feb29, cardTitle } });
     if (!result.ok) { ping(result.error); return; }
     setDesk(result);
-    ping(result.reconfirm ? "Saved. Confirm the card again before any future check. Automation stays off." : "Saved. Automation stays off.");
+    ping(result.reconfirm ? "Saved. Confirm the saved card again before the 9:00 check can run. Nothing was sent." : "Saved. Nothing was sent.");
   }
 
   async function confirm() {
-    const saved = await saveBirthdayDesk({ data: { slug, code, source, sourceRef, timezone, feb29, cardTitle, enabled: false } });
+    const saved = await saveBirthdayDesk({ data: { slug, code, source, sourceRef, timezone, feb29, cardTitle } });
     if (!saved.ok) { ping(saved.error); return; }
     const result = await confirmBirthdayDesk({ data: { slug, code } });
     if (!result.ok) { ping(result.error); return; }
     setDesk(result);
-    ping("This card is confirmed for a future check. The check is still off, and nothing was sent.");
+    ping("This saved card is confirmed. The 9:00 check is not turned on by confirming. Nothing was sent.");
   }
 
   async function pause() {
@@ -52,12 +52,16 @@ export function BirthdayDesk({ slug, code, ping }: { slug: string; code: string;
     const result = await previewBirthdayDeskPlan({ data: { slug, code } });
     if (!result.ok) { ping(result.error); return; }
     const sample = result.samples.map((item) => item.text).join(" ");
-    setPreview(`${result.offNotice} Preview only. The saved check stays off. Pretend clock: ${result.pretendNotice} Sample card wording, not a send: ${sample} No provider was called.`);
+    setPreview(`${result.offNotice} Preview only. Nothing was changed or sent. Pretend clock: ${result.pretendNotice} Sample card wording, not a send: ${sample} No provider was called.`);
   }
 
-  async function refuseOn() {
-    const result = await saveBirthdayDesk({ data: { slug, code, enabled: true } });
-    ping(result.ok ? "The check unexpectedly turned on." : result.error);
+  async function turnOn() {
+    const result = await saveBirthdayDesk({ data: { slug, code, source, sourceRef, timezone, feb29, cardTitle, enabled: true } });
+    if (!result.ok) { ping(result.error); return; }
+    setDesk(result);
+    ping(result.storedEnabled
+      ? "The 9:00 check is on for the confirmed saved card. Nothing was sent from this screen."
+      : "The 9:00 check was not turned on. Nothing was sent.");
   }
 
   if (!desk) return <p>Opening birthday settings…</p>;
@@ -102,7 +106,7 @@ export function BirthdayDesk({ slug, code, ping }: { slug: string; code: string;
         <button type="button" onClick={() => void confirm()}>Confirm this card</button>
         <button type="button" onClick={() => void pause()}>Pause</button>
         <button type="button" onClick={() => void previewPlan()}>Preview with a fake clock</button>
-        <button type="button" onClick={() => void refuseOn()}>Try to turn automation on</button>
+        <button type="button" onClick={() => void turnOn()}>Turn the 9:00 check on</button>
       </div>
       {preview && <p>{preview}</p>}
       <h3>Missing birthday dates</h3>

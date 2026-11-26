@@ -35,7 +35,9 @@ await pg.exec(`
   insert into contacts (advisor_id, full_name, email, birthday, tags) values
     (1, 'Casey Sample', 'casey.sample@example.invalid', '', 'Acceptance'),
     (1, 'Quinn Sample', 'quinn.sample@example.invalid', '1990-01-02', 'Unsubscribed');
-  insert into saved_cards (advisor_id, title, message) values (1, 'Thank You', 'Thank you for your trust. It is a pleasure working with you.');
+  insert into saved_cards (advisor_id, title, message) values
+    (1, 'Thank You', 'Thank you for your trust. It is a pleasure working with you.'),
+    (1, 'Birthday', 'Happy birthday, {{name}}.');
   insert into birthday_notices (advisor_id, run_date, body) values (1, 'seed', 'Birthday check is off. Nothing was sent.');
   insert into birthday_settings (advisor_id, enabled, source, card_title, template_version, confirmed_version) values (2, false, 'desk', 'Other card', 1, 1);
 `);
@@ -55,28 +57,39 @@ describe("birthday settings stay off and advisor-scoped", () => {
     assert.equal(other.rows[0]?.card_title, "Other card");
   });
 
-  it("saves a desk card, requires confirmation again, and pauses without sending", async () => {
+  it("saves an existing card, confirms it, and can turn the 9:00 check on without sending", async () => {
+    const card = "Thank you for your trust. It is a pleasure working with you.";
     const saved = await saveBirthdaySettings(sql, 1, {
       source: "desk",
       timezone: "America/Toronto",
       feb29: "skip",
-      cardTitle: "Happy birthday, {{name}}.",
+      cardTitle: card,
       enabled: false,
     });
     assert.equal(saved.ok, true);
     if (!saved.ok) return;
     assert.equal(saved.storedEnabled, false);
     assert.equal(saved.needsConfirmation, true);
+    assert.equal(saved.sent, false);
     assert.equal(saved.missingDates[0].name, "Casey Sample");
+    const tooSoon = await saveBirthdaySettings(sql, 1, { enabled: true });
+    assert.equal(tooSoon.ok, false);
     const confirmed = await confirmBirthdayCard(sql, 1);
     assert.equal(confirmed.ok, true);
     if (!confirmed.ok) return;
     assert.equal(confirmed.needsConfirmation, false);
     assert.equal(confirmed.storedEnabled, false);
-    const changed = await saveBirthdaySettings(sql, 1, { cardTitle: "A different card, {{name}}." });
+    assert.equal(confirmed.sent, false);
+    const on = await saveBirthdaySettings(sql, 1, { enabled: true });
+    assert.equal(on.ok, true);
+    if (!on.ok) return;
+    assert.equal(on.storedEnabled, true);
+    assert.equal(on.sent, false);
+    const changed = await saveBirthdaySettings(sql, 1, { cardTitle: "Happy birthday, {{name}}." });
     assert.equal(changed.ok, true);
     if (!changed.ok) return;
     assert.equal(changed.needsConfirmation, true);
+    assert.equal(changed.storedEnabled, false);
     const paused = await pauseBirthdayCheck(sql, 1);
     assert.equal(paused.ok, true);
     if (!paused.ok) return;

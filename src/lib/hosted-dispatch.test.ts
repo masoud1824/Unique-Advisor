@@ -141,9 +141,12 @@ describe("hosted job dispatch", () => {
     });
     assert.equal(result.blocked, true);
     assert.equal(result.sent, 0);
+    assert.equal(result.birthdays.providerCalls, 0);
+    assert.match(result.birthdays.detail, /Nothing was sent/);
+    assert.match(result.birthdays.detail, /not marked failed/);
     assert.deepEqual(network, []);
     const claims = await sql.query<{ status: string }>("select status from birthday_claims");
-    assert.equal(claims[0]?.status, "failed");
+    assert.equal(claims.length, 0);
   });
 
   it("advances a drip only after the mock accepts, and an unknown result is not retried or advanced", async () => {
@@ -328,9 +331,11 @@ describe("hosted job dispatch", () => {
       });
       assert.equal(result.birthdays.providerCalls, 0);
       assert.equal(result.sent, 0);
+      assert.match(result.birthdays.detail, /Nothing was sent/);
+      assert.match(result.birthdays.detail, /not marked failed/);
       assert.deepEqual(network, []);
       const claims = await sql.query<{ status: string }>("select status from birthday_claims");
-      assert.equal(claims[0]?.status, "failed");
+      assert.equal(claims.length, 0);
     } finally {
       if (previous === undefined) delete process.env.UA_BUDGET_HALT_MAIL;
       else process.env.UA_BUDGET_HALT_MAIL = previous;

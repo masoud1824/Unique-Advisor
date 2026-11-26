@@ -154,11 +154,12 @@ export async function executeBirthdayJob(sql: QuerySql, input: {
   deliver?: (person: BirthdayPerson, card: { text: string }, context: { advisorId: number }) => Promise<MockDelivery>;
   dropbox?: BirthdayFileReader;
   advisorId?: number;
+  skipDelivery?: string;
 }) {
   if (process.env.UA_BIRTHDAY_LIVE === "1") {
     throw new Error("Refusing a live birthday run. Nothing was sent.");
   }
-  if (!input.deliver) {
+  if (!input.deliver && !input.skipDelivery) {
     throw new Error("No delivery function is configured. Nothing was sent.");
   }
   const deliver = input.deliver;
@@ -212,6 +213,12 @@ export async function executeBirthdayJob(sql: QuerySql, input: {
     const due = planned.window === "run"
       ? planned.recipients.filter((item) => item.action === "send" || item.action === "retry")
       : retryToday;
+    if (input.skipDelivery && due.length) {
+      const notice = `${input.skipDelivery} The birthday check did not call a provider, and these cards were not marked failed.`;
+      await noticeOnce(sql, settings.advisorId, planned.local.date, notice);
+      notices.push({ advisorId: settings.advisorId, body: notice });
+      continue;
+    }
     const outcomes: Array<{ name: string; outcome: string }> = [];
     for (const item of due) {
       const key = claimKey(settings.advisorId, item.contactId, planned.local.year);
@@ -221,6 +228,7 @@ export async function executeBirthdayJob(sql: QuerySql, input: {
       if (!person) continue;
       let result: MockDelivery;
       try {
+        if (!deliver) throw new Error("No delivery function is configured. Nothing was sent.");
         providerCalls += 1;
         result = await deliver(person, previewBirthdayCard(settings.cardTitle || "Happy birthday, {{name}}.", person), { advisorId: settings.advisorId });
       } catch {

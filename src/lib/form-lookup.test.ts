@@ -24,6 +24,7 @@ import {
 import { chooseForm, formsFromPage } from "./desk-workflows.ts";
 import { isFormAsk } from "./advisor-intent.ts";
 import { asksContactRecord, asksExplicitWebFormSearch } from "./delivery-audience.ts";
+import { orchestrationControl } from "./orchestration.ts";
 import { contentHoldKind } from "./workspace-policy.ts";
 
 describe("useful links before the web", () => {
@@ -149,6 +150,9 @@ describe("explicit provider form web search", () => {
       assert.equal(asksExplicitWebFormSearch(line), true, line);
       assert.equal(asksContactRecord(line), false, line);
       assert.equal(isFormAsk(line), true, line);
+      assert.equal(contentHoldKind(line), "form", line);
+      assert.equal(orchestrationControl(line).conversational, false, line);
+      assert.equal(orchestrationControl(line).desk, true, line);
     }
     assert.equal(asksExplicitWebFormSearch("Do not search the web for the Manulife form."), false);
     assert.equal(asksContactRecord("Show the saved contact record for Casey Sample, including email and phone."), true);

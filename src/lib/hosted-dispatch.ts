@@ -159,14 +159,19 @@ function stopReason(kind: "mail" | "signature", outboundBlocked: boolean) {
 }
 
 async function dispatchBirthdays(sql: QuerySql, now: Date, stop: string, providers: DispatchProviders) {
-  const deliver = stop
-    ? async () => ({ status: "failed" as const, providerId: "" })
-    : providers.birthdayDeliver;
+  if (stop) {
+    const result = await executeBirthdayJob(sql, { now, skipDelivery: stop });
+    return {
+      providerCalls: 0,
+      detail: [stop, result.notices.map((item) => item.body).join(" ")].filter(Boolean).join(" ").slice(0, 500),
+    };
+  }
+  const deliver = providers.birthdayDeliver;
   if (!deliver) return { providerCalls: 0, detail: "No birthday provider is configured. Nothing was sent." };
   const result = await executeBirthdayJob(sql, { now, deliver });
   return {
-    providerCalls: stop ? 0 : result.providerCalls,
-    detail: stop || result.notices.map((item) => item.body).join(" ").slice(0, 500),
+    providerCalls: result.providerCalls,
+    detail: result.notices.map((item) => item.body).join(" ").slice(0, 500),
   };
 }
 

@@ -7,21 +7,27 @@ import {
   type BirthdaySettings,
   type BirthdayPerson,
 } from "./birthday-job.ts";
+import { outboundBlocked } from "./outbound-guard.ts";
 
 export type BirthdaySql = {
   query<T = Record<string, unknown>>(text: string, params?: unknown[]): Promise<T[]>;
 };
 
 export const BIRTHDAY_AUTOMATION_OFF =
-  "Birthday automation stays off in this copy. Nothing was scheduled and nothing was sent.";
+  "Choose one of the saved cards and confirm it before the 9:00 check can be turned on. A new card was not created. Nothing was sent.";
 
-export const BIRTHDAY_READINESS = {
-  codeReady: true,
-  schedulerReady: false,
-  providerReady: false,
-  automation: "off" as const,
-  note: "The settings screen and the fake preview are ready. There is no 9:00 scheduler, and no mail provider is called. A mock result is not a delivery.",
-};
+export function birthdayReadiness() {
+  const blocked = outboundBlocked();
+  return {
+    codeReady: true,
+    schedulerReady: true,
+    providerReady: false,
+    automation: blocked ? "blocked" as const : "configured" as const,
+    note: blocked
+      ? "The 9:00 check can be turned on for this desk. Mail delivery is not configured in this environment, so the check does not call a provider and does not mark a card failed. Nothing is sent from this screen."
+      : "The 9:00 check uses the confirmed saved card. This screen does not send. If the mailbox is not connected, the check says so and does not mark the card delivered.",
+  };
+}
 
 const ZONES = ["America/Toronto", "America/Vancouver", "America/Winnipeg", "America/Halifax", "America/St_Johns", "UTC"];
 
@@ -47,6 +53,17 @@ async function ensureRow(sql: BirthdaySql, advisorId: number) {
   );
 }
 
+async function matchingSavedCard(sql: BirthdaySql, advisorId: number, cardTitle: string) {
+  const wanted = String(cardTitle || "").trim();
+  if (!wanted) return "";
+  const cards = await sql.query<Record<string, unknown>>(
+    "select title, message from saved_cards where advisor_id = $1 order by id",
+    [advisorId],
+  );
+  const match = cards.find((card) => String(card.message || "").trim() === wanted || String(card.title || "").trim() === wanted);
+  return match ? String(match.message || "").trim() : "";
+}
+
 export async function readBirthdayDesk(sql: BirthdaySql, advisorId: number) {
   await ensureRow(sql, advisorId);
   const settings = await sql.query<Record<string, unknown>>("select * from birthday_settings where advisor_id = $1", [advisorId]);
@@ -65,11 +82,12 @@ export async function readBirthdayDesk(sql: BirthdaySql, advisorId: number) {
   );
   const missing = contacts.filter((contact) => !String(contact.birthday || "").trim());
   const dropbox = dropboxBirthdayReady();
+  const storedEnabled = row.enabled === true || row.enabled === "t";
   return {
     ok: true as const,
     advisorId,
-    enabled: false,
-    storedEnabled: row.enabled === true || row.enabled === "t",
+    enabled: storedEnabled,
+    storedEnabled,
     source: cleanBirthdaySource(String(row.source || "")),
     sourceRef: String(row.source_ref || ""),
     timezone: cleanBirthdayZone(String(row.timezone || "America/Toronto")),
@@ -82,7 +100,7 @@ export async function readBirthdayDesk(sql: BirthdaySql, advisorId: number) {
     missingDates: missing.map((contact) => ({ id: Number(contact.id), name: String(contact.full_name || "") })),
     notices: notices.map((notice) => ({ id: Number(notice.id), runDate: String(notice.run_date || ""), body: String(notice.body || "") })),
     dropbox,
-    readiness: BIRTHDAY_READINESS,
+    readiness: birthdayReadiness(),
     zones: ZONES,
   };
 }
@@ -95,26 +113,39 @@ export async function saveBirthdaySettings(
   if (input.advisorId && !sameAdvisor(input.advisorId, advisorId)) {
     return { ok: false as const, error: "That birthday setup belongs to another advisor." };
   }
-  if (input.enabled === true) return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
   await ensureRow(sql, advisorId);
   const current = await readBirthdayDesk(sql, advisorId);
   const source = input.source === undefined ? current.source : cleanBirthdaySource(input.source);
   const sourceRef = input.sourceRef === undefined ? current.sourceRef : String(input.sourceRef || "").slice(0, 300);
   const timezone = input.timezone === undefined ? current.timezone : cleanBirthdayZone(input.timezone);
   const feb29 = input.feb29 === undefined ? current.feb29 : input.feb29 === "march1" ? "march1" : "skip";
-  const cardTitle = input.cardTitle === undefined ? current.cardTitle : String(input.cardTitle || "").slice(0, 500);
+  let cardTitle = input.cardTitle === undefined ? current.cardTitle : String(input.cardTitle || "").slice(0, 500);
+  if (input.cardTitle !== undefined && String(input.cardTitle || "").trim()) {
+    const saved = await matchingSavedCard(sql, advisorId, cardTitle);
+    if (!saved) return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
+    cardTitle = saved;
+  }
   const changed = source !== current.source || sourceRef !== current.sourceRef || timezone !== current.timezone || feb29 !== current.feb29 || cardTitle !== current.cardTitle;
   const version = changed ? current.templateVersion + 1 : current.templateVersion;
+  let enabled = current.storedEnabled && !changed;
+  if (input.enabled === false) enabled = false;
+  if (input.enabled === true) {
+    if (!cardTitle.trim() || changed || current.confirmedVersion !== current.templateVersion || version !== current.confirmedVersion) {
+      return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
+    }
+    if (source !== "desk" && source !== "dropbox") return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
+    enabled = true;
+  }
   await sql.query(
     `update birthday_settings
      set source = $2, source_ref = $3, timezone = $4, feb29 = $5, card_title = $6,
-         template_version = $7, enabled = false, updated_at = now()
+         template_version = $7, enabled = $8, updated_at = now()
      where advisor_id = $1`,
-    [advisorId, source, sourceRef, timezone, feb29, cardTitle, version],
+    [advisorId, source, sourceRef, timezone, feb29, cardTitle, version, enabled],
   );
   const saved = await readBirthdayDesk(sql, advisorId);
   const { ok: _savedOk, ...desk } = saved;
-  return { ok: true as const, ...desk, reconfirm: changed };
+  return { ok: true as const, ...desk, reconfirm: changed, sent: false as const };
 }
 
 export async function confirmBirthdayCard(sql: BirthdaySql, advisorId: number, input: { advisorId?: number } = {}) {
@@ -123,15 +154,17 @@ export async function confirmBirthdayCard(sql: BirthdaySql, advisorId: number, i
   }
   const current = await readBirthdayDesk(sql, advisorId);
   if (!current.cardTitle.trim()) return { ok: false as const, error: "Choose the birthday card before confirming it." };
+  const saved = await matchingSavedCard(sql, advisorId, current.cardTitle);
+  if (!saved) return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
   if (current.source !== "desk" && current.source !== "dropbox") {
     return { ok: false as const, error: "Choose Unique Advisor contacts or one Dropbox file before confirming." };
   }
   await sql.query(
-    "update birthday_settings set confirmed_version = template_version, enabled = false, updated_at = now() where advisor_id = $1",
-    [advisorId],
+    "update birthday_settings set confirmed_version = template_version, card_title = $2, updated_at = now() where advisor_id = $1",
+    [advisorId, saved],
   );
-  const saved = await readBirthdayDesk(sql, advisorId);
-  const { ok: _savedOk, ...desk } = saved;
+  const next = await readBirthdayDesk(sql, advisorId);
+  const { ok: _savedOk, ...desk } = next;
   return { ok: true as const, ...desk, sent: false as const };
 }
 

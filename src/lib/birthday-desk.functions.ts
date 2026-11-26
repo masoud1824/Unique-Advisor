@@ -3,7 +3,6 @@ import { gateAdvisor } from "@/lib/advisor-db";
 import { getSql } from "@/lib/db";
 import { todaysBirthdayReport, zonedParts, type BirthdayPerson } from "@/lib/birthday-job";
 import {
-  BIRTHDAY_AUTOMATION_OFF,
   confirmBirthdayCard,
   pauseBirthdayCheck,
   previewBirthdayDesk,
@@ -33,7 +32,6 @@ export const saveBirthdayDesk = createServerFn({ method: "POST" }).validator((in
   if (body.advisorId && Number(body.advisorId) !== Number(gate.row.id)) {
     return { ok: false as const, error: "That birthday setup belongs to another advisor." };
   }
-  if (body.enabled === true) return { ok: false as const, error: BIRTHDAY_AUTOMATION_OFF };
   return saveBirthdaySettings(asBirthdaySql(await getSql()), Number(gate.row.id), body);
 });
 
@@ -110,7 +108,7 @@ export const previewBirthdayDeskPlan = createServerFn({ method: "POST" }).valida
     live: false as const,
     providerCalled: false as const,
     schedulerRan: false as const,
-    savedStaysOff: true as const,
+    savedStaysOff: desk.enabled === false,
     localDate: local.date,
     offNotice: preview.notice,
     pretendNotice: pretended.notice,
