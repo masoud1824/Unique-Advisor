@@ -43,6 +43,6 @@ export function runWorkflow(kind: WorkflowKind, connections: WorkflowConnections
     sent: false,
     booked: false,
     uploaded: false,
-    notice: `${kind} is connected, but this staging preview does not send, book, or upload. Nothing was sent.`,
+    notice: `${kind} has a connection on file. Staging still does not read, send, book, or upload from this tool. Nothing was sent.`,
   };
 }

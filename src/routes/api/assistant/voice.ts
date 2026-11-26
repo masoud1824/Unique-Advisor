@@ -42,7 +42,7 @@ export const Route = createFileRoute("/api/assistant/voice")({
             };
             try {
               const result = await answerAdvisor(
-                { slug: String(body?.slug || ""), code: String(body?.code || ""), chatId: Number(body?.chatId) || 0, page: Number(body?.page) || 0, transcriptConfirmed: Boolean(body?.transcriptConfirmed), activeNewsletterId: Number(body?.activeNewsletterId) || 0, messages: [{ role: "user", content: String(body?.content || "") }] },
+                { slug: String(body?.slug || ""), code: String(body?.code || ""), chatId: Number(body?.chatId) || 0, page: Number(body?.page) || 0, transcriptConfirmed: Boolean(body?.transcriptConfirmed), activeNewsletterId: Number(body?.activeNewsletterId) || 0, source: "voice", messages: [{ role: "user", content: String(body?.content || "") }] },
                 (text: string) => {
                   send({ type: "delta", text });
                 },

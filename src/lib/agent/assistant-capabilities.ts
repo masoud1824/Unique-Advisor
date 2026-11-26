@@ -1,7 +1,7 @@
 /** What this preview actually does. Status is shown to the advisor and returned by the agent. */
 export const ASSISTANT_NAME = "Unique Advisor AI Assistant";
 
-export type CapabilityStatus = "testing" | "premium-deferred" | "not-connected";
+export type CapabilityStatus = "testing" | "premium-deferred" | "connection-required" | "not-connected";
 
 export type AssistantCapability = {
   id: string;
@@ -32,50 +32,50 @@ export const ASSISTANT_CAPABILITIES: AssistantCapability[] = [
   {
     id: "email",
     label: "Read mail and draft replies",
-    status: "not-connected",
-    note: "In the v1 plan, but no Microsoft or Google mailbox is connected for this advisor. Nothing is read or sent.",
+    status: "connection-required",
+    note: "Desk preparation exists. No Microsoft or Google mailbox is connected, so nothing is read or sent.",
   },
   {
     id: "cards",
     label: "Personalized cards",
-    status: "not-connected",
-    note: "In the v1 plan. Card delivery is not connected, so no card is sent.",
+    status: "connection-required",
+    note: "Desk preparation exists. Card delivery needs a connected mailbox, so no card is sent.",
   },
   {
     id: "newsletters",
     label: "Newsletters and e-letters",
-    status: "not-connected",
-    note: "In the v1 plan. Newsletter delivery is not connected, so nothing is sent.",
+    status: "connection-required",
+    note: "Desk preparation exists. Newsletter delivery needs a connected mailbox, so nothing is sent.",
   },
   {
     id: "drips",
     label: "Scheduled drip campaigns",
-    status: "not-connected",
-    note: "In the v1 plan. A drip would stop on unsubscribe or reply, but no campaign sender is connected. Nothing is scheduled or sent.",
+    status: "connection-required",
+    note: "Desk preparation exists. A drip stops on unsubscribe or reply, but no campaign mailbox is connected. Nothing is scheduled or sent.",
   },
   {
     id: "dropbox-search",
     label: "Dropbox client search",
-    status: "not-connected",
-    note: "In the v1 plan. Dropbox is not connected, so no client files were searched and no contact list was produced.",
+    status: "connection-required",
+    note: "Desk file listing exists. Dropbox is not connected, so no client files were searched.",
   },
   {
     id: "scheduling",
     label: "Calendar, Zoom, and in-person meetings",
-    status: "not-connected",
-    note: "In the v1 plan. Calendar and Zoom are not connected, so nothing is booked and no notice is sent.",
+    status: "connection-required",
+    note: "Desk meeting tools exist. Calendar and Zoom are not connected, so nothing is booked and no notice is sent.",
   },
   {
     id: "morning",
     label: "Morning briefing and meeting follow-up",
-    status: "not-connected",
-    note: "In the v1 plan. It needs the mailbox, calendar, and client files before it can brief you. Nothing was invented.",
+    status: "connection-required",
+    note: "A briefing needs the mailbox and calendar. Neither is connected, so nothing was invented.",
   },
   {
     id: "client-reviews",
     label: "Client reviews",
-    status: "not-connected",
-    note: "Not part of the connected v1 tools yet. No review was created.",
+    status: "connection-required",
+    note: "Desk review tools exist. No mailbox is connected, so no review was created.",
   },
   {
     id: "approved-save",

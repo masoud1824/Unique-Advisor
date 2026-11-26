@@ -16,7 +16,7 @@ export const AGENT_ROADMAP = [
   },
   {
     id: "email",
-    status: "not-implemented" as const,
+    status: "connection-required" as const,
     summary: "Read the advisor's mail and prepare replies only after that advisor explicitly connects Microsoft or Google.",
     requirements: [
       "Use that advisor's connected mailbox through the supported OAuth connection. Isolate every read and draft to the signed-in advisor.",
