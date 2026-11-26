@@ -333,7 +333,7 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}` },
       body: form,
-      signal: AbortSignal.timeout(20000),
+      signal: AbortSignal.timeout(15000),
     });
   };
   const refused = async (response: Response, model: string) => {
@@ -355,7 +355,9 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
     if (!text || transcriptEchoesPrompt(text, prompt, names)) return "";
     return text;
   };
-  let modelUsed = "gpt-4o-mini-transcribe";
+  const seconds = type.includes("wav") ? Math.max(0, (bytes.length - 44) / 32000) : 0;
+  const tooShort = (value: string) => seconds >= 3 && value.split(/\s+/).filter(Boolean).length < 4;
+  let modelUsed = "";
   let text = "";
   let lastError = "";
   for (const model of ["gpt-4o-mini-transcribe", "whisper-1"]) {
@@ -366,8 +368,9 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
         lastError = await refused(response, model);
         continue;
       }
-      text = accept(await readTranscript(response));
-      if (text) break;
+      const next = accept(await readTranscript(response));
+      if (next.split(/\s+/).filter(Boolean).length > text.split(/\s+/).filter(Boolean).length) text = next;
+      if (text && !tooShort(text)) break;
     } catch (error) {
       const name = error instanceof Error ? error.name : "";
       console.info(`[voice] stt-error model=${model} ${name || "failed"} bytes=${bytes.length}`);

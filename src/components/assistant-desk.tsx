@@ -301,12 +301,69 @@ export function voiceLabel(phase: string, error = "") {
   return "";
 }
 
+let closeCapture: (() => void) | null = null;
+
+function mergeSamples(parts: Float32Array[]) {
+  let length = 0;
+  for (const part of parts) length += part.length;
+  const merged = new Float32Array(length);
+  let offset = 0;
+  for (const part of parts) {
+    merged.set(part, offset);
+    offset += part.length;
+  }
+  return merged;
+}
+
+function downsampleMono(input: Float32Array, fromRate: number, toRate: number) {
+  if (fromRate <= toRate) return input;
+  const ratio = fromRate / toRate;
+  const length = Math.max(1, Math.floor(input.length / ratio));
+  const out = new Float32Array(length);
+  for (let index = 0; index < length; index += 1) {
+    const start = Math.floor(index * ratio);
+    const end = Math.min(input.length, Math.floor((index + 1) * ratio));
+    let sum = 0;
+    for (let cursor = start; cursor < end; cursor += 1) sum += input[cursor];
+    out[index] = sum / Math.max(1, end - start);
+  }
+  return out;
+}
+
+function wavFromSamples(samples: Float32Array, sampleRate: number) {
+  const buffer = new ArrayBuffer(44 + samples.length * 2);
+  const view = new DataView(buffer);
+  const write = (offset: number, text: string) => {
+    for (let index = 0; index < text.length; index += 1) view.setUint8(offset + index, text.charCodeAt(index));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + samples.length * 2, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, samples.length * 2, true);
+  let offset = 44;
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = Math.max(-1, Math.min(1, samples[index] || 0));
+    view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+    offset += 2;
+  }
+  return new Blob([buffer], { type: "audio/wav" });
+}
+
 async function openCommandMic() {
   sharedStream?.getTracks().forEach((track) => track.stop());
   sharedStream = null;
   try {
     sharedStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
   } catch {
     sharedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -378,6 +435,8 @@ function haltVoice() {
   recognition = null;
   try { if (recorder && recorder.state !== "inactive") recorder.stop(); } catch { /* already stopped */ }
   recorder = null;
+  closeCapture?.();
+  closeCapture = null;
   spokenAudio?.pause();
   spokenAudio = null;
   window.speechSynthesis?.cancel();
@@ -574,6 +633,8 @@ export function startAdvisorSpeech(
   options?: { slug: string; code: string; names?: string[]; onDraft?: (text: string) => void },
 ) {
   const generation = ++speechGeneration;
+  const captureContext = typeof AudioContext !== "undefined" ? new AudioContext() : null;
+  void captureContext?.resume();
   voiceStopping = false;
   keepListening = true;
   voiceSending = false;
@@ -587,6 +648,7 @@ export function startAdvisorSpeech(
   onStatus({ listening: true, error: "", phase: "listening" });
   voiceLog("listen-start");
   if (!options?.slug || !options.code) {
+    void captureContext?.close();
     endVoiceLog();
     const error = "Voice is not ready. Open the assistant and tap Talk again.";
     keepListening = false;
@@ -679,7 +741,7 @@ export function startAdvisorSpeech(
       settled = true;
       voiceLog("stt-timeout", mime);
       giveUp(publicTranscriptionError({ stage: "timeout", mime, bytes }));
-    }, 20000);
+    }, 35000);
     try {
       const audio = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
@@ -717,6 +779,48 @@ export function startAdvisorSpeech(
     }
   };
 
+  let stopCapture: (() => Promise<Blob | null>) | null = null;
+  const armCapture = (stream: MediaStream) => {
+    const samples: Float32Array[] = [];
+    let peak = 0;
+    let kept = 0;
+    const maxSamples = 48000 * 90;
+    const context = captureContext;
+    let processor: ScriptProcessorNode | null = null;
+    if (context) {
+      void context.resume();
+      const source = context.createMediaStreamSource(stream);
+      processor = context.createScriptProcessor(4096, 1, 1);
+      processor.onaudioprocess = (event) => {
+        if (kept >= maxSamples) return;
+        const channel = event.inputBuffer.getChannelData(0);
+        samples.push(new Float32Array(channel));
+        kept += channel.length;
+        for (let index = 0; index < channel.length; index += 32) peak = Math.max(peak, Math.abs(channel[index] || 0));
+      };
+      const mute = context.createGain();
+      mute.gain.value = 0;
+      source.connect(processor);
+      processor.connect(mute);
+      mute.connect(context.destination);
+    }
+    closeCapture = () => {
+      try { processor?.disconnect(); } catch { /* already stopped */ }
+      void context?.close();
+    };
+    armRecorder(stream);
+    stopCapture = async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 120));
+      try { processor?.disconnect(); } catch { /* already stopped */ }
+      const rate = context?.sampleRate || 48000;
+      const merged = samples.length ? downsampleMono(mergeSamples(samples), rate, 16000) : new Float32Array();
+      const wav = merged.length > 1600 && peak >= 0.01 ? wavFromSamples(merged, 16000) : null;
+      void context?.close();
+      closeCapture = null;
+      const webm = await takeRecording();
+      return wav || webm;
+    };
+  };
   const armRecorder = (stream: MediaStream) => {
     if (recorder && recorder.state === "recording") return;
     if (typeof MediaRecorder === "undefined") return;
@@ -735,7 +839,7 @@ export function startAdvisorSpeech(
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) chunks.push(event.data);
     };
-    try { recorder.start(); } catch { /* this browser will not record */ }
+    try { recorder.start(250); } catch { try { recorder.start(); } catch { /* this browser will not record */ } }
   };
 
   const armRecognition = (duringSpeech = false) => {
@@ -848,7 +952,7 @@ export function startAdvisorSpeech(
       recognition = null;
       const raw = turnText(turn).trim();
       const line = transcriptEchoesPrompt(raw, prompt, names) ? "" : raw;
-      void takeRecording().then((blob) => correct(line, blob));
+      void (stopCapture ? stopCapture() : takeRecording()).then((blob) => correct(line, blob));
     }, 500);
   };
   listenDuringSpeech = () => {
@@ -868,7 +972,7 @@ export function startAdvisorSpeech(
         if (generation === speechGeneration && keepListening) fail("The microphone could not be started.", false);
         return;
       }
-      armRecorder(stream);
+      armCapture(stream);
       const speech = window as unknown as { SpeechRecognition?: new () => Heard; webkitSpeechRecognition?: new () => Heard };
       const canRecognize = Boolean(speech.SpeechRecognition || speech.webkitSpeechRecognition);
       if (typeof MediaRecorder !== "undefined") {
