@@ -19,7 +19,6 @@ import {
 } from "./equitable-fields.ts";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "./assistant-capabilities.ts";
 import { runWorkflow, type WorkflowKind } from "./v1-workflows.ts";
-import { rejectedModelReason } from "./model-config.ts";
 import { bareApprovalSpeech } from "./voice-bridge.ts";
 
 export type FormLoad =
@@ -321,7 +320,7 @@ export function createDraftAgent() {
   });
   const workflow = tool({
     name: "run_advisor_workflow",
-    description: "Check one advisor workflow: email, cards, newsletters, drips, dropbox, scheduling, morning, or reviews. Say when the connection is missing or when staging cannot perform the live action. Does not send, book, or upload.",
+    description: "Run an implemented v1 workflow: email, cards, newsletters, drips, dropbox, scheduling, morning, or reviews. Reports a missing connection instead of pretending the task was done. Does not send, book, or upload.",
     parameters: z.object({ kind: z.enum(["email", "cards", "newsletters", "drips", "dropbox", "scheduling", "morning", "reviews"]) }),
     execute: async (input, context) => {
       const scope = scopeFrom(context as RunContext<DraftScope>);
@@ -509,15 +508,6 @@ export async function runDraftTurn(input: {
     input.store.save(existing);
     return view(existing, { ok: false, calledModel: true, reply, code: "failed" });
   }
-  const usage = readRunUsage(result, input.requestedModel || "");
-  if (input.requestedModel) {
-    const wrong = rejectedModelReason(input.requestedModel, usage.returnedModel);
-    if (wrong) {
-      existing.messages.push({ role: "assistant", text: wrong, source: "system" });
-      input.store.save(existing);
-      return view(existing, { ok: false, calledModel: true, reply: wrong, code: "wrong-model", usage });
-    }
-  }
   if (result.interruptions.length) {
     existing.pending = approvalFrom(result.interruptions[0], existing);
     existing.approvalStatus = "pending";
@@ -539,7 +529,7 @@ export async function runDraftTurn(input: {
   }
   existing.messages.push({ role: "assistant", text: reply, source: "system" });
   input.store.save(existing);
-  return view(existing, { calledModel: true, reply, usage });
+  return view(existing, { calledModel: true, reply, usage: readRunUsage(result, input.requestedModel || "") });
 }
 
 function approvalFrom(interruption: { rawItem?: unknown }, record: DraftRecord): DraftApproval {

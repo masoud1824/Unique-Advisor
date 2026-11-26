@@ -13,7 +13,7 @@ import {
 import { redactPrivate } from "../hosted-runtime.ts";
 import { modelTransportOpen } from "../outbound-guard.ts";
 import { FORM_CODE, type DraftPayload } from "./equitable-fields.ts";
-import { decideDraft, MemoryDraftStore, blankRecord, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
+import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
 import { verifyModelAccess } from "./model-config.ts";
 import { sharedAdvisorRunId } from "./v1-workflows.ts";
 import { speechSegments } from "./voice-bridge.ts";
@@ -142,30 +142,6 @@ export async function runDeskAgentTurn(input: { advisorId: number; slug: string;
     outputTokens: result.usage?.outputTokens ?? null,
     runId,
   };
-}
-
-export async function readSharedTaskLines(advisorId: number) {
-  const sql = await getSql();
-  await ensurePreviewTables(sql);
-  const record = await readRun(sql, advisorId, sharedAdvisorRunId(advisorId));
-  if (!record) return "";
-  return record.messages.slice(-8).map((message) => `${message.role}: ${String(message.text || "").replace(/\s+/g, " ").trim()}`).filter((line) => line.length > 2).join("\n").slice(0, 2000);
-}
-
-export async function recordSharedExchange(input: { advisorId: number; slug: string; userText: string; assistantText: string; source: "typed" | "voice" }) {
-  const text = String(input.userText || "").replace(/\s+/g, " ").trim();
-  const reply = String(input.assistantText || "").trim();
-  if (!text || !reply) return;
-  const sql = await getSql();
-  await ensurePreviewTables(sql);
-  const runId = sharedAdvisorRunId(input.advisorId);
-  const existing = await readRun(sql, input.advisorId, runId);
-  const record = existing || blankRecord(runId, String(input.advisorId), input.slug, false);
-  const prior = record.messages.at(-1);
-  if (prior?.role === "assistant" && prior.text === reply) return;
-  record.messages.push({ role: "user", text, source: input.source });
-  record.messages.push({ role: "assistant", text: reply, source: "system" });
-  await writeRun(sql, input.advisorId, record);
 }
 
 function asBytes(value: unknown) {

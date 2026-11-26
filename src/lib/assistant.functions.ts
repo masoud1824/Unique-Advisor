@@ -21,7 +21,7 @@ import { websiteButtonHtml } from "@/lib/advisor-website";
 import { ASSISTANT_LOCK, assistantGate, decideAction, decideSend, parseAssistantSettings } from "@/lib/assistant-policy";
 import { loadClientBook, readDefaultRules, readRules, runAdvisorMorning, sourceClientReport, writeDefaultRules, writeRules } from "@/lib/assistant-work";
 import { CARDS, personalize } from "@/lib/catalog";
-import { configuredModelId, rejectedModelReason } from "@/lib/agent/model-config.ts";
+import { configuredModelId } from "@/lib/agent/model-config.ts";
 import { factsFromResponse, publicAssistantError, type ProviderCall } from "@/lib/assistant-diagnostics";
 import { getSql } from "@/lib/db";
 import { attachPreviews, bindPreviewMessages, readChatPreviewRows, type ChatPreviewRow } from "@/lib/chat-previews";
@@ -82,15 +82,11 @@ function advisorChatModel() {
   return configuredModelId();
 }
 function rejectedReturnedModel(returned: string) {
-  return rejectedModelReason(advisorChatModel(), returned);
-}
-async function loadSharedTaskLines(advisorId: number) {
-  const { readSharedTaskLines } = await import("@/lib/agent/preview-server.ts");
-  return readSharedTaskLines(advisorId).catch(() => "");
-}
-async function shareDeskTurn(advisorId: number, slug: string, userText: string, assistantText: string, source: "typed" | "voice") {
-  const { recordSharedExchange } = await import("@/lib/agent/preview-server.ts");
-  await recordSharedExchange({ advisorId, slug, userText, assistantText, source }).catch(() => undefined);
+  const requested = advisorChatModel();
+  if (!returned.startsWith(requested)) {
+    return `The provider returned ${returned || "no model id"} instead of ${requested}. That reply was not used. No fallback model was used.`;
+  }
+  return "";
 }
 var OPENAI_TTS = "gpt-4o-mini-tts";
 var OPENAI_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
@@ -1286,252 +1282,28 @@ async function runQueuedCampaign(input: { payload?: unknown; io?: unknown; slug?
   });
 }
 async function runModel(settings: { tools: { clients: unknown; calendar: unknown; zoom: unknown; dropbox: unknown; draft: unknown }; instructions?: unknown }, advisorId: number, advisorName: unknown, turns: Array<{ role?: string; content?: string }>, slug: string, code: string, rulesNote: unknown, onDelta: ((text: string) => void) | undefined, calls: ProviderCall[], chatId = 0, source: "typed" | "voice" = "typed") {
-  void source;
-  const apiKey = await companyApiKey();
-  if (!apiKey) return { ok: false as const, error: "The assistant is not available right now. In Superadmin, open OpenAI and save the key." };
-  const tools: Array<{ type: string; function: { name: string; description: string; parameters: { type: string; properties: Record<string, unknown>; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { cardId: { type: string }; contactId: { type: string }; contactName: { type: string }; tag: { type: string }; message: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; articles: { type: string; items: { type: string; properties: { title: { type: string }; body: { type: string } }; required: unknown[] } }; contactName: { type: string }; tag: { type: string }; design: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; contactName: { type: string }; tag: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; body: { type: string }; contactName: { type: string }; tag: { type: string }; design: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { campaign: { type: string }; frequency: { type: string }; contactName: { type: string }; tag: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { where: { type: string; enum: unknown[] }; title: { type: string }; start: { type: string }; minutes: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { contactName: { type: string }; whenText: { type: string }; minutes: { type: string }; topic: { type: string }; confirm: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { name: { type: string }; content: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { to: { type: string }; name: { type: string }; subject: { type: string }; body: { type: string } }; required: unknown[]; additionalProperties: boolean } } }> = [];
-  if (settings.tools.clients) {
-    tools.push({ type: "function", function: { name: "list_clients", description: "Read this advisor's contacts.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "client_report", description: "Report who needs contact, yearly KYC, and upsell or cross-sell gaps.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "list_cards", description: "List this advisor's e-cards.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "send_card", description: "Match an e-card and a contact, then ask the advisor to confirm. A later yes sends it. Do not send it in this call, and do not tell them to press Approve and send.", parameters: { type: "object", properties: { cardId: { type: "string" }, contactId: { type: "number" }, contactName: { type: "string" }, tag: { type: "string" }, message: { type: "string" } }, required: ["cardId"], additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "list_newsletters", description: "List saved newsletters.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "propose_newsletter", description: "Prepare a new newsletter for approval. Set tag when the advisor names a group such as life insurance clients. Leave design empty unless they named a template. This does not send.", parameters: { type: "object", properties: { title: { type: "string" }, articles: { type: "array", items: { type: "object", properties: { title: { type: "string" }, body: { type: "string" } }, required: ["title", "body"] } }, contactName: { type: "string" }, tag: { type: "string" }, design: { type: "string" } }, required: ["title", "articles"], additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "send_newsletter", description: "Prepare a saved newsletter for approval. Set tag when the advisor names a group. This does not send. Do not use this for a new letter.", parameters: { type: "object", properties: { title: { type: "string" }, contactName: { type: "string" }, tag: { type: "string" } }, required: ["title"], additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "send_eletter", description: "Prepare one e-letter for approval. Set tag when the advisor names a group such as life insurance clients. Leave design empty unless they named a template. This does not send.", parameters: { type: "object", properties: { title: { type: "string" }, body: { type: "string" }, contactName: { type: "string" }, tag: { type: "string" }, design: { type: "string" } }, required: ["title", "body"], additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "list_campaigns", description: "List this advisor's drip campaigns and the default campaigns.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-    tools.push({ type: "function", function: { name: "propose_campaign", description: "Prepare a drip campaign. Pick the campaign they named. Leave design empty; a random template is chosen. Set frequency only if they said how often. Set tag or contactName only if they said who. If frequency or recipients are missing, the tool tells you to ask. This does not start the campaign.", parameters: { type: "object", properties: { campaign: { type: "string" }, frequency: { type: "string" }, contactName: { type: "string" }, tag: { type: "string" } }, required: ["campaign"], additionalProperties: false } } });
-  }
-  if (settings.tools.calendar) tools.push({ type: "function", function: { name: "list_calendar", description: "Read this advisor's calendar.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-  if (settings.tools.zoom) tools.push({ type: "function", function: { name: "list_zoom", description: "Read this advisor's Zoom meetings.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-  if (settings.tools.dropbox) tools.push({ type: "function", function: { name: "list_dropbox", description: "List this advisor's Dropbox files.", parameters: { type: "object", properties: {}, additionalProperties: false } } });
-  if (settings.tools.zoom || settings.tools.calendar) tools.push({ type: "function", function: { name: "propose_meeting", description: "Propose a Zoom or calendar meeting that is not with a named contact. This does not book it.", parameters: { type: "object", properties: { where: { type: "string", enum: ["zoom", "google", "outlook"] }, title: { type: "string" }, start: { type: "string" }, minutes: { type: "number" } }, required: ["where", "title", "start", "minutes"], additionalProperties: false } } });
-  if (settings.tools.zoom) tools.push({ type: "function", function: { name: "book_zoom", description: "Book a Zoom meeting with one contact. Pass whenText as the advisor's own words, such as tomorrow at 3 or next Tuesday at 10am. Do not convert the day yourself. The first call does not book. It returns the question to show the advisor. Say that question and wait. Call again with confirm true only after the advisor agrees. If the time has passed, ask for a new time.", parameters: { type: "object", properties: { contactName: { type: "string" }, whenText: { type: "string" }, minutes: { type: "number" }, topic: { type: "string" }, confirm: { type: "boolean" } }, required: ["contactName"], additionalProperties: false } } });
-  if (settings.tools.dropbox) tools.push({ type: "function", function: { name: "propose_dropbox", description: "Propose a Dropbox note. This does not upload it.", parameters: { type: "object", properties: { name: { type: "string" }, content: { type: "string" } }, required: ["name", "content"], additionalProperties: false } } });
-  if (settings.tools.draft) tools.push({ type: "function", function: { name: "draft_email", description: "Prepare one plain email. This does not send it.", parameters: { type: "object", properties: { to: { type: "string" }, name: { type: "string" }, subject: { type: "string" }, body: { type: "string" } }, required: ["to", "subject", "body"], additionalProperties: false } } });
-  const now = /* @__PURE__ */ new Date();
-  const zone = await advisorZone(advisorId).catch(() => "America/Toronto");
-  const clock = assistantClock(now, zone);
-  const request = [...turns].reverse().find((turn) => turn.role === "user")?.content ?? "";
-  const allowTools = tools.length > 0 && toolsAllowed(request);
-  const operating = await readOperatingInstructions();
-  const history = turns.slice(-12).map((turn) => ({ role: turn.role, content: turn.content }));
-  const remembered = allowTools ? await loadCalendarSnapshot(advisorId, chatId) : "";
-  if (remembered && !history.some((turn) => turn.role === "assistant" && String(turn.content || "").includes(remembered.slice(0, 80)))) {
-    history.splice(Math.max(0, history.length - 1), 0, { role: "assistant", content: remembered });
-  }
-  const messages: Array<{ role?: string; content?: string; tool_call_id?: string }> = [
-    { role: "system", content: composeAdvisorPrompt({ operating, clock, advisorName: String(advisorName || ""), advisorId, settingsInstructions: String(settings.instructions || ""), lock: ASSISTANT_LOCK, rulesNote: String(rulesNote || "") }) },
-    ...history
-  ];
-  const drafts: Array<{ id: number; to: string; name: string; subject: string }> = [];
-  const made: Array<{ id: number; kind: string; summary: string; preview: string; previewHtml: string; previewImage: string }> = [];
-  const shared = await loadSharedTaskLines(advisorId);
-  if (shared) {
-    const known = history.map((turn) => String(turn.content || "").trim()).filter(Boolean);
-    const fresh = shared.split("\n").filter((line) => {
-      const text = line.replace(/^(user|assistant):\s*/, "").trim();
-      return Boolean(text) && !known.some((item) => item === text);
-    });
-    if (fresh.length) messages.splice(1, 0, { role: "system", content: `Shared task history from this advisor. Use it for corrections. It is not permission to send, book, or upload.\n${fresh.join("\n")}` });
-  }
-  let ready5 = "";
-  let lastProblem = "";
-  const model = modelTransportOpen();
-  if (!model.ok) return { ok: false as const, error: model.reason };
-  for (let round = 0; round < 4; round += 1) {
-    const payload = { model: advisorChatModel(), temperature: 0.3, max_tokens: 4e3, messages, ...allowTools ? { tools, tool_choice: "auto" } : {} };
-    let failure = null;
-    let response = await fetch(`${OPENAI}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ ...payload, stream: true, stream_options: { include_usage: true } })
-    });
-    if (!response.ok) {
-      const failed = await response.text().catch(() => "");
-      failure = publicAssistantError(response.status, failed);
-      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: response.status, detail: failure.detail, reference: failure.reference });
-      console.error(`[assistant] model ${response.status} ${failure.detail}`);
-      if (response.status === 429) {
-        if (round < 2) {
-          const header = Number(response.headers.get("retry-after"));
-          const mentioned = String(failed).match(/try again in (\d+(?:\.\d+)?)s/i);
-          const wait = Number.isFinite(header) && header > 0 ? header * 1000 : mentioned ? Math.ceil(Number(mentioned[1]) * 1000) : 20000;
-          await new Promise((resolve) => setTimeout(resolve, Math.min(Math.max(wait, 1000), 25000)));
-          continue;
-        }
-        return { ok: false as const, error: failure.error };
-      }
-      response = await fetch(`${OPENAI}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify(payload)
-      });
-    }
-    if (!response.ok) {
-      const failed = await response.text().catch(() => "");
-      failure = publicAssistantError(response.status, failed);
-      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: response.status, detail: failure.detail, reference: failure.reference });
-      console.error(`[assistant] model retry ${response.status} ${failure.detail}`);
-      const plain = await fetch(`${OPENAI}/chat/completions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ model: payload.model, temperature: 0.3, max_tokens: 1200, messages })
-      });
-      if (plain.ok) response = plain;
-      else {
-        const plainFailed = await plain.text().catch(() => "");
-        failure = publicAssistantError(plain.status, plainFailed);
-        noteProvider(calls, { ...factsFromResponse(plain, void 0, plainFailed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: plain.status, detail: failure.detail, reference: failure.reference });
-        console.error(`[assistant] model plain ${plain.status} ${failure.detail}`);
-        return { ok: false as const, error: failure.error };
-      }
-    }
-    const message = await readCompletionMessage(response);
-    noteProvider(calls, message?.providerFacts);
-    const wrongModel = rejectedReturnedModel(String(message?.providerFacts?.model || ""));
-    if (wrongModel) return { ok: false as const, error: wrongModel };
-    if (!message) return { ok: false as const, error: "The assistant did not answer." };
-    if (!message.content && !(message.tool_calls || []).length) return { ok: false as const, error: "The assistant did not answer." };
-    const calls2 = Array.isArray(message.tool_calls) ? message.tool_calls.slice(0, 4) : [];
-    if (calls2.length === 0) {
-      const spoken = String(message.content || ready5 || "I have nothing to add.").trim();
-      if (replacesWithBookingRefusal(request, spoken)) {
-        const reply = "Not booked. No Zoom meeting, Outlook event, or confirmation email was created.";
-        onDelta?.(reply);
-        return { ok: true as const, reply, drafts, actions: made };
-      }
-      onDelta?.(spoken);
-      return { ok: true as const, reply: spoken, drafts, actions: made };
-    }
-    messages.push(assistantHistoryMessage(message));
-    for (const call of calls2) {
-      const toolCall = call as { id?: string; name?: string; function?: { name?: string; arguments?: string } };
-      const name = toolCall.function?.name || toolCall.name || "";
-      const args = toolArgs(toolCall);
-      let result: {
-        ok?: boolean;
-        error?: string;
-        message?: string;
-        confirm?: boolean;
-        held?: boolean;
-        pending?: boolean;
-        actionId?: number;
-        summary?: string;
-        preview?: string;
-        html?: string;
-        image?: string;
-        cards?: unknown;
-        newsletters?: unknown;
-        campaigns?: unknown;
-        defaults?: unknown;
-        text?: string;
-        connected?: boolean;
-        meetings?: unknown;
-        files?: unknown;
-        reply?: string;
-        draftId?: number;
-        source?: string;
-        file?: string;
-        people?: unknown;
-        needsContact?: unknown;
-        kycDue?: unknown;
-        kycDone?: unknown;
-        opportunities?: unknown;
-        booked?: boolean;
-        choices?: unknown;
-        contact?: unknown;
-        when?: unknown;
-        topic?: unknown;
-        to?: unknown;
-        name?: string;
-        subject?: string;
-        detail?: string;
-        started?: boolean;
-        practiceCampaignStarted?: boolean;
-        reason?: string;
-        sent?: unknown;
-        skipped?: unknown;
-        failed?: unknown;
-        title?: string;
-        [key: string]: unknown;
-      } = { ok: false, error: "That tool is not available." };
-      try {
-        if (name === "list_clients" && settings.tools.clients) result = await loadClientBook(advisorId);
-        if (name === "client_report" && settings.tools.clients) result = await sourceClientReport(advisorId);
-        if (name === "list_cards" && settings.tools.clients) result = { cards: (await cardsForAdvisor(advisorId)).map((item) => ({ id: item.id, title: item.title })) };
-        if (name === "send_card" && settings.tools.clients) {
-          result = await sendAdvisorCard({ advisorId, slug, code, args, request });
-          const staged = result && typeof result === "object" && result.confirm === true && result.ok === true;
-          if (staged) {
-            const reply = String(result.message || "");
-            messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 12e3) });
-            onDelta?.(reply);
-            return { ok: true as const, reply, drafts, actions: [] };
-          }
-        }
-        if (name === "list_newsletters" && settings.tools.clients) result = { newsletters: await savedNewsletters(advisorId) };
-        if (name === "propose_newsletter" && settings.tools.clients) result = await proposeNewsletter({ advisorId, slug, code, args, request });
-        if (name === "send_newsletter" && settings.tools.clients) result = await sendAdvisorNewsletter({ advisorId, slug, code, args, request });
-        if (name === "send_eletter" && settings.tools.clients) result = await sendAdvisorEletter({ advisorId, slug, code, args, request });
-        if (name === "list_campaigns" && settings.tools.clients) {
-          const listed = await listDrips({ data: { slug, code } });
-          const campaignRows = (Array.isArray(listed.campaigns) ? listed.campaigns : []) as Array<{ name?: string }>;
-          const defaultRows = (Array.isArray(listed.defaults) ? listed.defaults : []) as Array<{ name?: string }>;
-          result = listed?.ok ? { campaigns: campaignRows.map((item) => String(item.name || "")), defaults: defaultRows.map((item) => String(item.name || "")) } : { ok: false as const, error: listed?.error || "Campaigns could not be loaded." };
-        }
-        if (name === "propose_campaign" && settings.tools.clients) result = await proposeCampaign({ advisorId, slug, code, args, request });
-        if (name === "list_calendar" && settings.tools.calendar) {
-          const text = await calendarBrief(advisorId, request);
-          result = { text };
-          await saveCalendarSnapshot(advisorId, chatId, text);
-        }
-        if (name === "list_zoom" && settings.tools.zoom) result = await readZoom(advisorId);
-        if (name === "list_dropbox" && settings.tools.dropbox) result = await readDropbox(advisorId);
-        if (name === "propose_meeting" && (settings.tools.zoom || settings.tools.calendar)) result = await proposeMeeting(advisorId, args);
-        if (name === "book_zoom" && settings.tools.zoom) {
-          result = await bookZoom(advisorId, args, turns.filter((turn) => turn.role === "user").map((turn) => String(turn.content || "")), now);
-          const reply = meetingReply(result);
-          messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 12e3) });
-          onDelta?.(reply);
-          return { ok: true as const, reply, drafts, actions: made };
-        }
-        if (name === "propose_dropbox" && settings.tools.dropbox) result = await proposeDropbox(advisorId, args);
-        if (name === "draft_email" && settings.tools.draft) {
-          const draft = await saveDraft(advisorId, args);
-          result = draft;
-          if (draft.ok) drafts.push({ id: Number(draft.draftId), to: String(draft.to || ""), name: String(draft.name || ""), subject: String(draft.subject || "") });
-        }
-      } catch (error) {
-        console.error("[assistant] tool", name, error);
-        result = { ok: false as const, error: "Sorry, something went wrong \u2014 please try again." };
-      }
-      const failed = result && typeof result === "object" && "ok" in result && result.ok === false;
-      if (result && result.held && result.message) {
-        const reply = String(result.message);
-        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 12e3) });
-        onDelta?.(reply);
-        return { ok: true as const, reply, drafts, actions: made };
-      }
-      if (failed) lastProblem = String(result.error || "That step did not work.");
-      const waiting = result && typeof result === "object" && result.ok && result.pending;
-      const waitingKind = name === "send_card" ? "card" : name === "send_eletter" ? "eletter" : name === "propose_newsletter" ? "newsletter" : name === "propose_campaign" ? "campaign" : "";
-      if (waiting && waitingKind) {
-        const madeLetter = result;
-        ready5 = madeLetter.message || "It is ready below. Press Approve and send.";
-        made.push({
-          id: Number(madeLetter.actionId),
-          kind: waitingKind,
-          summary: String(madeLetter.summary || ready5),
-          preview: String(madeLetter.preview || ""),
-          previewHtml: String(madeLetter.html || ""),
-          previewImage: String(madeLetter.image || "")
-        });
-      }
-      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result).slice(0, 12e3) });
-    }
-  }
-  return { ok: true as const, reply: ready5 || lastProblem || "I could not finish that. Try again.", drafts, actions: made };
+  void settings;
+  void advisorName;
+  void rulesNote;
+  void chatId;
+  const asked = [...turns].reverse().find((turn) => turn.role === "user")?.content ?? "";
+  const { runDeskAgentTurn } = await import("@/lib/agent/preview-server.ts");
+  const turn = await runDeskAgentTurn({ advisorId, slug, text: String(asked), source });
+  calls.push({
+    provider: "openai",
+    model: turn.returnedModel || turn.requestedModel,
+    requestId: "",
+    promptTokens: turn.inputTokens,
+    completionTokens: turn.outputTokens,
+    totalTokens: turn.inputTokens != null && turn.outputTokens != null ? turn.inputTokens + turn.outputTokens : null,
+    at: new Date().toISOString(),
+    detail: `requested ${turn.requestedModel}; returned ${turn.returnedModel || "not in provider metadata"}`,
+  });
+  const wrongModel = turn.returnedModel ? rejectedReturnedModel(turn.returnedModel) : "";
+  if (wrongModel) return { ok: false as const, error: wrongModel };
+  if (!turn.ok) return { ok: false as const, error: turn.reply || "The assistant did not answer. No other model was used." };
+  onDelta?.(turn.reply);
+  return { ok: true as const, reply: turn.reply, drafts: [] as Array<{ id: number; to: string; name: string; subject: string }>, actions: [] as Array<{ id: number; kind: string; summary: string; preview: string; previewHtml: string; previewImage: string }> };
 }
 export const loadAssistantDiagnostics = createServerFn({ method: "POST" }).validator((input: { code?: string }) => input).handler(async ({ data }) => {
   const gate = await gateOperator(data.code || "");
@@ -4025,8 +3797,7 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
       if (result.ok) {
         handled = "openai";
         const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
-        await shareDeskTurn(gate.row.id, data.slug || "", command, result.reply, data.source === "voice" ? "voice" : "typed");
-        await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
+                await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
       } else {
         handled = calls.length ? "openai" : "model-unavailable";
       }
@@ -4102,8 +3873,7 @@ The advisor is on the ${page} page of the desk. Use that when it is relevant.` :
     if (result.ok) {
       handled = "openai";
       const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
-      await shareDeskTurn(gate.row.id, data.slug || "", command, result.reply, data.source === "voice" ? "voice" : "typed");
-      await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
+            await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
     } else if (calls.length) handled = "openai";
     return result;
   } catch (error) {
