@@ -79,7 +79,7 @@ describe("microphone transcript is not the prompt", () => {
     assert.equal(heard.submit, false);
     assert.match(heard.message, /Sound was detected/);
     assert.match(heard.message, /did not send a command/);
-    assert.match(heard.message, /Live recognition is not available/);
+    assert.match(heard.message, /transcribes it when you tap Stop/);
   });
 
   it("shows the transcription failure instead of a generic sentence, and still accepts browser speech", () => {

@@ -876,17 +876,20 @@ export function startAdvisorSpeech(
       }
       armRecorder(stream);
       const speech = window as unknown as { SpeechRecognition?: new () => Heard; webkitSpeechRecognition?: new () => Heard };
-      liveWords = Boolean(speech.SpeechRecognition || speech.webkitSpeechRecognition);
-      if (!liveWords && typeof MediaRecorder === "undefined") {
-        fail("This browser cannot record speech. Use Chrome or Safari, then tap Voice command again.", false);
-        return;
-      }
-      if (liveWords) armRecognition();
-      else {
+      const canRecognize = Boolean(speech.SpeechRecognition || speech.webkitSpeechRecognition);
+      if (typeof MediaRecorder !== "undefined") {
+        liveWords = false;
         voiceLog("record-only");
         emitVoice({ phase: "listening", error: "", listening: true, speaking: false });
         onStatus({ listening: true, error: "", phase: "listening" });
+        return;
       }
+      liveWords = canRecognize;
+      if (!liveWords) {
+        fail("This browser cannot record speech. Use Chrome or Safari, then tap Voice command again.", false);
+        return;
+      }
+      armRecognition();
     } catch (error) {
       keepListening = false;
       fail(micError(error), false);

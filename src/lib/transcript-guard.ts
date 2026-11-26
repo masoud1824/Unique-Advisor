@@ -129,9 +129,7 @@ export function microphoneTestReport(input: {
     ? `Selected input: ${input.deviceLabel.trim()}.`
     : "The browser did not name the selected input. Check the site microphone setting if this is the wrong device.";
   const size = `Recording: ${Math.max(0, input.bytes || 0)} bytes${input.mime ? ` (${input.mime})` : ""}. Track is ${input.trackState}.`;
-  const recognition = input.recognition
-    ? "Live recognition is available."
-    : "Live recognition is not available in this browser. Voice command can still record and transcribe after Stop.";
+  const recognition = "Voice command records this input and transcribes it when you tap Stop.";
   if (input.level == null) {
     return { submit: false as const, message: `${device} ${size} Sound level was not measured. ${recognition} This test did not send a command.` };
   }

@@ -325,10 +325,10 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
   const retry = "Nothing was heard. Tap Voice command, speak, then tap Stop.";
   if (bytes.length < 200) return { ok: false as const, error: publicTranscriptionError({ stage: "empty", mime, bytes: bytes.length }) };
   const fileName = type.includes("mp4") ? "speech.m4a" : type.includes("wav") ? "speech.wav" : "speech.webm";
-  const send = async (model: string) => {
+  const send = async (model: string, withPrompt: boolean) => {
     const form = new FormData();
     form.append("model", model);
-    if (prompt) form.append("prompt", prompt);
+    if (withPrompt && prompt) form.append("prompt", prompt);
     form.append("language", "en");
     form.append("file", new File([new Uint8Array(bytes)], fileName, { type }), fileName);
     return fetch(`${OPENAI}/audio/transcriptions`, {
@@ -348,28 +348,42 @@ export const transcribeAssistant = createServerFn({ method: "POST" }).validator(
     console.info(`[voice] stt-refused model=${model} status=${response.status} bytes=${bytes.length} mime=${type}`);
     return publicTranscriptionError({ stage: "provider", status: response.status, model, mime, bytes: bytes.length, detail });
   };
+  const readTranscript = async (response: Response) => {
+    const body = await response.json();
+    return String(body.text || "").replace(/\s+/g, " ").trim();
+  };
+  let modelUsed = "gpt-4o-mini-transcribe";
   let response: Response;
   try {
-    response = await send("gpt-4o-mini-transcribe");
+    response = await send(modelUsed, true);
   } catch (error) {
     const name = error instanceof Error ? error.name : "";
-    console.info(`[voice] stt-error model=gpt-4o-mini-transcribe ${name || "failed"} bytes=${bytes.length}`);
-    return { ok: false as const, error: publicTranscriptionError({ stage: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider", model: "gpt-4o-mini-transcribe", mime, bytes: bytes.length, detail: name === "TimeoutError" || name === "AbortError" ? "" : "The transcription request did not connect." }) };
+    console.info(`[voice] stt-error model=${modelUsed} ${name || "failed"} bytes=${bytes.length}`);
+    return { ok: false as const, error: publicTranscriptionError({ stage: name === "TimeoutError" || name === "AbortError" ? "timeout" : "provider", model: modelUsed, mime, bytes: bytes.length, detail: name === "TimeoutError" || name === "AbortError" ? "" : "The transcription request did not connect." }) };
   }
   if (!response.ok) {
-    const first = await refused(response, "gpt-4o-mini-transcribe");
+    const first = await refused(response, modelUsed);
+    modelUsed = "whisper-1";
     try {
-      response = await send("whisper-1");
+      response = await send(modelUsed, true);
     } catch (error) {
       const name = error instanceof Error ? error.name : "";
-      console.info(`[voice] stt-error model=whisper-1 ${name || "failed"} bytes=${bytes.length}`);
-      return { ok: false as const, error: name === "TimeoutError" || name === "AbortError" ? publicTranscriptionError({ stage: "timeout", model: "whisper-1", mime, bytes: bytes.length }) : first };
+      console.info(`[voice] stt-error model=${modelUsed} ${name || "failed"} bytes=${bytes.length}`);
+      return { ok: false as const, error: name === "TimeoutError" || name === "AbortError" ? publicTranscriptionError({ stage: "timeout", model: modelUsed, mime, bytes: bytes.length }) : first };
     }
-    if (!response.ok) return { ok: false as const, error: await refused(response, "whisper-1") };
+    if (!response.ok) return { ok: false as const, error: await refused(response, modelUsed) };
   }
-  const body = await response.json();
-  await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response, body)]).catch(() => void 0);
-  const text = String(body.text || "").replace(/\s+/g, " ").trim();
+  let text = await readTranscript(response);
+  if (!text || transcriptEchoesPrompt(text, prompt, names)) {
+    try {
+      const again = await send(modelUsed, false);
+      if (again.ok) {
+        const second = await readTranscript(again);
+        if (second && !transcriptEchoesPrompt(second, prompt, names)) text = second;
+      }
+    } catch { /* the first transcript still decides */ }
+  }
+  await saveAssistantDiagnostic(gate.row.id, "openai", [factsFromResponse(response, { text })]).catch(() => void 0);
   console.info(`[voice] server-stt ${Date.now() - started}ms chars=${text.length}`);
   const decision = decideTranscript({ audioBytes: bytes.length, prompt, names, serverText: text, serverOk: Boolean(text), browserText: "" });
   if (!decision.post || transcriptEchoesPrompt(text, prompt, names)) return { ok: false as const, error: retry };
