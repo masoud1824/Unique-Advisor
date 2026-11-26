@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { transcribeAssistant } from "@/lib/assistant.functions";
 import { ASSISTANT_CAPABILITIES, ASSISTANT_NAME } from "@/lib/agent/assistant-capabilities";
 import { echoesAssistantReply, phaseAfterStop, sameTurnGuard, type VoicePhase } from "@/lib/agent/voice-bridge";
@@ -24,6 +24,8 @@ type Turn = {
   dropbox?: { connected: boolean; uploaded: boolean; reason: string };
   calledModel?: boolean;
   code?: string;
+  requestedModel?: string;
+  returnedModel?: string;
 };
 type Line = { role: "user" | "assistant"; text: string };
 type AuthState = "locked" | "checking" | "open" | "error";
@@ -59,11 +61,19 @@ export const Route = createFileRoute("/a/$slug/agent")({
   component: AgentPreview,
 });
 
+export function DeskAssistant({ slug, code }: { slug: string; code: string }) {
+  return <AgentPanel slug={slug} initialCode={code} embedded />;
+}
+
 function AgentPreview() {
   const { slug } = Route.useParams();
-  const [code, setCode] = useState("");
+  return <AgentPanel slug={slug} />;
+}
+
+function AgentPanel({ slug, initialCode = "", embedded = false }: { slug: string; initialCode?: string; embedded?: boolean }) {
+  const [code, setCode] = useState(initialCode);
   const [sessionToken, setSessionToken] = useState("");
-  const [auth, setAuth] = useState<AuthState>("locked");
+  const [auth, setAuth] = useState<AuthState>(embedded && initialCode ? "checking" : "locked");
   const [text, setText] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
   const [phase, setPhase] = useState<VoicePhase>("idle");
@@ -204,6 +214,12 @@ function AgentPreview() {
       setNote("The access code could not be checked. Nothing was changed.");
     }
   }
+
+  const deskCode = useRef(initialCode);
+  useEffect(() => {
+    if (!embedded || !deskCode.current) return;
+    void openAssistant();
+  }, [embedded]);
 
   function onRequestKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
@@ -399,9 +415,10 @@ function AgentPreview() {
   const missing = turn?.missing || [];
   const readBack = Object.entries(turn?.readBack || {});
   return (
-    <main className="agent-preview">
+    <main className={embedded ? "agent-preview agent-embedded" : "agent-preview"}>
       <style>{`
         .agent-preview { min-height: 100vh; box-sizing: border-box; padding: 16px; background: #f4f1ea; color: #1d1b16; font: 16px/1.45 Georgia, serif; }
+        .agent-preview.agent-embedded { min-height: 0; padding: 0; background: transparent; }
         .agent-preview * { box-sizing: border-box; }
         .agent-preview h1 { font-size: 1.3rem; margin: 0 0 4px; }
         .agent-preview .eyebrow { margin: 0; font: 600 0.75rem/1.2 system-ui, sans-serif; letter-spacing: 0.04em; text-transform: uppercase; color: #6b6458; }
@@ -427,6 +444,10 @@ function AgentPreview() {
       <p className="status" role="status">{auth === "checking" ? "Checking the access code" : auth === "open" ? "Signed in" : auth === "error" ? "Access code was not accepted" : "Locked"}</p>
       <p className="status" aria-live="polite">{phase === "idle" ? "Idle" : phase}</p>
       <p className="note" aria-live="polite">{note}</p>
+      {(turn?.requestedModel || turn?.returnedModel) && (
+        <p>Requested model: {turn.requestedModel || "not recorded"}. Returned model: {turn.returnedModel || "not in provider metadata"}.</p>
+      )}
+      {!embedded && (
       <form aria-label="Advisor access" onSubmit={(event) => void openAssistant(event)}>
         <label htmlFor="advisor-access-code">Advisor access code</label>
         <input
@@ -452,7 +473,8 @@ function AgentPreview() {
           <button type="submit" style={buttonStyle} disabled={auth === "checking"}>{auth === "checking" ? "Checking…" : "Open assistant"}</button>
         </div>
       </form>
-      <p>{auth === "open" ? "The request box is ready." : "The request box is locked until the access code is accepted."}</p>
+      )}
+      <p>{auth === "open" ? "The request box is ready." : embedded ? "Opening the assistant with this desk sign-in." : "The request box is locked until the access code is accepted."}</p>
       <ul className="caps">
         {ASSISTANT_CAPABILITIES.map((item) => (
           <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
