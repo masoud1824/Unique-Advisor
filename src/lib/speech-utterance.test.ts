@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { applySpeechSegments, emptyUtterance, keepUtterance } from "./speech-utterance.ts";
-import { applyChosenName, resolveSpokenContact } from "./contact-match.ts";
+import { applyChosenName, isHearingCheck, resolveSpokenContact } from "./contact-match.ts";
 
 describe("speech utterance", () => {
   it("keeps two consecutive final segments instead of replacing the first", () => {
@@ -76,5 +76,9 @@ describe("spoken contact names", () => {
     const missing = resolveSpokenContact("send a thank you card to Bob Smith", contacts);
     assert.equal(missing.kind, "ask");
     if (missing.kind === "ask") assert.match(missing.question, /Which contact/);
+    assert.equal(resolveSpokenContact("Can you hear me for a second", contacts).kind, "none");
+    assert.equal(isHearingCheck("can you hear me"), true);
+    assert.equal(isHearingCheck("Can you hear me for a second?"), true);
+    assert.equal(isHearingCheck("send a card to Avery Sample"), false);
   });
 });

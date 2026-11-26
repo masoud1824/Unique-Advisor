@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssistantChat, discardAssistantAction, discardAssistantDraft, listAssistantActions, listAssistantDrafts, listAssistantMessages, runMorningCheck, saveAssistantRules, speakAssistant, startAssistantChat, transcribeAssistant, warmAssistantVoice } from "@/lib/assistant.functions";
 import { assistantPieces } from "@/lib/assistant-reply";
 import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, shouldCaptureSpeech, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
-import { applyChosenName, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
+import { applyChosenName, isHearingCheck, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
@@ -1342,6 +1342,19 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       setHeard(text);
       setText(text);
       void askRef.current(text);
+      return;
+    }
+    if (isHearingCheck(text)) {
+      const reply = "Yes. I can hear you.";
+      nameChoice.current = null;
+      transcriptChoice.current = null;
+      setChoices([]);
+      setChoiceNote("");
+      setHeard(text);
+      setText("");
+      const at = new Date().toISOString();
+      setTurns((current) => [...current, { role: "user", content: text, at }, { role: "assistant", content: reply, at }]);
+      void speakInBrowser(reply);
       return;
     }
     const contacts = contactNames();

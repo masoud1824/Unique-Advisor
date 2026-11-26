@@ -106,6 +106,17 @@ export function nameQuestion(names: string[]) {
   return `Did you mean ${names.slice(0, -1).join(", ")}, or ${names[names.length - 1]}?`;
 }
 
+function needsContact(text: string) {
+  return /\b(?:send|e-?mail|email|book|schedule|call|text|message|card|letter|newsletter|meeting|zoom|invite|draft)\b/i.test(text);
+}
+
+/** A microphone check is not a request for a contact. */
+export function isHearingCheck(text: string) {
+  const tidy = text.replace(/[^\p{L}\p{N}\s']/gu, " ").replace(/\s+/g, " ").trim();
+  if (!tidy || needsContact(tidy)) return false;
+  return /\bhear me\b/i.test(tidy) || /\b(?:mic|microphone) check\b/i.test(tidy) || /^(?:are you there|testing)\b/i.test(tidy);
+}
+
 function recipientWords(text: string) {
   const matches = [...text.matchAll(/\b(?:to|with|for)\s+([A-Za-z][A-Za-z'-]*(?:\s+[A-Za-z][A-Za-z'-]*){0,2})/gi)];
   const last = matches[matches.length - 1]?.[1] || "";
@@ -129,7 +140,7 @@ export function spokenNameOptions(text: string, contacts: NamedContact[]) {
 export function resolveSpokenContact(text: string, contacts: NamedContact[]): SpokenMatch {
   const hits = rankSpoken(text, contacts).filter((item) => item.score >= 0.8);
   if (hits.length === 0) {
-    if (recipientWords(text).length > 0) return { kind: "ask", question: "Which contact should I use? I could not match that name." };
+    if (needsContact(text) && recipientWords(text).length > 0) return { kind: "ask", question: "Which contact should I use? I could not match that name." };
     return { kind: "none" };
   }
   const top = hits[0];
