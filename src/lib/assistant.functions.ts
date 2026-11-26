@@ -21,6 +21,7 @@ import { websiteButtonHtml } from "@/lib/advisor-website";
 import { ASSISTANT_LOCK, assistantGate, decideAction, decideSend, parseAssistantSettings } from "@/lib/assistant-policy";
 import { loadClientBook, readDefaultRules, readRules, runAdvisorMorning, sourceClientReport, writeDefaultRules, writeRules } from "@/lib/assistant-work";
 import { CARDS, personalize } from "@/lib/catalog";
+import { configuredModelId, rejectedModelReason } from "@/lib/agent/model-config.ts";
 import { factsFromResponse, publicAssistantError, type ProviderCall } from "@/lib/assistant-diagnostics";
 import { getSql } from "@/lib/db";
 import { attachPreviews, bindPreviewMessages, readChatPreviewRows, type ChatPreviewRow } from "@/lib/chat-previews";
@@ -77,7 +78,20 @@ import { performLibraryTurn } from "@/lib/library-store";
 
 var EMAIL2 = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 var OPENAI = "https://api.openai.com/v1";
-var OPENAI_CHAT = "gpt-4.1";
+function advisorChatModel() {
+  return configuredModelId();
+}
+function rejectedReturnedModel(returned: string) {
+  return rejectedModelReason(advisorChatModel(), returned);
+}
+async function loadSharedTaskLines(advisorId: number) {
+  const { readSharedTaskLines } = await import("@/lib/agent/preview-server.ts");
+  return readSharedTaskLines(advisorId).catch(() => "");
+}
+async function shareDeskTurn(advisorId: number, slug: string, userText: string, assistantText: string, source: "typed" | "voice") {
+  const { recordSharedExchange } = await import("@/lib/agent/preview-server.ts");
+  await recordSharedExchange({ advisorId, slug, userText, assistantText, source }).catch(() => undefined);
+}
 var OPENAI_TTS = "gpt-4o-mini-tts";
 var OPENAI_VOICES = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse", "marin", "cedar"];
 export function openAiVoice(value: string) {
@@ -1271,7 +1285,8 @@ async function runQueuedCampaign(input: { payload?: unknown; io?: unknown; slug?
     sendOne: async () => { throw new Error("campaign provider"); },
   });
 }
-async function runModel(settings: { tools: { clients: unknown; calendar: unknown; zoom: unknown; dropbox: unknown; draft: unknown }; instructions?: unknown }, advisorId: number, advisorName: unknown, turns: Array<{ role?: string; content?: string }>, slug: string, code: string, rulesNote: unknown, onDelta: ((text: string) => void) | undefined, calls: ProviderCall[], chatId = 0) {
+async function runModel(settings: { tools: { clients: unknown; calendar: unknown; zoom: unknown; dropbox: unknown; draft: unknown }; instructions?: unknown }, advisorId: number, advisorName: unknown, turns: Array<{ role?: string; content?: string }>, slug: string, code: string, rulesNote: unknown, onDelta: ((text: string) => void) | undefined, calls: ProviderCall[], chatId = 0, source: "typed" | "voice" = "typed") {
+  void source;
   const apiKey = await companyApiKey();
   if (!apiKey) return { ok: false as const, error: "The assistant is not available right now. In Superadmin, open OpenAI and save the key." };
   const tools: Array<{ type: string; function: { name: string; description: string; parameters: { type: string; properties: Record<string, unknown>; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { cardId: { type: string }; contactId: { type: string }; contactName: { type: string }; tag: { type: string }; message: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; articles: { type: string; items: { type: string; properties: { title: { type: string }; body: { type: string } }; required: unknown[] } }; contactName: { type: string }; tag: { type: string }; design: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; contactName: { type: string }; tag: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { title: { type: string }; body: { type: string }; contactName: { type: string }; tag: { type: string }; design: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { campaign: { type: string }; frequency: { type: string }; contactName: { type: string }; tag: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { where: { type: string; enum: unknown[] }; title: { type: string }; start: { type: string }; minutes: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { contactName: { type: string }; whenText: { type: string }; minutes: { type: string }; topic: { type: string }; confirm: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { name: { type: string }; content: { type: string } }; required: unknown[]; additionalProperties: boolean } } } | { type: string; function: { name: string; description: string; parameters: { type: string; properties: { to: { type: string }; name: { type: string }; subject: { type: string }; body: { type: string } }; required: unknown[]; additionalProperties: boolean } } }> = [];
@@ -1311,12 +1326,21 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
   ];
   const drafts: Array<{ id: number; to: string; name: string; subject: string }> = [];
   const made: Array<{ id: number; kind: string; summary: string; preview: string; previewHtml: string; previewImage: string }> = [];
+  const shared = await loadSharedTaskLines(advisorId);
+  if (shared) {
+    const known = history.map((turn) => String(turn.content || "").trim()).filter(Boolean);
+    const fresh = shared.split("\n").filter((line) => {
+      const text = line.replace(/^(user|assistant):\s*/, "").trim();
+      return Boolean(text) && !known.some((item) => item === text);
+    });
+    if (fresh.length) messages.splice(1, 0, { role: "system", content: `Shared task history from this advisor. Use it for corrections. It is not permission to send, book, or upload.\n${fresh.join("\n")}` });
+  }
   let ready5 = "";
   let lastProblem = "";
   const model = modelTransportOpen();
   if (!model.ok) return { ok: false as const, error: model.reason };
   for (let round = 0; round < 4; round += 1) {
-    const payload = { model: OPENAI_CHAT, temperature: 0.3, max_tokens: 4e3, messages, ...allowTools ? { tools, tool_choice: "auto" } : {} };
+    const payload = { model: advisorChatModel(), temperature: 0.3, max_tokens: 4e3, messages, ...allowTools ? { tools, tool_choice: "auto" } : {} };
     let failure = null;
     let response = await fetch(`${OPENAI}/chat/completions`, {
       method: "POST",
@@ -1326,7 +1350,7 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
     if (!response.ok) {
       const failed = await response.text().catch(() => "");
       failure = publicAssistantError(response.status, failed);
-      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: OPENAI_CHAT }), status: response.status, detail: failure.detail, reference: failure.reference });
+      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: response.status, detail: failure.detail, reference: failure.reference });
       console.error(`[assistant] model ${response.status} ${failure.detail}`);
       if (response.status === 429) {
         if (round < 2) {
@@ -1347,7 +1371,7 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
     if (!response.ok) {
       const failed = await response.text().catch(() => "");
       failure = publicAssistantError(response.status, failed);
-      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: OPENAI_CHAT }), status: response.status, detail: failure.detail, reference: failure.reference });
+      noteProvider(calls, { ...factsFromResponse(response, void 0, failed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: response.status, detail: failure.detail, reference: failure.reference });
       console.error(`[assistant] model retry ${response.status} ${failure.detail}`);
       const plain = await fetch(`${OPENAI}/chat/completions`, {
         method: "POST",
@@ -1358,13 +1382,15 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
       else {
         const plainFailed = await plain.text().catch(() => "");
         failure = publicAssistantError(plain.status, plainFailed);
-        noteProvider(calls, { ...factsFromResponse(plain, void 0, plainFailed, void 0, { url: `${OPENAI}/chat/completions`, model: OPENAI_CHAT }), status: plain.status, detail: failure.detail, reference: failure.reference });
+        noteProvider(calls, { ...factsFromResponse(plain, void 0, plainFailed, void 0, { url: `${OPENAI}/chat/completions`, model: advisorChatModel() }), status: plain.status, detail: failure.detail, reference: failure.reference });
         console.error(`[assistant] model plain ${plain.status} ${failure.detail}`);
         return { ok: false as const, error: failure.error };
       }
     }
     const message = await readCompletionMessage(response);
     noteProvider(calls, message?.providerFacts);
+    const wrongModel = rejectedReturnedModel(String(message?.providerFacts?.model || ""));
+    if (wrongModel) return { ok: false as const, error: wrongModel };
     if (!message) return { ok: false as const, error: "The assistant did not answer." };
     if (!message.content && !(message.tool_calls || []).length) return { ok: false as const, error: "The assistant did not answer." };
     const calls2 = Array.isArray(message.tool_calls) ? message.tool_calls.slice(0, 4) : [];
@@ -3737,7 +3763,7 @@ Advisor said: ${text.slice(0, 800)}`;
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: OPENAI_CHAT,
+        model: advisorChatModel(),
         temperature: 0,
         max_tokens: 300,
         messages: [{ role: "system", content: system }, { role: "user", content: user }]
@@ -3747,6 +3773,8 @@ Advisor said: ${text.slice(0, 800)}`;
     if (!response.ok) return null;
     const json = await response.json();
     noteProvider(calls, factsFromResponse(response, json));
+    const wrongModel = rejectedReturnedModel(String((json as { model?: string }).model || ""));
+    if (wrongModel) return null;
     return parseHeardJob(json.choices?.[0]?.message?.content || "");
   } catch (error) {
     console.error("[assistant] hear", error);
@@ -3884,7 +3912,7 @@ async function deliverStagedById(advisorId: number, slug: string, code: string, 
   await (await getSql())`update assistant_actions set status = 'done' where id = ${action.id} and advisor_id = ${advisorId}`;
   return { ok: true as const, detail: String("detail" in sent && sent.detail ? sent.detail : "Done.") };
 }
-export async function answerAdvisor(data: { slug?: string; code?: string; messages?: unknown; chatId?: unknown; activeNewsletterId?: unknown; transcriptConfirmed?: unknown; page?: string | number }, onDelta?: (text: string) => void) {
+export async function answerAdvisor(data: { slug?: string; code?: string; messages?: unknown; chatId?: unknown; activeNewsletterId?: unknown; transcriptConfirmed?: unknown; page?: string | number; source?: "typed" | "voice" }, onDelta?: (text: string) => void) {
   const gate = await gateAdvisor(data.slug || "", data.code || "");
   if (!gate.ok) return gate;
   await ensureAcceptanceRecords(gate.row.id).catch(() => void 0);
@@ -3993,10 +4021,11 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
       const context = await orchestrationNote(gate.row.id, control);
       const listing = calendarListingFromThread(thread);
       const grounding = refersToAppointment(command) && !isCalendarAsk(command) ? appointmentGrounding(listing) : "";
-      const result = await runModel(settings, gate.row.id, gate.row.advisor_name || gate.row.slug, thread, data.slug || "", data.code || "", `${note}\n\n${context}${grounding ? `\n\n${grounding}` : ""}${page ? `\n\nThe advisor is on the ${page} page of the desk.` : ""}`, onDelta, calls, chatId);
+      const result = await runModel(settings, gate.row.id, gate.row.advisor_name || gate.row.slug, thread, data.slug || "", data.code || "", `${note}\n\n${context}${grounding ? `\n\n${grounding}` : ""}${page ? `\n\nThe advisor is on the ${page} page of the desk.` : ""}`, onDelta, calls, chatId, data.source === "voice" ? "voice" : "typed");
       if (result.ok) {
         handled = "openai";
         const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
+        await shareDeskTurn(gate.row.id, data.slug || "", command, result.reply, data.source === "voice" ? "voice" : "typed");
         await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
       } else {
         handled = calls.length ? "openai" : "model-unavailable";
@@ -4069,10 +4098,11 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
     if (onDelta) console.info("[voice] ask-start");
     const result = await runModel(settings, gate.row.id, gate.row.advisor_name || gate.row.slug, thread, data.slug || "", data.code || "", page ? `${note}
 
-The advisor is on the ${page} page of the desk. Use that when it is relevant.` : note, onDelta, calls, chatId);
+The advisor is on the ${page} page of the desk. Use that when it is relevant.` : note, onDelta, calls, chatId, data.source === "voice" ? "voice" : "typed");
     if (result.ok) {
       handled = "openai";
       const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
+      await shareDeskTurn(gate.row.id, data.slug || "", command, result.reply, data.source === "voice" ? "voice" : "typed");
       await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
     } else if (calls.length) handled = "openai";
     return result;

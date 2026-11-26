@@ -456,7 +456,7 @@ function AgentPreview() {
       <ul className="caps">
         {ASSISTANT_CAPABILITIES.map((item) => (
           <li key={item.id} className={item.status === "testing" ? "testing" : "unavailable"}>
-            <strong>{item.status === "testing" ? "Testing" : item.status === "premium-deferred" ? "Premium, not in v1" : "Not connected"}: </strong>{item.label}. {item.note}
+            <strong>{item.status === "testing" ? "Testing" : item.status === "premium-deferred" ? "Premium, not in v1" : item.status === "connection-required" ? "Connection required" : "Not connected"}: </strong>{item.label}. {item.note}
           </li>
         ))}
       </ul>

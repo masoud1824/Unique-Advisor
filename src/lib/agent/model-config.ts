@@ -6,6 +6,14 @@ export function configuredModelId() {
   return chosen || V1_MAIN_MODEL;
 }
 
+
+export function rejectedModelReason(requested: string, returned: string) {
+  const want = String(requested || "").trim();
+  const got = String(returned || "").trim();
+  if (want && got.startsWith(want)) return "";
+  return `The provider returned ${got || "no model id"} instead of ${want || "the requested model"}. That reply was not used. No fallback model was used.`;
+}
+
 export type ModelAccess = { ok: true; model: string } | { ok: false; model: string; blocker: string };
 
 /** Confirms the configured model on this account. A failure does not switch models. */

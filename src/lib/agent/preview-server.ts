@@ -13,8 +13,9 @@ import {
 import { redactPrivate } from "../hosted-runtime.ts";
 import { modelTransportOpen } from "../outbound-guard.ts";
 import { FORM_CODE, type DraftPayload } from "./equitable-fields.ts";
-import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
+import { decideDraft, MemoryDraftStore, blankRecord, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
 import { verifyModelAccess } from "./model-config.ts";
+import { sharedAdvisorRunId } from "./v1-workflows.ts";
 import { speechSegments } from "./voice-bridge.ts";
 import { ALLOWANCE_STOP, accountView, agreePurchase, packQuote, paymentConfigured, reserve, cancelReservation, reconcile, withBilling } from "../billing/usage.ts";
 
@@ -80,14 +81,91 @@ async function serverModel() {
 }
 
 async function dropboxConnected(sql: Sql, advisorId: number) {
+  return linkConnected(sql, advisorId, ["dropbox"]);
+}
+
+async function linkConnected(sql: Sql, advisorId: number, providers: string[]) {
   const rows = await sql.query<{ connected: number }>(
     `select 1 as connected from advisor_links
-     where advisor_id = $1 and provider = 'dropbox'
+     where advisor_id = $1 and provider = any($2)
        and (length(refresh_token) > 0 or length(access_token) > 0)
      limit 1`,
-    [advisorId],
+    [advisorId, providers],
   );
   return Boolean(rows[0]);
+}
+
+export async function runDeskAgentTurn(input: { advisorId: number; slug: string; text: string; source?: "typed" | "voice" }) {
+  const sql = await getSql();
+  await ensurePreviewTables(sql);
+  const model = await serverModel();
+  const requestedModel = model.ok ? model.modelId : "model" in model && model.model ? model.model : "";
+  if (!model.ok) {
+    return { ok: false as const, reply: model.reason, requestedModel, returnedModel: "", inputTokens: null, outputTokens: null, runId: sharedAdvisorRunId(input.advisorId) };
+  }
+  const runId = sharedAdvisorRunId(input.advisorId);
+  const dropbox = await dropboxConnected(sql, input.advisorId);
+  const scope = {
+    advisorId: String(input.advisorId),
+    slug: input.slug,
+    dropboxConnected: dropbox,
+    formFillEnabled: false,
+    connections: {
+      mailbox: await linkConnected(sql, input.advisorId, ["microsoft", "google"]),
+      dropbox,
+      calendar: await linkConnected(sql, input.advisorId, ["microsoft", "google"]),
+      zoom: await linkConnected(sql, input.advisorId, ["zoom"]),
+    },
+    loadForm: (query: string) => loadForm(sql, input.advisorId, query),
+    searchWeb: (query: string) => searchPublicFormPages(query),
+  };
+  const store = new MemoryDraftStore();
+  const existing = await readRun(sql, input.advisorId, runId);
+  if (existing) store.save(existing);
+  const result = await runDraftTurn({
+    store,
+    scope,
+    request: input.text,
+    source: input.source === "voice" ? "voice" : "typed",
+    model: model.model,
+    requestedModel: model.modelId,
+    runId,
+  });
+  const saved = store.load(runId, scope.advisorId);
+  if (saved) await writeRun(sql, input.advisorId, saved);
+  return {
+    ok: result.ok,
+    reply: result.reply,
+    requestedModel: model.modelId,
+    returnedModel: result.usage?.returnedModel || "",
+    inputTokens: result.usage?.inputTokens ?? null,
+    outputTokens: result.usage?.outputTokens ?? null,
+    runId,
+  };
+}
+
+export async function readSharedTaskLines(advisorId: number) {
+  const sql = await getSql();
+  await ensurePreviewTables(sql);
+  const record = await readRun(sql, advisorId, sharedAdvisorRunId(advisorId));
+  if (!record) return "";
+  return record.messages.slice(-8).map((message) => `${message.role}: ${String(message.text || "").replace(/\s+/g, " ").trim()}`).filter((line) => line.length > 2).join("\n").slice(0, 2000);
+}
+
+export async function recordSharedExchange(input: { advisorId: number; slug: string; userText: string; assistantText: string; source: "typed" | "voice" }) {
+  const text = String(input.userText || "").replace(/\s+/g, " ").trim();
+  const reply = String(input.assistantText || "").trim();
+  if (!text || !reply) return;
+  const sql = await getSql();
+  await ensurePreviewTables(sql);
+  const runId = sharedAdvisorRunId(input.advisorId);
+  const existing = await readRun(sql, input.advisorId, runId);
+  const record = existing || blankRecord(runId, String(input.advisorId), input.slug, false);
+  const prior = record.messages.at(-1);
+  if (prior?.role === "assistant" && prior.text === reply) return;
+  record.messages.push({ role: "user", text, source: input.source });
+  record.messages.push({ role: "assistant", text: reply, source: "system" });
+  await writeRun(sql, input.advisorId, record);
 }
 
 function asBytes(value: unknown) {
@@ -269,6 +347,12 @@ async function openScope(body: Body) {
     slug: gate.row.slug,
     dropboxConnected: connected,
     formFillEnabled: false,
+    connections: {
+      mailbox: await linkConnected(sql, gate.row.id, ["microsoft", "google"]),
+      dropbox: connected,
+      calendar: await linkConnected(sql, gate.row.id, ["microsoft", "google"]),
+      zoom: await linkConnected(sql, gate.row.id, ["zoom"]),
+    },
     loadForm: (query: string) => loadForm(sql, gate.row.id, query),
     searchWeb: (query: string) => searchPublicFormPages(query),
   };
@@ -301,7 +385,7 @@ export async function previewTurn(body: Body) {
   }
   const model = await serverModel();
   if (!model.ok) return { ...model, sessionToken: opened.gate.sessionToken };
-  const runId = String(body.runId || "").trim() || crypto.randomUUID();
+  const runId = String(body.runId || "").trim() || sharedAdvisorRunId(opened.scope.advisorId);
   const operationId = `turn:${runId}:${crypto.randomUUID()}`;
   let held = false;
   try {

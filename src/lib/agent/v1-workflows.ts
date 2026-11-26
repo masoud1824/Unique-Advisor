@@ -25,24 +25,23 @@ function requiredConnection(kind: WorkflowKind, connections: WorkflowConnections
 
 export function runWorkflow(kind: WorkflowKind, connections: WorkflowConnections) {
   const required = requiredConnection(kind, connections);
-  if (!required.ready) {
-    return {
-      implemented: true,
-      connection: "missing" as const,
-      performed: false,
-      sent: false,
-      booked: false,
-      uploaded: false,
-      notice: `${required.missing} is not connected for this advisor. The ${kind} workflow is implemented and did not run. Nothing was read, sent, booked, or uploaded.`,
-    };
-  }
-  return {
-    implemented: true,
-    connection: "connected" as const,
+  const stopped = {
+    live: false,
     performed: false,
     sent: false,
     booked: false,
     uploaded: false,
+  };
+  if (!required.ready) {
+    return {
+      ...stopped,
+      connection: "missing" as const,
+      notice: `${required.missing} is not connected for this advisor. Live ${kind} access is not implemented on staging. Nothing was read, sent, booked, or uploaded.`,
+    };
+  }
+  return {
+    ...stopped,
+    connection: "connected" as const,
     notice: `${kind} has a connection on file. Staging still does not read, send, book, or upload from this tool. Nothing was sent.`,
   };
 }
