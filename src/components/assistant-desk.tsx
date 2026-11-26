@@ -6,7 +6,7 @@ import { applyChosenName, isHearingCheck, resolveSpokenContact, spokenNameOption
 import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
-import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
+import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
 import { AdvisorVoiceChooser } from "@/components/advisor-voice";
 import { emptyTurn, pushRecognition, readVoiceAutoSend, shouldAutoSend, turnText, voiceDebugEnabled, type TurnState } from "@/lib/voice-turn";
 import { appendVoiceLog } from "@/lib/voice-log.functions";
@@ -1394,6 +1394,16 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setSpeaking(false);
     onVoice?.({ listening: false, speaking: false });
     emitVoice({ phase: "off", error: "", listening: false, speaking: false });
+    if (soundsLikeNoise(text)) {
+      nameChoice.current = null;
+      transcriptChoice.current = null;
+      setHeard("");
+      setText("");
+      setChoices([]);
+      setChoiceNote("");
+      setError("That was microphone noise, not a command. Tap Voice command and try again.");
+      return;
+    }
     if (isOnboardingDemo(text) || refersToAppointment(text)) {
       nameChoice.current = null;
       transcriptChoice.current = null;
@@ -1465,6 +1475,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     transcriptChoice.current = null;
     nameChoice.current = null;
     setTurns((current) => [...current, { role: "user", content, at: new Date().toISOString() }]);
+    setHeard("");
     stickRef.current = true;
     if (spoken) setText(content);
     else setText("");
@@ -1626,6 +1637,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       return;
     }
     setMicTest("");
+    setHeard("");
     startAdvisorSpeech(
       (said) => hear(said),
       (status) => {
