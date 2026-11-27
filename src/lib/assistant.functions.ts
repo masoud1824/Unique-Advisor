@@ -2688,7 +2688,8 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
       request: tidy
     });
     if (!prepared.ok) {
-      const shown = letter ? letterBlockedPreview(String(prepared.error || ""), letter, recipients[0] || "") : "";
+      const named = String(prepared.error || "").split("—")[0].trim();
+      const shown = letter ? letterBlockedPreview(String(prepared.error || ""), letter, named || recipients[0] || "") : "";
       return preparedWork(shown || String(prepared.error || "The letter was not prepared."));
     }
     await keepOnlyPending(advisorId, "eletter", Number(prepared.actionId));

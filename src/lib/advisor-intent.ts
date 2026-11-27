@@ -476,10 +476,20 @@ export function rewriteAllowed(original: string, rewrite: string) {
   return left === right;
 }
 
+/** “Show me the letter” means the letter just requested, not a saved template. */
+export function asksToShowRecentLetter(text: string) {
+  const tidy = tidyHeard(text);
+  if (/\bsaved\b/i.test(tidy)) return false;
+  if (/\b(?:write|send|draft|prepare|compose)\b/i.test(tidy)) return false;
+  return /\b(?:show|see|read|open)\b/i.test(tidy) && /\b(?:e-?letter|letter)\b/i.test(tidy);
+}
+
 /** Protected desk commands stay exact. Grok may clarify everything else before the keyword router. */
 export function grokMayRewrite(text: string) {
   const tidy = tidyHeard(text);
   if (!tidy) return false;
+  if (asksToShowRecentLetter(tidy)) return false;
+  if (isEletterAsk(tidy) && eletterFromRequest(tidy)?.body) return false;
   if (asksExplicitWebFormSearch(tidy) || isNewNewsletterDraft(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy) || isNewsletterArticleAdd(tidy)) return false;
   if (isBareRefusal(tidy) || agreesToSendCard(tidy) || declinesCard(tidy)) return false;
   return true;
@@ -1496,9 +1506,7 @@ export function letterBlockedPreview(reason: string, letter: { title: string; bo
 
 /** “Show me the letter” repeats the letter just requested, not a saved template. */
 export function recentLetterToShow(command: string, earlier: string) {
-  const tidy = tidyHeard(command);
-  if (/\bsaved\b/i.test(tidy)) return null;
-  if (!/\b(?:show|see|read|open)\b/i.test(tidy) || !/\b(?:e-?letter|letter)\b/i.test(tidy)) return null;
+  if (!asksToShowRecentLetter(command)) return null;
   if (!isEletterAsk(earlier)) return null;
   return eletterFromRequest(earlier);
 }

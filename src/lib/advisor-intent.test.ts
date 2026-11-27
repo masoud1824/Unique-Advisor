@@ -405,6 +405,10 @@ describe("misheard advisor commands", () => {
     assert.equal(letterBlockedPreview("That contact is not in this advisor's list.", season, "Avery"), "");
     assert.match(recentLetterToShow("show me the letter", rrsp)?.body || "", /RRSP season is approaching/);
     assert.equal(recentLetterToShow("Which saved e-letter should I open?", rrsp), null);
+    assert.equal(grokMayRewrite(rrsp), false);
+    assert.equal(grokMayRewrite("show me the letter"), false);
+    assert.equal(deskCommandAfterGrok(rrsp, "open the saved e-letter"), rrsp);
+    assert.equal(deskCommandAfterGrok("show me the letter", "Which saved e-letter should I open?"), "show me the letter");
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);
