@@ -80,7 +80,9 @@ export function textHitsRuleCard(text: string, rules: Array<{ text?: string; on?
 
 export function isZoomAsk(text: string) {
   const tidy = tidyHeard(text);
-  return /\b(?:book(?:ed)?\s+(?:a\s+)?zoom|book\s+zoom|zoom\s+meeting)\b/i.test(tidy);
+  const allowed = withoutNegatedDelivery(tidy);
+  if (/\b(?:book|schedule|set\s+up)\b/i.test(allowed) && /\b(?:zoom|meetings?|appointments?)\b/i.test(allowed)) return true;
+  return /\b(?:book(?:ed)?\s+(?:a\s+)?zoom|book\s+zoom|zoom\s+meeting)\b/i.test(allowed);
 }
 
 export function isDropboxListAsk(text: string) {
@@ -1786,11 +1788,11 @@ export function newsletterAwaitingYes(messages: Array<{ role: string; content: s
 }
 
 const TASK_PATTERNS: RegExp[] = [
-  /\b(?:create|write|make|prepare|draft|send|build)\b[^.?!;\n]{0,48}\bnewsletters?\b|\bnewsletters?\b/gi,
+  /\b(?:create|write|make|prepare|draft|send|build)\b(?:(?!\b(?:e-?cards?|cards?|letters?|notes?|appointments?|meetings?|calendars?)\b)[^.?!;\n]){0,48}\bnewsletters?\b|\bnewsletters?\b/gi,
   /\b(?:create|write|make|prepare|draft|send)\b[^.?!;\n]{0,40}\be-?letters?\b|\be-?letters?\b|\b(?:write|send|draft|prepare)\b[^.?!;\n]{0,24}\b(?:a\s+)?(?:letter|note)\b/gi,
   /\b(?:send|run|start|launch)\b[^.?!;\n]{0,48}\b(?:drip\s+campaigns?|campaigns?|drips?)\b|\bdrip\s+campaigns?\b|\bdrips?\b/gi,
   /\b(?:send|give|mail)\b[^.?!;\n]{0,80}\b(?:e-?cards?|greeting\s+cards?|(?:thank(?:\s+you)?|thanks|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz)\s+cards?|(?:season'?s?|seasons|seasonal)\s+greetings?|holiday\s+greetings?|thank(?:\s+you)?|thanks|birthday|halloween|holidays?)\b|\be-?cards?\b|\bgreeting\s+cards?\b|\b(?:season'?s?|seasons|seasonal)\s+greetings?\b/gi,
-  /\b(?:book|schedule|set\s+up)\b[^.?!;\n]{0,40}\b(?:zoom(?:\s+meeting)?|meeting)\b|\bzoom\s+meetings?\b/gi,
+  /\b(?:book|schedule|set\s+up)\b[^.?!;\n]{0,48}\b(?:zoom(?:\s+meeting)?|meetings?|appointments?)\b|\bzoom\s+meetings?\b/gi,
   /\b(?:show|see|read|check|open|what(?:'s| is)|list)\b[^.?!;\n]{0,40}\b(?:calendars?|schedule|agenda|meetings?)\b|\b(?:my|the)\s+calendar\b/gi,
   /\b(?:read|check|show|open|any|new)\b[^.?!;\n]{0,28}\b(?:e-?mails?|inbox|mailbox)\b/gi,
   /\b(?:who needs|who should i|who do i|which clients? (?:need|needs|are due|is due|should)|who is due|cross-?sell|upsell|not contacted|kyc due|needs attention|review (?:my |the )?clients|clients? (?:need|needs) (?:a )?review|due (?:for|to) (?:a )?(?:review|contact)|hasn'?t been contacted|have not been contacted)\b/gi,
@@ -1815,7 +1817,10 @@ export function splitSecretaryTasks(text: string) {
     if (previous && hit.index < previous.end) continue;
     if (previous && hit.pattern === previous.pattern) {
       const between = tidy.slice(previous.end, hit.index);
-      if (!/\b(?:then|also|plus|next)\b/i.test(between)) continue;
+      const fresh = /\b(?:then|also|plus|next)\b/i.test(between)
+        || /\band\s+(?:send|create|write|make|prepare|draft|book|check|show|give)\b/i.test(between)
+        || /\band\s+(?:a|an|the|another)\s+(?:e-?card|card|newsletter|letter|note|meeting|appointment|campaign|drip)\b/i.test(between);
+      if (!fresh) continue;
     }
     kept.push(hit);
   }
@@ -1828,6 +1833,23 @@ export function splitSecretaryTasks(text: string) {
     if (slice.length > 2) slices.push(slice);
   }
   return slices.length > 1 ? slices : [text];
+}
+
+export function taskHeading(kind: string) {
+  const names: Record<string, string> = {
+    "e-card": "E-card",
+    newsletter: "Newsletter",
+    "e-letter": "Letter",
+    campaign: "Campaign",
+    meeting: "Appointment",
+    calendar: "Calendar",
+    inbox: "Email",
+    review: "Review",
+    file: "Client file",
+    "client-file": "Client file",
+    form: "Form",
+  };
+  return names[kind] || "Task";
 }
 
 export function taskKind(text: string) {

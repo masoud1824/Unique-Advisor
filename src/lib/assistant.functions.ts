@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, askedSavedLetterName, chooseSavedEletter, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, askedSavedLetterName, chooseSavedEletter, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskHeading, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
@@ -2870,6 +2870,25 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     const blocked = await deliveryBlockFor(advisorId, person, dropped);
     if (blocked) {
       await cancelWaitingCard(advisorId, dropped);
+      const chosen = picked && "card" in picked ? cards.find((item) => item.id === picked.card.id) : undefined;
+      if (chosen && /No email is recorded|Unsubscribed/i.test(blocked)) {
+        const who = String(person.full_name || name);
+        const message = personalize(String(chosen.message || ""), who);
+        const previewHtml = cardPreviewHtml(String(chosen.image || ""), message, chosen.title, "", who);
+        const stored = await saveAction(advisorId, "card-preview", `${chosen.title} · ${who} · not for sending`, { title: chosen.title, message, image: chosen.image || "", recipient: who });
+        return preparedWork([
+          blocked,
+          `Preview of the ${chosen.title} card. It was not sent.`,
+          message,
+        ].join("\n\n"), [{
+          id: stored.actionId,
+          kind: "card-preview",
+          summary: `${chosen.title} · ${who} · not for sending`,
+          preview: message,
+          previewHtml,
+          previewImage: String(chosen.image || ""),
+        }]);
+      }
       return preparedWork(blocked);
     }
     if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
@@ -3636,21 +3655,16 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
     const done: Array<unknown> = [];
     const confirms: Array<unknown> = [];
     const actions: DeskAction[] = [];
-    const seen = /* @__PURE__ */ new Set();
     for (const part of parts3) {
       const kind = taskKind(part);
-      if (kind && seen.has(kind)) {
-        done.push(`I can prepare one ${kind} at a time. After you say yes, ask me: ${part}`);
-        continue;
-      }
-      if (kind) seen.add(kind);
       const prepared2 = await fulfillSecretary(advisorId, slug, code, part);
       if (!prepared2) {
-        done.push(`I could not do this part: ${part}`);
+        done.push(`${kind ? `${taskHeading(kind)}: ` : ""}I could not do this part: ${part}`);
         continue;
       }
-      if (prepared2.confirm) confirms.push(prepared2.reply);
-      else done.push(prepared2.reply);
+      const headed = `${kind ? `${taskHeading(kind)}: ` : ""}${prepared2.reply}`;
+      if (prepared2.confirm) confirms.push(headed);
+      else done.push(headed);
       actions.push(...prepared2.actions);
     }
     const reply = [

@@ -29,6 +29,7 @@ const NOT_TOKENS = new Set([
   "life", "insurance", "client", "clients", "policy", "policies", "article",
   "articles", "newsletter", "newsletters", "copy", "copies", "archive", "archived",
   "meeting", "appointment", "minute", "minutes",
+  "milestone", "anniversary", "wishes", "greeting", "greetings", "holiday", "birthday", "halloween", "season", "seasons",
 ]);
 
 const LEADING_WORDS = new Set([

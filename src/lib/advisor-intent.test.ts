@@ -198,6 +198,13 @@ describe("misheard advisor commands", () => {
     assert.equal(splitSecretaryTasks(oneNewsletter).length, 1);
     assert.equal(isReviewAsk("who needs KYC and a cross-sell review"), true);
     assert.equal(splitSecretaryTasks("who needs KYC and a cross-sell review").length, 1);
+    const many = "send an anniversary card to Avery and create a newsletter and send a letter to Riley and book an appointment with Jordan and check my calendar";
+    const jobs = splitSecretaryTasks(many);
+    assert.deepEqual(jobs.map((part) => taskKind(part)), ["e-card", "newsletter", "e-letter", "meeting", "calendar"]);
+    assert.match(jobs[0], /anniversary card to Avery/i);
+    assert.doesNotMatch(jobs[0], /newsletter|letter to Riley|appointment|calendar/i);
+    assert.match(jobs[3], /appointment with Jordan/i);
+    assert.doesNotMatch(jobs[3], /calendar/i);
     assert.equal(eletterAwaitingYes([{ role: "assistant", content: "Just to confirm: send the e-letter “Disability Insurance” to Ali Mortazavi?" }]), true);
     assert.equal(campaignAwaitingYes([{ role: "assistant", content: "Just to confirm: start the Welcome campaign, every week, for Majid Hashemi?" }]), true);
     const batch = [
