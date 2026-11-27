@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { archiveMessages, deleteLetter, listTemplates, saveLetter } from "@/lib/advisor.functions";
 import { isEletterPack } from "@/lib/eletter";
 import {
@@ -33,6 +33,7 @@ export function NewsletterDesk({
   const [issue, setIssue] = useState<NewsletterIssue>(() => blankIssue());
   const [stories, setStories] = useState<Story[]>(() => blankIssue().articles.map(story));
   const [editorOpen, setEditorOpen] = useState(false);
+  const issueRef = useRef<HTMLElement>(null);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [tag, setTag] = useState("");
@@ -139,20 +140,44 @@ export function NewsletterDesk({
   }
 
   return (
-    <>
-      <section className="ua-panel p-6">
+    <div className="flex flex-col">
+      <section className={`ua-panel p-6${editorOpen ? " order-2" : ""}`}>
         <div className="mb-4 flex flex-wrap gap-2">
           <button type="button" className="ua-btn" onClick={() => setLibraryOpen((value) => !value)}>{libraryOpen ? "Close article library" : "Article library"}</button>
           <button type="button" className="ua-btn" onClick={() => {
             setOpenId(null);
             const blank = blankIssue();
+            blank.kicker = "Newsletter";
             setIssue(blank);
             setStories(blank.articles.map(story));
             setEditorOpen(true);
             setLibraryOpen(false);
+            window.setTimeout(() => issueRef.current?.scrollIntoView({ block: "start" }), 0);
           }}>Create newsletter</button>
         </div>
-        {libraryOpen && <ArticleLibraryDesk slug={desk.slug} code={code} ping={ping} />}
+        {libraryOpen && (
+          <ArticleLibraryDesk
+            slug={desk.slug}
+            code={code}
+            ping={ping}
+            onClose={() => setLibraryOpen(false)}
+            onUse={(article) => {
+              setEditorOpen(true);
+              setLibraryOpen(false);
+              setStories((current) => {
+                const empty = current.findIndex((item) => !item.title.trim() && !item.body.trim());
+                if (empty >= 0) {
+                  const next = current.slice();
+                  next[empty] = { ...next[empty], title: article.title, body: article.body };
+                  return next;
+                }
+                return [...current, story(article)];
+              });
+              ping(`Added “${article.title}” to this newsletter.`);
+              window.setTimeout(() => issueRef.current?.scrollIntoView({ block: "start" }), 0);
+            }}
+          />
+        )}
         <h2 className="text-lg font-semibold">Newsletter design</h2>
         <p className="mt-1 mb-4 text-sm" style={{ color: "#5a6a7a" }}>
           Pick a layout, then choose how many articles this issue has. The matching boxes open below. Every article shows in full in the editor, the preview, and the email. Your picture is included only when Show profile picture on newsletters is ticked in Profile and you save.
@@ -206,8 +231,8 @@ export function NewsletterDesk({
           </div>
         )}
       </section>
-      {editorOpen && <section className="ua-panel mt-6 p-6">
-        <h2 className="mb-4 text-lg font-semibold">This issue</h2>
+      {editorOpen && <section ref={issueRef} className="ua-panel order-1 p-6">
+        <h2 className="mb-4 text-lg font-semibold">{issue.title.trim() || (openId ? "This issue" : "New newsletter")}</h2>
         <label className="mb-3 grid gap-1 text-sm font-semibold">
           Word in the header
           <input value={issue.kicker} maxLength={40} onChange={(event) => setIssue({ ...issue, kicker: event.target.value })} className="ua-field font-normal" />
@@ -262,7 +287,7 @@ export function NewsletterDesk({
           Save newsletter
         </button>
       </section>}
-      {editorOpen && <section className="ua-panel mt-6 p-6">
+      {editorOpen && <section className="ua-panel order-1 mt-6 p-6">
         <h2 className="mb-3 text-lg font-semibold">Preview</h2>
         <p className="mb-3 text-sm font-semibold">{issue.title}</p>
         <iframe
@@ -296,7 +321,7 @@ export function NewsletterDesk({
         )}
         <button type="button" disabled={busy} className="ua-btn mt-4" onClick={() => void send()}>{busy ? "Sending…" : "Send newsletter"}</button>
       </section>}
-    </>
+    </div>
   );
 }
 

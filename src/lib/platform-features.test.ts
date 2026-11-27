@@ -5,6 +5,7 @@ import {
   copySnapshotsIntoNewsletter,
   editOwnCopy,
   filterArticles,
+  groupLibraryArticles,
   normalizeArticleInput,
   reorderOwnArticles,
   sameAdvisor,
@@ -169,6 +170,16 @@ describe("article library", () => {
     const hits = filterArticles([published, draft], { text: "waiting", advisor: true });
     assert.deepEqual(hits.map((item) => item.id), [7]);
     assert.equal(filterArticles([draft], { advisor: true, text: "draft" }).length, 0);
+  });
+
+  it("groups published articles under a list title", () => {
+    const groups = groupLibraryArticles([
+      { title: "Who is named on a life policy", topics: "Life Insurance" },
+      { title: "What life insurance is for", topics: "Life Insurance" },
+      { title: "The disability waiting period", topics: "Disability Insurance" },
+    ]);
+    assert.deepEqual(groups.map((group) => group.title), ["Disability Insurance Articles", "Life Insurance Articles"]);
+    assert.deepEqual(groups[1].articles.map((item) => item.title), ["What life insurance is for", "Who is named on a life policy"]);
   });
 
   it("copies a snapshot and leaves it unchanged when the library article changes", () => {

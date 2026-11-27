@@ -39,8 +39,41 @@ function rowArticle(row: Record<string, unknown>): LibraryArticle {
 }
 
 async function articles(sql: Sql) {
+  await ensureSampleLibrary(sql);
   const rows = await sql`select * from library_articles order by updated_at desc, id desc`;
   return rows.map((row) => rowArticle(row as Record<string, unknown>));
+}
+
+const SAMPLE_LIBRARY = [
+  { title: "What life insurance is for", topics: "Life Insurance", body: "Life insurance pays a benefit after the person insured dies. Families use it to replace income, pay a mortgage, or leave money for children. This is a test library article, not a quote." },
+  { title: "Who is named on a life policy", topics: "Life Insurance", body: "The beneficiary is the person or trust named to receive the benefit. The name, relationship, and share should match what the client intends. This is a test library article, not a quote." },
+  { title: "When the amount should be reviewed", topics: "Life Insurance", body: "A new child, a home, a divorce, or a change in income is a reason to look at the amount again. The old number may no longer fit. This is a test library article, not a quote." },
+  { title: "What disability insurance covers", topics: "Disability Insurance", body: "Disability insurance replaces part of income when illness or injury stops the client from working. It is not life insurance and it does not pay because someone dies. This is a test library article, not a quote." },
+  { title: "The disability waiting period", topics: "Disability Insurance", body: "The waiting period is the time the client must be disabled before benefits start. A longer wait usually means a lower cost. This is a test library article, not a quote." },
+  { title: "Coverage already provided at work", topics: "Disability Insurance", body: "A group plan at work may cover only part of income and may end if the job ends. A personal plan can sit beside it. This is a test library article, not a quote." },
+];
+
+async function ensureSampleLibrary(sql: Sql) {
+  try {
+    for (const sample of SAMPLE_LIBRARY) {
+      const found = await sql<{ id: number }>`select id from library_articles where title = ${sample.title} limit 1`;
+      if (found[0]) continue;
+      const html = `<p>${sample.body}</p>`;
+      const inserted = await sql<{ id: number }>`
+        insert into library_articles (status, title, body_html, body_text, image_url, image_alt, source_note, author_note, topics, language, version)
+        values ('published', ${sample.title}, ${html}, ${sample.body}, '', '', 'Test library article', 'Superadmin library', ${sample.topics}, 'en', 1)
+        returning id
+      `;
+      const id = Number(inserted[0]?.id || 0);
+      if (!id) continue;
+      await sql`
+        insert into library_article_versions (article_id, version, title, body_html, body_text, image_url, image_alt, source_note, author_note, topics, language)
+        values (${id}, 1, ${sample.title}, ${html}, ${sample.body}, '', '', 'Test library article', 'Superadmin library', ${sample.topics}, 'en')
+      `;
+    }
+  } catch (error) {
+    console.error("[library] sample articles", error instanceof Error ? error.message : "failed");
+  }
 }
 
 export const saveLibraryArticle = createServerFn({ method: "POST" }).validator((input: unknown) => input).handler(async ({ data }) => {

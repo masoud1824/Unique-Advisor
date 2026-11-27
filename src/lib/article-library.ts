@@ -82,6 +82,28 @@ export function articleVisibleToAdvisor(status: string): boolean {
   return status === "published";
 }
 
+export function libraryListTitle(topic: string) {
+  const clean = topic.replace(/\s+/g, " ").trim() || "Other";
+  return /articles$/i.test(clean) ? clean : `${clean} Articles`;
+}
+
+export function groupLibraryArticles<T extends { topics: string; title: string }>(articles: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const article of articles) {
+    const topic = article.topics.split(",")[0]?.trim() || "Other";
+    const list = groups.get(topic) || [];
+    list.push(article);
+    groups.set(topic, list);
+  }
+  return [...groups.entries()]
+    .sort((left, right) => libraryListTitle(left[0]).localeCompare(libraryListTitle(right[0])))
+    .map(([topic, items]) => ({
+      topic,
+      title: libraryListTitle(topic),
+      articles: items.slice().sort((left, right) => left.title.localeCompare(right.title)),
+    }));
+}
+
 export function filterArticles(
   articles: LibraryArticle[],
   query: { text?: string; topic?: string; language?: string; status?: string; advisor?: boolean },
