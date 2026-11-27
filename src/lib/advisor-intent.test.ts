@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, yesApplies } from "./advisor-intent.ts";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies } from "./advisor-intent.ts";
 import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
 import { SECRETARY_RULES, taskOn } from "./secretary-rules.ts";
 import { orchestrationControl } from "./orchestration.ts";
@@ -392,6 +392,19 @@ describe("misheard advisor commands", () => {
     assert.match(asked?.body || "", /meeting to review your policies/i);
     assert.match(asked?.body || "", /Book a meeting button/i);
     assert.doesNotMatch(asked?.body || "", /What should the letter say/i);
+    const rrsp = "send a letter to Avery about the RRSP season approaching and ask for a meeting";
+    const season = eletterFromRequest(rrsp);
+    assert.equal(eletterRecipient(rrsp).toLowerCase(), "avery");
+    assert.match(season?.body || "", /RRSP season is approaching/i);
+    assert.match(season?.body || "", /ask for a meeting/i);
+    assert.match(season?.body || "", /Book a meeting button/i);
+    const blocked = letterBlockedPreview("Avery Sample — No email is recorded. Nothing was sent.", season, "Avery Sample");
+    assert.match(blocked, /The letter is below/);
+    assert.match(blocked, /Dear Avery Sample/);
+    assert.match(blocked, /RRSP season is approaching/);
+    assert.equal(letterBlockedPreview("That contact is not in this advisor's list.", season, "Avery"), "");
+    assert.match(recentLetterToShow("show me the letter", rrsp)?.body || "", /RRSP season is approaching/);
+    assert.equal(recentLetterToShow("Which saved e-letter should I open?", rrsp), null);
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);

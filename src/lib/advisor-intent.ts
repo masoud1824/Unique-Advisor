@@ -1460,6 +1460,12 @@ export function eletterFromRequest(text: string) {
     .replace(/^(?:ask(?:ing)?|request(?:ing)?|invit(?:e|ing))\s+(?:(?:him|her|them)\s+)?(?:for\s+)?/i, "I am writing to ask for ")
     .replace(/^(?:about|regarding)\s+/i, "")
     .replace(/\bits\b/gi, "it is")
+    .replace(/\brrsp season approaching\b/i, "RRSP season is approaching")
+    .replace(/^(.+?)\s+and\s+ask\s+for\s+(.+)$/i, (_all, topic: string, request: string) => {
+      const clean = topic.replace(/^(?:the|a|an)\s+/i, "").trim();
+      const head = clean.charAt(0).toUpperCase() + clean.slice(1);
+      return `${head}. I would like to ask for ${request}`;
+    })
     .replace(/\s+and\s+suggest\s+(?:some\s+)?time\s+for\s+/i, ". I would like to suggest a time for ")
     .replace(/\ba zoom\b/gi, "a Zoom meeting")
     .replace(/\bin person meeting\b/gi, "an in-person meeting")
@@ -1472,6 +1478,29 @@ export function eletterFromRequest(text: string) {
     ? "\n\nPlease use the Book a meeting button in this letter. You can meet by Zoom or in person. The page shows only the times that are still open."
     : "\n\nPlease reply if you would like to go over this.";
   return { title: title.charAt(0).toUpperCase() + title.slice(1), body: `${sentence}${meeting}` };
+}
+
+/** A letter for someone who cannot receive mail. The text is shown and nothing is queued. */
+export function letterBlockedPreview(reason: string, letter: { title: string; body: string } | null, who = "") {
+  if (!letter?.body) return "";
+  const blocked = /No email is recorded|Unsubscribed/i.test(reason);
+  if (reason.trim() && !blocked) return "";
+  const person = String(who || "").trim();
+  const greeting = person ? `Dear ${person},` : "Dear [Contact Name],";
+  const body = /^dear\b/i.test(letter.body) ? letter.body : `${greeting}\n\n${letter.body}`;
+  const head = blocked
+    ? `${reason.trim()}\n\nThe letter is below. It was not sent.`
+    : `Preview of the e-letter “${letter.title}”. Nothing was sent.`;
+  return `${head}\n\n${body}`;
+}
+
+/** “Show me the letter” repeats the letter just requested, not a saved template. */
+export function recentLetterToShow(command: string, earlier: string) {
+  const tidy = tidyHeard(command);
+  if (/\bsaved\b/i.test(tidy)) return null;
+  if (!/\b(?:show|see|read|open)\b/i.test(tidy) || !/\b(?:e-?letter|letter)\b/i.test(tidy)) return null;
+  if (!isEletterAsk(earlier)) return null;
+  return eletterFromRequest(earlier);
 }
 
 export function isCampaignAsk(text: string) {
