@@ -215,7 +215,7 @@ const THEMES: Record<NewsletterDesign, Theme> = {
   ink: { canvas: "#eceae6", page: "#ffffff", header: "#1A1916", gold: "#c4a574", ink: "#1A1916", muted: "#6B655C", font: "Georgia,Times New Roman,serif", layout: "sidebar" },
   sand: { canvas: "#efe4d6", page: "#f6f1e7", header: "#8c4a32", gold: "#b4532a", ink: "#3d2b22", muted: "#8a7568", font: "Georgia,Times New Roman,serif", layout: "cards" },
   brief: { canvas: "#eef3f0", page: "#ffffff", header: "#1f4d3a", gold: "#1f4d3a", ink: "#16382b", muted: "#5d6b64", font: "Segoe UI,Arial,sans-serif", layout: "brief" },
-  slate: { canvas: "#e8edf3", page: "#f8fafc", header: "#1e293b", gold: "#2563eb", ink: "#0f172a", muted: "#64748b", font: "Segoe UI,Arial,sans-serif", layout: "feature" },
+  slate: { canvas: "#e8edf3", page: "#f8fafc", header: "#1e293b", gold: "#2563eb", ink: "#0f172a", muted: "#334155", font: "Segoe UI,Arial,sans-serif", layout: "feature" },
 };
 
 function isDesign(value: unknown): value is NewsletterDesign {
@@ -250,9 +250,9 @@ function articleBlock(
   const moreBlock = "";
   if (theme.layout === "feature") {
     if (index === 0) {
-      return `<tr><td style="padding:0 20px 8px;background:${theme.page}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${theme.header}"><tr><td style="padding:22px 20px;color:#ffffff;font-family:${theme.font}"><article id="a-${index}"><div style="font-family:${theme.font};font-size:22px;font-weight:700;line-height:1.2">${title}</div>${copy ? `<div style="margin-top:10px;font-family:${theme.font};font-size:16px;line-height:1.5;color:#e2e8f0">${copy}</div>` : ""}${moreBlock}</article></td></tr></table></td></tr>`;
+      return `<tr><td style="padding:0 20px 8px;background:${theme.page}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${theme.header}"><tr><td style="padding:22px 20px;color:#ffffff;font-family:${theme.font}"><article id="a-${index}"><div style="font-family:${theme.font};font-size:22px;font-weight:700;line-height:1.2;color:#ffffff">${title}</div>${copy ? `<div style="margin-top:10px;font-family:${theme.font};font-size:16px;line-height:1.5;color:#ffffff">${copy}</div>` : ""}${moreBlock}</article></td></tr></table></td></tr>`;
     }
-    return `<tr><td style="padding:8px 20px 16px;background:${theme.page};font-family:${theme.font};border-bottom:1px solid #e2e8f0"><article id="a-${index}"><div style="font-family:${theme.font};font-size:22px;font-weight:700;line-height:1.2;color:${theme.ink}">${title}</div>${copy ? `<div style="margin-top:8px;font-family:${theme.font};font-size:16px;line-height:1.5;color:${theme.muted}">${copy}</div>` : ""}${moreBlock}</article></td></tr>`;
+    return `<tr><td style="padding:8px 20px 16px;background:${theme.page};font-family:${theme.font};border-bottom:1px solid #e2e8f0"><article id="a-${index}"><div style="font-family:${theme.font};font-size:22px;font-weight:700;line-height:1.2;color:${theme.ink}">${title}</div>${copy ? `<div style="margin-top:8px;font-family:${theme.font};font-size:16px;line-height:1.5;color:${theme.ink}">${copy}</div>` : ""}${moreBlock}</article></td></tr>`;
   }
   if (theme.layout === "cards") {
     return `<tr><td style="padding:8px 28px;background:${theme.page}"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff"><tr><td style="padding:18px 20px;font-family:${theme.font}"><article id="a-${index}"><div style="font-size:20px;font-weight:700;color:${theme.ink}">${title}</div>${copy ? `<div style="margin-top:8px;color:${theme.muted};font-size:15px;line-height:1.5">${copy}</div>` : ""}${moreBlock}</article></td></tr></table></td></tr>`;
