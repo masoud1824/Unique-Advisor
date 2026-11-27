@@ -4,6 +4,7 @@ import { installDeskSessionFetch } from "@/lib/desk-session-client";
 import { PhoneShell } from "@/components/phone-shell";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import appCss from "../styles.css?url";
+import designRowCss from "../design-row.css?url";
 
 installDeskSessionFetch();
 
@@ -22,6 +23,7 @@ export const Route = createRootRoute({
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
       { rel: "stylesheet", href: appCss },
+      { rel: "stylesheet", href: designRowCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
