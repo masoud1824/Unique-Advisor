@@ -36,6 +36,7 @@ export function NewsletterDesk({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [selected, setSelected] = useState<number[]>([]);
   const [tag, setTag] = useState("");
+  const [contactsOpen, setContactsOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [shared, setShared] = useState<{ id: number; name: string; detail: string; body: string }[]>([]);
   const people = tag ? desk.contacts.filter((contact) => contact.tags.includes(tag)) : desk.contacts;
@@ -276,18 +277,23 @@ export function NewsletterDesk({
             if (height > 0) frame.style.height = `${height}px`;
           }}
         />
-        <select value={tag} onChange={(event) => setTag(event.target.value)} className="ua-field mb-3 mt-4">
-          <option value="">All Contacts</option>
-          {desk.tags.map((item) => <option key={item}>{item}</option>)}
-        </select>
-        <ul className="max-h-64 overflow-auto rounded-lg border" style={{ borderColor: "#e1e8ef" }}>
-          {people.map((person) => (
-            <li key={person.id} className="flex gap-3 border-b px-3 py-2">
-              <input type="checkbox" checked={selected.includes(person.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, person.id] : selected.filter((id) => id !== person.id))} />
-              <span>{person.fullName}</span>
-            </li>
-          ))}
-        </ul>
+        <button type="button" className="ua-btn-line mb-3 mt-4" onClick={() => { setTag(""); setContactsOpen(true); }}>Open contacts</button>
+        {contactsOpen && (
+          <>
+            <select value={tag} onChange={(event) => setTag(event.target.value)} className="ua-field mb-3">
+              <option value="">All contacts</option>
+              {desk.tags.map((item) => <option key={item}>{item}</option>)}
+            </select>
+            <ul className="max-h-64 overflow-auto rounded-lg border" style={{ borderColor: "#e1e8ef" }}>
+              {people.map((person) => (
+                <li key={person.id} className="flex gap-3 border-b px-3 py-2">
+                  <input type="checkbox" checked={selected.includes(person.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, person.id] : selected.filter((id) => id !== person.id))} />
+                  <span>{person.fullName}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <button type="button" disabled={busy} className="ua-btn mt-4" onClick={() => void send()}>{busy ? "Sending…" : "Send newsletter"}</button>
       </section>}
     </>

@@ -1598,6 +1598,7 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 	const [wash, setWash] = useState(WASH.birthday);
 	const [selected, setSelected] = useState<number[]>([]);
 	const [tag, setTag] = useState("");
+	const [contactsOpen, setContactsOpen] = useState(false);
 	const [upload, setUpload] = useState(false);
 	const [sharedCards, setSharedCards] = useState(desk.sharedCards ?? []);
 	const [customTitle, setCustomTitle] = useState("");
@@ -1961,6 +1962,16 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 						personalize(message, contact.fullName).split("\n")[0]
 					] }, contact.id))
 				}),
+				/* @__PURE__ */ jsx("button", {
+					type: "button",
+					className: "ua-btn-line mt-4",
+					onClick: () => {
+						setTag("");
+						setContactsOpen(true);
+					},
+					children: "Open contacts"
+				}),
+				contactsOpen && /* @__PURE__ */ jsxs("div", { children: [
 				/* @__PURE__ */ jsxs("label", {
 					className: "mt-4 grid gap-1 text-sm font-semibold",
 					style: { color: "#5a6a7a" },
@@ -1970,7 +1981,7 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 						className: "ua-field font-normal",
 						children: [/* @__PURE__ */ jsx("option", {
 							value: "",
-							children: "All Contacts"
+							children: "All contacts"
 						}), desk.tags.map((item) => /* @__PURE__ */ jsx("option", { children: item }, item))]
 					})]
 				}),
@@ -2013,7 +2024,8 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 							})
 						] })]
 					}, contact.id))]
-				}),
+				})
+				] }),
 				/* @__PURE__ */ jsx("button", {
 					type: "button",
 					disabled: busy,
@@ -2135,6 +2147,7 @@ function DripsTab({ code, desk, ping }: { code: string; desk: DeskData; ping: De
 	const [sendId, setSendId] = useState<string | number>("");
 	const [defaultId, setDefaultId] = useState<string | number>("");
 	const [tag, setTag] = useState("");
+	const [contactsOpen, setContactsOpen] = useState(false);
 	const [everyDays, setEveryDays] = useState(7);
 	const [picked, setPicked] = useState<number[]>([]);
 	const [busy, setBusy] = useState(false);
@@ -2581,6 +2594,16 @@ function DripsTab({ code, desk, ping }: { code: string; desk: DeskData; ping: De
 							". Choose the contacts, then how often, then send."
 						]
 					}),
+					/* @__PURE__ */ jsx("button", {
+						type: "button",
+						className: "ua-btn-line mb-4",
+						onClick: () => {
+							setTag("");
+							setContactsOpen(true);
+						},
+						children: "Open contacts"
+					}),
+					contactsOpen && /* @__PURE__ */ jsxs("div", { children: [
 					/* @__PURE__ */ jsxs("label", {
 						className: "mb-3 grid gap-1 text-sm font-semibold",
 						children: ["Filter by tag", /* @__PURE__ */ jsxs("select", {
@@ -2643,7 +2666,8 @@ function DripsTab({ code, desk, ping }: { code: string; desk: DeskData; ping: De
 							}, contact.id);
 							})]
 						})]
-					}),
+					})
+					] }),
 					/* @__PURE__ */ jsxs("label", {
 						className: "mb-4 grid gap-1 text-sm font-semibold",
 						children: ["How often", /* @__PURE__ */ jsx("select", {
