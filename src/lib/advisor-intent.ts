@@ -1852,6 +1852,94 @@ export function taskHeading(kind: string) {
   return names[kind] || "Task";
 }
 
+export function pieceChange(text: string) {
+  const tidy = tidyHeard(text);
+  if (/^(?:yes|yeah|yep|no|nope|cancel|stop)\b/i.test(tidy)) return "";
+  if (splitSecretaryTasks(tidy).length > 1) return "";
+  if (/\b(?:template|design|stationery|layout)\b/i.test(tidy) && /\b(?:change|switch|use|different|another|new)\b/i.test(tidy)) return "template" as const;
+  if (/\b(?:shorter|shorten|condense|briefer)\b/i.test(tidy)) return "shorter" as const;
+  if (/\b(?:longer|lengthen|expand)\b/i.test(tidy) && !/\bexpand the (?:list|search)\b/i.test(tidy)) return "longer" as const;
+  if (/\b(?:remove|delete|drop|take out|cut)\b/i.test(tidy) && !/\b(?:contact|recipient|meeting|appointment)\b/i.test(tidy)) return "remove" as const;
+  if (/\b(?:add|insert|include)\b/i.test(tidy) && !/\b(?:contact|recipient|article about)\b/i.test(tidy)) return "add" as const;
+  if (/\b(?:change|edit|revise|rewrite|update|reword)\b/i.test(tidy) && /\b(?:wording|content|text|part|paragraph|sentence|opening|closing|line|section|message|body|it|this|that)\b/i.test(tidy)) return "wording" as const;
+  return "";
+}
+
+export function editedPiece(text: string, lastAssistant = "") {
+  const tidy = tidyHeard(text);
+  if (/\bnewsletter\b/i.test(tidy)) return "newsletter" as const;
+  if (/\be-?cards?\b|\bcards?\b/i.test(tidy) && !/\bnewsletter\b/i.test(tidy)) return "e-card" as const;
+  if (/\b(?:e-?letters?|letters?|notes?)\b/i.test(tidy)) return "e-letter" as const;
+  if (/\bcampaign\b/i.test(tidy)) return "campaign" as const;
+  const marks = [...String(lastAssistant || "").matchAll(/^(E-card|Newsletter|Letter|Appointment|Campaign):/gm)];
+  const last = marks.at(-1)?.[1] || "";
+  if (last === "E-card") return "e-card" as const;
+  if (last === "Newsletter") return "newsletter" as const;
+  if (last === "Letter") return "e-letter" as const;
+  if (last === "Campaign") return "campaign" as const;
+  const previous = String(lastAssistant || "");
+  if (/preview of the .+ card/i.test(previous)) return "e-card" as const;
+  if (/\bnewsletter\b/i.test(previous)) return "newsletter" as const;
+  if (/e-letter template|\be-?letter\b/i.test(previous)) return "e-letter" as const;
+  return "";
+}
+
+function pieceDetail(instruction: string, change: string) {
+  const tidy = tidyHeard(instruction);
+  const quoted = tidy.match(/[“"]([^"”]{2,500})[”"]/)?.[1]?.trim() || "";
+  if (quoted) return quoted;
+  if (change === "add" || change === "longer") {
+    const after = tidy.match(/\b(?:add|include|insert|say|saying)\s+(?:this\s*:?\s*)?(.+)$/i)?.[1] || "";
+    const text = after.replace(/^(?:a sentence(?: that says)?|the sentence|that)\s+/i, "").trim();
+    return /^(?:something|it|this|that|more|a bit)$/i.test(text) ? "" : text;
+  }
+  if (change === "remove") {
+    const after = tidy.match(/\b(?:remove|delete|drop|cut|take out)\s+(?:the\s+)?(.+)$/i)?.[1] || "";
+    const text = after.replace(/\b(?:from (?:it|this|that|the letter|the newsletter|the card)|please)\b/gi, "").trim();
+    return /^(?:something|it|this|that|a part|part)$/i.test(text) ? "" : text;
+  }
+  if (change === "wording") {
+    return tidy.match(/\b(?:to|so it says|so that it says)\s+(.+)$/i)?.[1]?.trim() || "";
+  }
+  return "";
+}
+
+export function adjustPieceText(body: string, change: string, instruction: string) {
+  const source = String(body || "").replace(/\s*\[\[book:[a-f0-9]+\]\]\s*/gi, "\n\n").trim();
+  if (!source) return { ok: false as const, body: "", note: "I do not have that wording in front of me. Show it again, then tell me the change." };
+  if (change === "shorter") {
+    const parts = source.split(/(?<=[.!?])\s+/).map((item) => item.trim()).filter(Boolean);
+    const keep = Math.max(1, Math.ceil(parts.length * 0.6));
+    const next = parts.slice(0, keep).join(" ");
+    if (next === source) return { ok: false as const, body: source, note: "That is already one sentence, so I did not shorten it. Tell me which words to cut." };
+    return { ok: true as const, body: next, note: "I made it shorter. The earlier approval no longer applies. Nothing was sent." };
+  }
+  const detail = pieceDetail(instruction, change);
+  if (change === "longer" || change === "add") {
+    if (!detail) return { ok: false as const, body: source, note: change === "longer" ? "What should I add to make it longer?" : "What should I add?" };
+    return { ok: true as const, body: `${source}\n\n${detail}`, note: "I added that. The earlier approval no longer applies. Nothing was sent." };
+  }
+  if (change === "remove") {
+    if (!detail) return { ok: false as const, body: source, note: "What should I remove?" };
+    if (!source.toLowerCase().includes(detail.toLowerCase())) return { ok: false as const, body: source, note: `I could not find “${detail}” in the last piece. Nothing was changed.` };
+    const next = source.replace(new RegExp(detail.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), "").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+    return { ok: true as const, body: next, note: `I removed “${detail}”. The earlier approval no longer applies. Nothing was sent.` };
+  }
+  if (change === "wording") {
+    if (!detail) return { ok: false as const, body: source, note: "What should that part say instead?" };
+    return { ok: true as const, body: /^dear\b/i.test(detail) ? detail : `${source}\n\n${detail}`, note: "I updated the wording. The earlier approval no longer applies. Nothing was sent." };
+  }
+  return { ok: false as const, body: source, note: "Tell me what to change." };
+}
+
+export function nextTemplate<T extends { id: string; name: string }>(list: readonly T[], current: string, instruction: string) {
+  const asked = tidyHeard(instruction).toLowerCase();
+  const named = list.find((item) => item.name.length > 3 && asked.includes(item.name.toLowerCase()));
+  if (named) return named;
+  const index = list.findIndex((item) => item.id === current || item.name.toLowerCase() === String(current || "").toLowerCase());
+  return list[(Math.max(index, 0) + 1) % list.length] || list[0];
+}
+
 export function taskKind(text: string) {
   const tidy = tidyHeard(text);
   if (isNewsletterHold(tidy) || contentHoldKind(tidy) === "newsletter") return "newsletter";

@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, askedSavedLetterName, chooseSavedEletter, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskHeading, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, askedSavedLetterName, chooseSavedEletter, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskHeading, pieceChange, editedPiece, adjustPieceText, nextTemplate, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
@@ -3327,6 +3327,81 @@ function farsiMoveReply(thread: Array<{ role?: string; content?: string }>, repl
   const extra = verifiedFarsiMoveNote(userLine, reply);
   return extra ? `${reply}\n\n${extra}` : reply;
 }
+async function revisePreparedPiece(advisorId: number, slug: string, code: string, command: string, change: string, piece: "e-letter" | "newsletter" | "e-card" | "campaign") {
+  const kinds = piece === "e-card" ? ["card-preview", "card"] : piece === "newsletter" ? ["newsletter-preview", "newsletter"] : piece === "campaign" ? ["campaign-preview", "campaign"] : ["eletter-preview", "eletter"];
+  const sql = await getSql();
+  const row = (await sql<{ payload: string }>`
+    select payload from assistant_actions
+    where advisor_id = ${advisorId} and kind in (${kinds[0]}, ${kinds[1]}) and status <> 'discarded'
+    order by id desc limit 1
+  `)[0];
+  if (!row) return { reply: `I do not have a ${taskHeading(piece).toLowerCase()} waiting to change. Show it again, then tell me the change. Nothing was sent.`, actions: [] as DeskAction[] };
+  let payload: Record<string, unknown> = {};
+  try { payload = JSON.parse(String(row.payload || "{}")) as Record<string, unknown>; } catch { payload = {}; }
+  await withdrawPending(advisorId, kinds);
+  if (change === "template") {
+    if (piece === "e-card") {
+      const cards = await cardsForAdvisor(advisorId);
+      const picked = matchCardByName(command, cards);
+      if (!picked || !("card" in picked)) return { reply: `Which card should I use instead? ${cards.slice(0, 6).map((item) => item.title).join(", ") || "None yet."} Nothing was sent.`, actions: [] };
+      const message = personalize(String(picked.card.message || ""), String(payload.recipient || ""));
+      const previewHtml = cardPreviewHtml(String(picked.card.image || ""), message, picked.card.title, "", String(payload.recipient || ""));
+      const stored = await saveAction(advisorId, "card-preview", `${picked.card.title} · not for sending`, { title: picked.card.title, message, image: picked.card.image || "", recipient: payload.recipient || "" });
+      return { reply: `I changed the card to ${picked.card.title}. Nothing was sent.\n\n${message}`, actions: [{ id: stored.actionId, kind: "card-preview", summary: `${picked.card.title} · not for sending`, preview: message, previewHtml, previewImage: String(picked.card.image || "") }] };
+    }
+    const designs = piece === "newsletter" || piece === "campaign" ? NEWSLETTER_DESIGNS : ELETTER_DESIGNS;
+    const next = nextTemplate(designs, String(payload.design || ""), command);
+    if (piece === "e-letter") {
+      const body = String(payload.body || "");
+      const title = String(payload.title || "A letter");
+      const shown = await previewComposedEletter({
+        advisorId, slug, code, request: command, title, body, who: "", reason: `I changed the template to ${next.name}. The wording is the same.`,
+        saved: { kind: "eletter", design: asEletterDesign(next.id), kicker: "A letter", title, subject: title, body, social: emptySocial() },
+      });
+      return shown;
+    }
+    const articles = Array.isArray(payload.articles) ? payload.articles as NewsletterIssue["articles"] : [];
+    if (!articles.length) return { reply: "I do not have that newsletter open. Nothing was changed.", actions: [] };
+    const issue = { ...(payload as unknown as NewsletterIssue), design: next.id as NewsletterIssue["design"], articles };
+    return rememberNewsletterPreview(advisorId, slug, code, issue, payload.letterId, `I changed the template to ${next.name}. The wording is the same. Nothing was sent.`);
+  }
+  if (piece === "newsletter" || piece === "campaign") {
+    const articles = Array.isArray(payload.articles)
+      ? (payload.articles as Array<{ title?: unknown; body?: unknown }>).map((item) => ({ title: String(item.title || ""), body: String(item.body || "") }))
+      : [];
+    const steps = Array.isArray(payload.steps) ? payload.steps as Array<{ title?: unknown; body?: unknown }> : [];
+    const blocks = articles.length ? articles : steps.map((item) => ({ title: String(item.title || ""), body: String(item.body || "") }));
+    if (!blocks.length) return { reply: "I do not have that piece open. Nothing was changed.", actions: [] };
+    const target = newsletterArticleTarget(command);
+    const index = target.index != null && blocks[target.index] ? target.index : blocks.length - 1;
+    const adjusted = adjustPieceText(blocks[index].body, change, command);
+    if (!adjusted.ok) return { reply: `${adjusted.note} Nothing was sent.`, actions: [] };
+    blocks[index] = { ...blocks[index], body: adjusted.body };
+    if (piece === "campaign") {
+      const preview = blocks.map((item, itemIndex) => `${itemIndex + 1}. ${item.title}\n${item.body}`).join("\n\n");
+      const stored = await saveAction(advisorId, "campaign-preview", `${String(payload.name || payload.title || "Campaign")} · not started`, { ...payload, steps: blocks });
+      return { reply: `${adjusted.note}\n\n${preview}`, actions: [{ id: stored.actionId, kind: "campaign-preview", summary: `${String(payload.name || "Campaign")} · not started`, preview, previewHtml: "", previewImage: "" }] };
+    }
+    const issue = { ...(payload as unknown as NewsletterIssue), articles: blocks };
+    if (payload.letterId) await sql`update saved_letters set body = ${packNewsletter(issue)} where id = ${Number(payload.letterId)} and advisor_id = ${advisorId}`;
+    return rememberNewsletterPreview(advisorId, slug, code, issue, payload.letterId, adjusted.note);
+  }
+  const body = piece === "e-card" ? String(payload.message || "") : String(payload.body || "");
+  const adjusted = adjustPieceText(body, change, command);
+  if (!adjusted.ok) return { reply: `${adjusted.note} Nothing was sent.`, actions: [] };
+  if (piece === "e-card") {
+    const title = String(payload.title || "Card");
+    const previewHtml = cardPreviewHtml(String(payload.image || ""), adjusted.body, title, "", String(payload.recipient || ""));
+    const stored = await saveAction(advisorId, "card-preview", `${title} · not for sending`, { ...payload, message: adjusted.body });
+    return { reply: `${adjusted.note}\n\n${adjusted.body}`, actions: [{ id: stored.actionId, kind: "card-preview", summary: `${title} · not for sending`, preview: adjusted.body, previewHtml, previewImage: String(payload.image || "") }] };
+  }
+  const title = String(payload.title || "A letter");
+  const shown = await previewComposedEletter({
+    advisorId, slug, code, request: command, title, body: adjusted.body, who: "", reason: adjusted.note,
+    saved: { kind: "eletter", design: asEletterDesign(payload.design), kicker: "A letter", title, subject: title, body: adjusted.body, social: emptySocial() },
+  });
+  return shown;
+}
 async function directAdvisorCommand(advisorId: number, slug: string, code: string, chatId: number, text: string, onDelta?: (text: string) => void, preferredId = 0) {
   const command = prepareDeskCommand(text);
   const tidy = tidyHeard(command);
@@ -3373,6 +3448,12 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
     return replyWith(advisorId, chatId, reply, onDelta, []);
   }
   const heldKind = contentHoldKind(command) || contentHoldKind(tidy) || contentHoldKind(text);
+  const change = pieceChange(command);
+  const piece = change ? editedPiece(command, lastAssistant) : "";
+  if (change && piece) {
+    const followed = await revisePreparedPiece(advisorId, slug, code, command, change, piece);
+    return replyWith(advisorId, chatId, followed.reply, onDelta, followed.actions);
+  }
   if (heldKind === "e-letter" || isLetterParagraphEdit(command, lastAssistant)) {
     const earlier = [...thread].reverse().find((turn) => turn.role === "user" && isEletterAsk(String(turn.content || "")));
     const recent = earlier ? recentLetterToShow(command, String(earlier.content || "")) : null;
