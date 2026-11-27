@@ -159,7 +159,7 @@ describe("model access", () => {
     if (!result.ok) {
       assert.match(result.blocker, /No fallback model was used/);
       const chosen = String(process.env.UA_AGENT_MODEL || "").trim();
-      const expected = chosen === "gpt-6.2-sol" || chosen.startsWith("gpt-6.2-sol-") ? chosen : "gpt-6.2-sol";
+      const expected = chosen === "grok-4.5" || chosen.startsWith("grok-4.5-") ? chosen : "grok-4.5";
       assert.equal(result.model, expected);
     }
   });

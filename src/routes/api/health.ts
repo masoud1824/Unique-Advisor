@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { hostedDataPlane, redactPrivate } from "@/lib/hosted-runtime";
 import { modelTransportOpen } from "@/lib/outbound-guard";
-import { configuredModelId, verifyModelAccess } from "@/lib/agent/model-config";
+import { configuredModelId, grokEnvKey, verifyModelAccess } from "@/lib/agent/model-config";
 
 let modelCache: { at: number; model: string; access: string; blocker: string } | null = null;
 
@@ -24,8 +24,8 @@ export const Route = createFileRoute("/api/health")({
             try {
               if (!model.ok) modelAccess = { at: Date.now(), model: configured, access: "not-called", blocker: model.reason };
               else {
-                const row = (await sql.query<{ openai_api_key: string }>("select openai_api_key from operators where id = 1"))[0];
-                const apiKey = String(row?.openai_api_key || "").trim() || String(process.env.OPENAI_API_KEY || "").trim();
+                const row = (await sql.query<{ xai_api_key: string }>("select xai_api_key from operators where id = 1").catch(() => []))[0];
+                const apiKey = String(row?.xai_api_key || "").trim() || grokEnvKey();
                 const verified = await verifyModelAccess(apiKey);
                 modelAccess = { at: Date.now(), model: verified.model, access: verified.ok ? "accepted" : "blocked", blocker: verified.ok ? "" : verified.blocker };
               }
@@ -45,6 +45,7 @@ export const Route = createFileRoute("/api/health")({
             modelAccess: modelAccess.access,
             modelBlocker: modelAccess.blocker,
             openAiEnvKey: Boolean(process.env.OPENAI_API_KEY?.trim()),
+            xaiEnvKey: Boolean(grokEnvKey()),
             billing: "test-values-only",
           });
         } catch (error) {

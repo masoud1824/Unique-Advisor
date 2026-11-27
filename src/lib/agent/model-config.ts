@@ -1,5 +1,6 @@
-/** v1 main model. Luna and Astra are not selected for routine calls. */
-export const V1_MAIN_MODEL = "gpt-6.2-sol";
+/** Written assistant model. OpenAI is not a fallback. */
+export const V1_MAIN_MODEL = "grok-4.5";
+export const XAI_BASE = "https://api.x.ai/v1";
 
 export function configuredModelId() {
   const chosen = String(process.env.UA_AGENT_MODEL || "").trim();
@@ -7,6 +8,9 @@ export function configuredModelId() {
   return V1_MAIN_MODEL;
 }
 
+export function grokEnvKey() {
+  return String(process.env.XAI_API_KEY || "").trim();
+}
 
 export function rejectedModelReason(requested: string, returned: string) {
   const want = String(requested || "").trim();
@@ -17,13 +21,13 @@ export function rejectedModelReason(requested: string, returned: string) {
 
 export type ModelAccess = { ok: true; model: string } | { ok: false; model: string; blocker: string };
 
-/** Confirms the configured model on this account. A failure does not switch models. */
+/** Confirms Grok on this account. A failure does not switch models. */
 export async function verifyModelAccess(apiKey: string, fetchImpl: typeof fetch = fetch): Promise<ModelAccess> {
   const model = configuredModelId();
-  if (!apiKey.trim()) return { ok: false, model, blocker: `${model} was not called. The language model key is not configured, and no fallback model was used.` };
+  if (!apiKey.trim()) return { ok: false, model, blocker: `${model} was not called. The Grok key is not configured, and no fallback model was used.` };
   let response: Response;
   try {
-    response = await fetchImpl(`https://api.openai.com/v1/models/${encodeURIComponent(model)}`, {
+    response = await fetchImpl(`${XAI_BASE}/models/${encodeURIComponent(model)}`, {
       headers: { Authorization: `Bearer ${apiKey}` },
       signal: AbortSignal.timeout(8000),
     });

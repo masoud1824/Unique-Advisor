@@ -1,7 +1,7 @@
 import { hasMeetingWhen, isTimeAgreement } from "./meeting-time.ts";
 import { refersToAppointment } from "./calendar-span.ts";
 import { contentHoldKind, deliveryRequested, isNewNewsletterDraft, withoutNegatedDelivery } from "./workspace-policy.ts";
-import { asksArchiveSearch, asksContactRecord, namedPeople } from "./delivery-audience.ts";
+import { asksArchiveSearch, asksContactRecord, asksExplicitWebFormSearch, namedPeople } from "./delivery-audience.ts";
 import { contactDeliveryBlock } from "./desk-workflows.ts";
 import { isSignatureAsk } from "./signature-request.ts";
 
@@ -452,7 +452,7 @@ export function parseHeardJob(text: string): HeardJob | null {
   try {
     const raw = JSON.parse(String(text).slice(start, end + 1)) as Record<string, unknown>;
     const job = String(raw.job || "").toLowerCase().trim();
-    const allowed = new Set(["card", "newsletter", "eletter", "campaign", "inbox", "file", "review", "calendar", "meeting", "several", "chat"]);
+    const allowed = new Set(["card", "newsletter", "eletter", "campaign", "inbox", "file", "review", "calendar", "meeting", "form", "several", "chat"]);
     if (!allowed.has(job)) return null;
     const clip = (value: unknown, max: number) => String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
     return { job, card: clip(raw.card, 80), contact: clip(raw.contact, 80), rewrite: clip(raw.rewrite, 500), unsure: raw.unsure === true, ask: clip(raw.ask, 280) };
@@ -474,6 +474,27 @@ export function rewriteAllowed(original: string, rewrite: string) {
   const right = taskKind(rewrite);
   if (!left || !right) return true;
   return left === right;
+}
+
+/** Protected desk commands stay exact. Grok may clarify everything else before the keyword router. */
+export function grokMayRewrite(text: string) {
+  const tidy = tidyHeard(text);
+  if (!tidy) return false;
+  if (asksExplicitWebFormSearch(tidy) || isNewNewsletterDraft(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy) || isNewsletterArticleAdd(tidy)) return false;
+  if (isBareRefusal(tidy) || agreesToSendCard(tidy) || declinesCard(tidy)) return false;
+  return true;
+}
+
+export function deskCommandAfterGrok(original: string, rewrite: string) {
+  const heard = String(original || "");
+  const next = String(rewrite || "").trim();
+  if (!grokMayRewrite(heard) || !next) return heard;
+  let kept = next;
+  if (/\b(?:do not|don't|never)\s+send\b/i.test(heard) && !/\b(?:do not|don't|never)\s+send\b/i.test(kept)) {
+    kept = `${kept.replace(/[.!\s]+$/g, "")}. Do not send.`;
+  }
+  if (!rewriteAllowed(heard, kept)) return heard;
+  return kept;
 }
 
 export function cardDoubtAllowed(original: string, job: string) {

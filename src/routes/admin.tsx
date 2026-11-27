@@ -942,7 +942,7 @@ function Admin() {
                     return rows.map((call, index) => (
                       <tr key={`${item.id}-${index}`}>
                         <td>{new Date(call.at || item.at).toLocaleString()}</td>
-                        <td>{item.handledBy === "openai" ? "OpenAI" : "Fixed rules"}</td>
+                        <td>{item.handledBy === "grok" ? "Grok" : item.handledBy === "openai" ? "OpenAI" : "Fixed rules"}</td>
                         <td>{call.provider || "—"}</td>
                         <td>{call.model || "—"}</td>
                         <td>{call.status || "—"}</td>

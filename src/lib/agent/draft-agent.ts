@@ -389,7 +389,7 @@ function runnerFor(model: Model) {
   return new Runner({
     model,
     tracingDisabled: true,
-    modelSettings: { maxTokens: 2048, reasoning: { effort: "low" } },
+    modelSettings: { maxTokens: 1200 },
   });
 }
 

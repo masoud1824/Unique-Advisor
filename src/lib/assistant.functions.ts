@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
@@ -21,7 +21,7 @@ import { websiteButtonHtml } from "@/lib/advisor-website";
 import { ASSISTANT_LOCK, assistantGate, decideAction, decideSend, parseAssistantSettings } from "@/lib/assistant-policy";
 import { loadClientBook, readDefaultRules, readRules, runAdvisorMorning, sourceClientReport, writeDefaultRules, writeRules } from "@/lib/assistant-work";
 import { CARDS, personalize } from "@/lib/catalog";
-import { configuredModelId } from "@/lib/agent/model-config.ts";
+import { configuredModelId, grokEnvKey, XAI_BASE } from "@/lib/agent/model-config.ts";
 import { factsFromResponse, publicAssistantError, type ProviderCall } from "@/lib/assistant-diagnostics";
 import { getSql } from "@/lib/db";
 import { attachPreviews, bindPreviewMessages, readChatPreviewRows, type ChatPreviewRow } from "@/lib/chat-previews";
@@ -70,7 +70,6 @@ import {
   shouldReplacePreview,
 } from "@/lib/delivery-audience";
 import { readConnectedPreview } from "@/lib/provider-read.ts";
-import { solChatCompletionBody } from "@/lib/agent/sol-request.ts";
 import { isDropboxListAsk } from "@/lib/advisor-intent.ts";
 import { contentHoldKind, holdNote } from "@/lib/workspace-policy";
 import { holdCampaign as persistCampaignControl, runQueuedCampaign as deliverCampaign, sendProposedNewsletter as deliverNewsletter, sendQueuedCard as deliverCard, sendQueuedEletter as deliverLetter, cancelPendingDesk, type DeliveryIo } from "@/lib/desk-handlers";
@@ -1305,7 +1304,7 @@ async function runModel(settings: { tools: { clients: unknown; calendar: unknown
   const { runDeskAgentTurn } = await import("@/lib/agent/preview-server.ts");
   const turn = await runDeskAgentTurn({ advisorId, slug, text: String(asked), source });
   calls.push({
-    provider: "openai",
+    provider: "xai",
     model: turn.returnedModel || turn.requestedModel,
     requestId: "",
     promptTokens: turn.inputTokens,
@@ -1360,7 +1359,7 @@ export const loadAssistantDiagnostics = createServerFn({ method: "POST" }).valid
     return {
       id: row.id,
       advisorId: row.advisor_id,
-      handledBy: row.handled_by === "openai" ? "openai" : "fixed",
+      handledBy: row.handled_by === "grok" ? "grok" : row.handled_by === "openai" ? "openai" : "fixed",
       at: row.created_at,
       calls
     };
@@ -3539,9 +3538,13 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
 export async function runDeskTurn(advisorId: number, slug: string, code: string, chatId: number, text: string) {
   return directAdvisorCommand(advisorId, slug, code, chatId, text);
 }
+async function grokApiKey() {
+  const saved = await (await getSql())<{ xai_api_key: string }>`select xai_api_key from operators where id = 1`.catch(() => []);
+  return String(saved[0]?.xai_api_key || "").trim() || grokEnvKey();
+}
 async function hearWithGrok(advisorId: number, text: string, rulesNote: string, lastAssistant: string, calls: ProviderCall[]) {
   if (!modelTransportOpen().ok) return null;
-  const apiKey = await companyApiKey();
+  const apiKey = await grokApiKey();
   if (!apiKey) return null;
   let titles = "";
   try {
@@ -3552,7 +3555,7 @@ async function hearWithGrok(advisorId: number, text: string, rulesNote: string, 
   const operating = await readOperatingInstructions();
   const system = `${operatingSystemBlock(operating)}
 
-You are the understanding layer for one financial advisor. The same operating instructions apply to typed and voice requests. You do not send, book, or say that something was sent. The desk will do the work and ask the advisor to confirm. The advisor's rules are binding only when they do not conflict with the operating instructions. A letter, e-letter, note, or email is never an e-card. A newsletter is never an e-card. A drip or campaign is never an e-card. Who needs a review, which client needs a review, and who is due to contact means job review, not a card. Season's greeting, seasons greeting, seasonal greeting, thank you, thanks, birthday, holiday, halloween, welcome, and anniversary mean an e-card unless they asked for a letter, note, email, or newsletter. If a rule says a phrase is an e-card, the job is card. Use an e-card title from this desk. If more than one title fits, set unsure true and set ask to exactly: Did you mean the Name card? rewrite is one clear instruction. If they are editing, previewing, saving, or said not to send, the rewrite must not include send, email, or a recipient. Otherwise card "send the [exact title] e-card to [name]"; newsletter "send the newsletter to [names they named]"; remove "remove the [name] part from the newsletter"; eletter "write a letter to [name] and tell them [what they said]"; campaign "start the [name] drip campaign for [who]"; inbox "read my emails"; file "what products does [name] have"; review "which clients need a review"; calendar "show my calendar"; meeting "book a zoom meeting with [name] [day and time]"; several, every job in one rewrite separated by ". Then "; chat, not a secretary task and rewrite empty. Do not invent a recipient. Reply with JSON only, no markdown: {"job":"card|newsletter|eletter|campaign|inbox|file|review|calendar|meeting|several|chat","card":"","contact":"","rewrite":"","unsure":false,"ask":""}.`;
+You are the understanding layer for one financial advisor. The same operating instructions apply to typed and voice requests. You do not send, book, or say that something was sent. The desk will do the work and ask the advisor to confirm. The advisor's rules are binding only when they do not conflict with the operating instructions. A letter, e-letter, note, or email is never an e-card. A newsletter is never an e-card. A drip or campaign is never an e-card. Who needs a review, which client needs a review, and who is due to contact means job review, not a card. Season's greeting, seasons greeting, seasonal greeting, thank you, thanks, birthday, holiday, halloween, welcome, and anniversary mean an e-card unless they asked for a letter, note, email, or newsletter. If a rule says a phrase is an e-card, the job is card. Use an e-card title from this desk. If more than one title fits, set unsure true and set ask to exactly: Did you mean the Name card? rewrite is one clear instruction. If they are editing, previewing, saving, or said not to send, the rewrite must not include send, email, or a recipient. Otherwise card "send the [exact title] e-card to [name]"; newsletter "send the newsletter to [names they named]"; remove "remove the [name] part from the newsletter"; eletter "write a letter to [name] and tell them [what they said]"; campaign "start the [name] drip campaign for [who]"; inbox "read my emails"; file "what products does [name] have"; review "which clients need a review"; calendar "show my calendar"; meeting "book a zoom meeting with [name] [day and time]"; several, every job in one rewrite separated by ". Then "; chat, not a secretary task and rewrite empty. Do not invent a recipient. A web search for an insurer form stays a web search, not a contact lookup. Reply with JSON only, no markdown: {"job":"card|newsletter|eletter|campaign|inbox|file|review|calendar|meeting|form|several|chat","card":"","contact":"","rewrite":"","unsure":false,"ask":""}.`;
   const user = `Rules:
 ${rulesNote.slice(0, 4e3) || "None."}
 
@@ -3562,15 +3565,14 @@ Your last reply: ${lastAssistant.slice(0, 800) || "none"}
 
 Advisor said: ${text.slice(0, 800)}`;
   try {
-    const response = await fetch(`${OPENAI}/chat/completions`, {
+    const response = await fetch(`${XAI_BASE}/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(solChatCompletionBody({
+      body: JSON.stringify({
         model: advisorChatModel(),
-        max_completion_tokens: 800,
-        reasoning_effort: "low",
+        max_tokens: 800,
         messages: [{ role: "system", content: system }, { role: "user", content: user }]
-      })),
+      }),
       signal: AbortSignal.timeout(2e4)
     });
     if (!response.ok) return null;
@@ -3729,7 +3731,7 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
   if (!(chatId > 0 ? (await sql<{ id: number }>`select id from assistant_chats where id = ${chatId} and advisor_id = ${gate.row.id}`)[0] : null)) chatId = await latestChat(gate.row.id);
   const priorThread = await advisorThread(gate.row.id, chatId);
   const priorAssistant = [...priorThread].reverse().find((turn) => turn.role === "assistant")?.content || "";
-  const command = prepareDeskCommand(latest.content, priorAssistant);
+  let command = prepareDeskCommand(latest.content, priorAssistant);
   const preferredNewsletter = Number(data.activeNewsletterId) || 0;
   const turnKey = deskTurnKey(gate.row.id, chatId, priorAssistant, latest.content);
   if (!claimVoiceTurn(turnKey)) {
@@ -3772,6 +3774,10 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
     if (isFormWebAgreement(command, lastSaid) || isFormWebAgreement(latest.content, lastSaid)) {
       handled = "fixed";
       return replyWith(gate.row.id, chatId, await searchPublicFormPages(pendingFormRequest(lastSaid)), onDelta);
+    }
+    if (grokMayRewrite(command)) {
+      const heard = await hearWithGrok(gate.row.id, command, note, lastSaid, calls);
+      command = deskCommandAfterGrok(command, heard ? heardCommand(heard) || "" : "");
     }
     const control = orchestrationControl(command);
     if (asksLibraryConversation(command) || asksLibraryConversation(latest.content)) {
@@ -3826,11 +3832,11 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
       const grounding = refersToAppointment(command) && !isCalendarAsk(command) ? appointmentGrounding(listing) : "";
       const result = await runModel(settings, gate.row.id, gate.row.advisor_name || gate.row.slug, thread, data.slug || "", data.code || "", `${note}\n\n${context}${grounding ? `\n\n${grounding}` : ""}${page ? `\n\nThe advisor is on the ${page} page of the desk.` : ""}`, onDelta, calls, chatId, data.source === "voice" ? "voice" : "typed");
       if (result.ok) {
-        handled = "openai";
+        handled = "grok";
         const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
                 await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
       } else {
-        handled = calls.length ? "openai" : "model-unavailable";
+        handled = calls.length ? "grok" : "model-unavailable";
       }
       return result;
     }
@@ -3866,7 +3872,7 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
     if (heard?.unsure && cardDoubtAllowed(command, heard.job)) {
       const reply = grokDoubtReply(heard);
       if (reply) {
-        handled = calls.length ? "openai" : "fixed";
+        handled = calls.length ? "grok" : "fixed";
         await remember(gate.row.id, chatId, "assistant", reply);
         onDelta?.(reply);
         return { ok: true as const, reply, drafts: [], actions: [] };
@@ -3902,10 +3908,10 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
 
 The advisor is on the ${page} page of the desk. Use that when it is relevant.` : note, onDelta, calls, chatId, data.source === "voice" ? "voice" : "typed");
     if (result.ok) {
-      handled = "openai";
+      handled = "grok";
       const messageId = await remember(gate.row.id, chatId, "assistant", result.reply);
             await bindPreviewMessages(sql, gate.row.id, chatId, messageId, (result.actions || []).map((item) => Number(item?.id || 0)));
-    } else if (calls.length) handled = "openai";
+    } else if (calls.length) handled = "grok";
     return result;
   } catch (error) {
     console.error("[assistant]", error);

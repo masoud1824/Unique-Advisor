@@ -1,6 +1,5 @@
 import { OpenAIProvider } from "@openai/agents-openai";
 import OpenAI from "openai";
-import { solAwareFetch } from "./sol-request.ts";
 import { gateAdvisor } from "../advisor-db.ts";
 import { getSql } from "../db.ts";
 import {
@@ -16,7 +15,7 @@ import { redactPrivate } from "../hosted-runtime.ts";
 import { modelTransportOpen } from "../outbound-guard.ts";
 import { FORM_CODE, type DraftPayload } from "./equitable-fields.ts";
 import { decideDraft, MemoryDraftStore, runDraftTurn, type DraftRecord } from "./draft-agent.ts";
-import { verifyModelAccess } from "./model-config.ts";
+import { grokEnvKey, verifyModelAccess, XAI_BASE } from "./model-config.ts";
 import { sharedAdvisorRunId } from "./v1-workflows.ts";
 import { speechSegments } from "./voice-bridge.ts";
 import { ALLOWANCE_STOP, accountView, agreePurchase, packQuote, paymentConfigured, reserve, cancelReservation, reconcile, withBilling } from "../billing/usage.ts";
@@ -69,13 +68,13 @@ async function serverModel() {
   const transport = modelTransportOpen();
   if (!transport.ok) return { ok: false as const, calledModel: false, reason: transport.reason };
   const sql = await getSql();
-  const row = (await sql.query<{ openai_api_key: string }>("select openai_api_key from operators where id = 1"))[0];
-  const apiKey = String(row?.openai_api_key || "").trim() || String(process.env.OPENAI_API_KEY || "").trim();
+  const row = (await sql.query<{ xai_api_key: string }>("select xai_api_key from operators where id = 1").catch(() => []))[0];
+  const apiKey = String(row?.xai_api_key || "").trim() || grokEnvKey();
   const verified = await verifyModelAccess(apiKey);
   if (!verified.ok) return { ok: false as const, calledModel: false, reason: verified.blocker, model: verified.model };
   const provider = new OpenAIProvider({
-    openAIClient: new OpenAI({ apiKey, fetch: solAwareFetch(globalThis.fetch.bind(globalThis)) }),
-    useResponses: true,
+    openAIClient: new OpenAI({ apiKey, baseURL: XAI_BASE }),
+    useResponses: false,
   });
   try {
     return { ok: true as const, model: await provider.getModel(verified.model), modelId: verified.model };
