@@ -3,7 +3,7 @@ import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssi
 import { assistantPieces } from "@/lib/assistant-reply";
 import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, shouldCaptureSpeech, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, isHearingCheck, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
-import { isOnboardingDemo, showUnclearChoice } from "@/lib/advisor-intent";
+import { assistantQuestions, isOnboardingDemo, questionAnswer, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
 import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
@@ -914,6 +914,36 @@ function AssistantText({ text }: { text: string }) {
     : <span key={index}>{piece.text}</span>);
 }
 
+function QuestionChoices({ question, busy, onAnswer }: { question: string; busy: boolean; onAnswer: (line: string) => void }) {
+  const [other, setOther] = useState("");
+  const sendOther = () => {
+    const typed = other.trim();
+    if (!typed) return;
+    setOther("");
+    onAnswer(typed);
+  };
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2">
+      <button type="button" className="ua-btn" style={{ padding: "6px 12px" }} disabled={busy} onClick={() => onAnswer(questionAnswer(question, "yes"))}>Yes</button>
+      <button type="button" className="ua-btn-line" style={{ padding: "6px 12px" }} disabled={busy} onClick={() => onAnswer(questionAnswer(question, "no"))}>No</button>
+      <input
+        value={other}
+        onChange={(event) => setOther(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          event.stopPropagation();
+          sendOther();
+        }}
+        placeholder="Different answer"
+        className="ua-field"
+        style={{ maxWidth: 260, padding: "6px 10px" }}
+        aria-label="Different answer"
+      />
+    </div>
+  );
+}
+
 export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, hearing = false, freshChat = 0, voiceCue = 0, onVoice, onOpenSettings }: { code: string; desk: DeskData; spoken?: { id: number; text: string; page?: string } | null; assistFrom?: { page: string; id: number } | null; hearing?: boolean; freshChat?: number; voiceCue?: number; onVoice?: (status: { listening: boolean; speaking: boolean }) => void; onOpenSettings?: () => void }) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [chats, setChats] = useState<Chat[]>([]);
@@ -1551,7 +1581,12 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
         const bookingAsk = /shall i book it\?/i.test(result.reply);
         const cardAsk = /just to confirm:/i.test(result.reply);
         const repeated = showUnclearChoice(content, lastQuestion.current, result.reply);
-        if (bookingAsk) {
+        const asked = assistantQuestions(reply).some((item) => item.asks);
+        if (asked) {
+          lastQuestion.current = result.reply;
+          setChoices([]);
+          setChoiceNote("");
+        } else if (bookingAsk) {
           lastQuestion.current = result.reply;
           setChoiceNote("");
           setChoices(["Yes", "Change time"]);
@@ -2022,7 +2057,16 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                     <strong>{turn.role === "user" ? "You" : "AI assistant"}</strong>
                     {stamp(turn.at) && <span className="text-xs" style={{ color: "#5a6a7a" }}>{stamp(turn.at)}</span>}
                   </div>
-                  <p className="mt-1 whitespace-pre-wrap">{turn.role === "assistant" ? <AssistantText text={turn.content} /> : turn.content}</p>
+                  <div className="mt-1 whitespace-pre-wrap">
+                    {turn.role === "assistant" && index === turns.length - 1 && assistantQuestions(turn.content).some((item) => item.asks)
+                      ? assistantQuestions(turn.content).map((item, itemIndex) => (
+                        <div key={itemIndex} className={itemIndex ? "mt-3" : ""}>
+                          <AssistantText text={item.text} />
+                          {item.asks && <QuestionChoices question={item.text} busy={busy} onAnswer={(line) => { setChoices([]); setChoiceNote(""); void ask(line); }} />}
+                        </div>
+                      ))
+                      : turn.role === "assistant" ? <AssistantText text={turn.content} /> : turn.content}
+                  </div>
                   {turn.previews && turn.previews.length > 0 && (
                     <div className="mt-3 grid gap-3">
                       {turn.previews.map((action) => (

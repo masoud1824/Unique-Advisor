@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { letterOnTemplate, starterEletter } from "./eletter.ts";
 import { describe, it } from "node:test";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, pieceChange, editedPiece, adjustPieceText, nextTemplate, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies, askedSavedLetterName, chooseSavedEletter } from "./advisor-intent.ts";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, pieceChange, editedPiece, adjustPieceText, nextTemplate, assistantQuestions, questionAnswer, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies, askedSavedLetterName, chooseSavedEletter } from "./advisor-intent.ts";
 import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
 import { SECRETARY_RULES, taskOn } from "./secretary-rules.ts";
 import { orchestrationControl } from "./orchestration.ts";
@@ -233,6 +233,21 @@ describe("misheard advisor commands", () => {
     assert.equal(taskKind("arrange a meeting with Riley"), "meeting");
     assert.equal(taskKind("set an appointment with Jordan"), "meeting");
     assert.equal(isZoomAsk("Show my appointments for today"), false);
+    const letterAndCard = "send a letter to masoud about importance of life insurance and then send a season card to avery and book an appointment with morgan for tomorrow at 10 am";
+    const mixed = splitSecretaryTasks(letterAndCard);
+    assert.deepEqual(mixed.map((part) => taskKind(part)), ["e-letter", "e-card", "meeting"]);
+    assert.match(mixed[0], /letter to masoud/i);
+    assert.doesNotMatch(mixed[0], /season card|appointment/i);
+    assert.match(mixed[1], /season card to avery/i);
+    assert.match(mixed[2], /appointment with morgan/i);
+    const asked = "E-card: Did you mean the Seasons Greeting card for Masoud Zangeneh?\n\nAppointment: Just to confirm: a 30-minute Zoom meeting with Morgan Sample on Saturday, Nov 28 at 10:00 AM Toronto time. Shall I book it?";
+    const questions = assistantQuestions(asked).filter((item) => item.asks);
+    assert.equal(questions.length, 2);
+    assert.equal(questionAnswer(questions[0].text, "yes"), "The Seasons Greeting card");
+    assert.match(questionAnswer(questions[0].text, "no"), /not the Seasons Greeting card/i);
+    assert.equal(questionAnswer(questions[1].text, "yes"), "yes");
+    assert.match(questionAnswer(questions[1].text, "no"), /do not book/i);
+    assert.equal(questionAnswer(questions[1].text, "Friday at 2"), "Friday at 2");
     assert.equal(eletterAwaitingYes([{ role: "assistant", content: "Just to confirm: send the e-letter “Disability Insurance” to Ali Mortazavi?" }]), true);
     assert.equal(campaignAwaitingYes([{ role: "assistant", content: "Just to confirm: start the Welcome campaign, every week, for Majid Hashemi?" }]), true);
     const batch = [

@@ -3514,6 +3514,14 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
   if (isTextEdit(tidy) || (blocksLookup(tidy) && !agreesToSendCard(tidy) && !declinesCard(tidy))) return null;
   const sql = await getSql();
   const waitingCard = cardAwaitingYes(thread) || cardAwaitingApprove(thread);
+  if (/^no\b/i.test(tidy) && /\bdo not book\b/i.test(tidy)) {
+    try { await clearPendingZoom(advisorId); } catch { /* no booking was waiting */ }
+    return replyWith(advisorId, chatId, "The appointment was not booked. Nothing was sent.", onDelta);
+  }
+  if (/^no\b/i.test(tidy) && /\bnot the\b/i.test(tidy) && /\bcard\b/i.test(tidy)) {
+    await cancelWaitingCard(advisorId);
+    return replyWith(advisorId, chatId, "I will not send that card. Nothing was sent.", onDelta);
+  }
   if (isBareRefusal(tidy) || (declinesCard(tidy) && (waitingCard || newsletterAwaitingYes(thread) || eletterAwaitingYes(thread) || campaignAwaitingYes(thread) || batchAwaitingYes(thread) || signaturePreviewWaiting(lastAssistant)))) {
     const facts = await cancellationFacts(advisorId);
     if (facts.pending || waitingCard || newsletterAwaitingYes(thread) || eletterAwaitingYes(thread) || campaignAwaitingYes(thread) || batchAwaitingYes(thread) || signaturePreviewWaiting(lastAssistant)) {

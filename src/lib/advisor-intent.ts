@@ -39,7 +39,7 @@ export function isCardAsk(text: string) {
   if (ordinaryBlocked(tidy)) return false;
   if (writtenCard(tidy)) return true;
   if (/\bgreeting\b/i.test(tidy) && /\b(?:for|to)\b/i.test(tidy)) return true;
-  if (/\b(?:thank(?:\s+you)?|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz)\s+cards?\b/i.test(tidy)) return true;
+  if (/\b(?:thank(?:\s+you)?|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz|season'?s?|seasons|seasonal)\s+cards?\b/i.test(tidy)) return true;
   return occasionCard(tidy);
 }
 
@@ -552,6 +552,28 @@ export function deskKeepsTurn(text: string, lastAssistant = "") {
 
 export function cardConfirmLine(title: string, name: string) {
   return `Just to confirm: send the ${title} e-card to ${name}?`;
+}
+
+export function assistantQuestions(text: string) {
+  const blocks = String(text || "").split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+  return blocks.map((part) => ({ text: part, asks: /\?/.test(part) }));
+}
+
+export function questionAnswer(question: string, choice: string) {
+  const typed = String(choice || "").trim();
+  const lower = typed.toLowerCase();
+  if (!typed) return "";
+  if (lower !== "yes" && lower !== "no") return typed;
+  const booking = /\b(?:shall i book|zoom meeting|appointment)\b/i.test(question);
+  const card = question.match(/\bthe\s+(.+?)\s+cards?\b/i)?.[1]?.replace(/^did you mean\s+/i, "").trim() || "";
+  if (lower === "no") {
+    if (booking && !card) return "No, do not book that appointment.";
+    if (card) return `No, not the ${card} card.`;
+    return "No";
+  }
+  if (booking && !card) return "yes";
+  if (card) return `The ${card} card`;
+  return "yes";
 }
 
 export function agreesToSendCard(text: string) {
@@ -1798,7 +1820,7 @@ const TASK_PATTERNS: RegExp[] = [
   /\b(?:create|write|make|prepare|draft|send|build)\b(?:(?!\b(?:e-?cards?|cards?|letters?|notes?|appointments?|meetings?|calendars?)\b)[^.?!;\n]){0,48}\bnewsletters?\b|\bnewsletters?\b/gi,
   /\b(?:create|write|make|prepare|draft|send)\b[^.?!;\n]{0,40}\be-?letters?\b|\be-?letters?\b|\b(?:write|send|draft|prepare)\b[^.?!;\n]{0,24}\b(?:a\s+)?(?:letter|note)\b/gi,
   /\b(?:send|run|start|launch)\b[^.?!;\n]{0,48}\b(?:drip\s+campaigns?|campaigns?|drips?)\b|\bdrip\s+campaigns?\b|\bdrips?\b/gi,
-  /\b(?:send|give|mail)\b(?:(?!\b(?:and|then)\s+(?:send|book|schedule|create|write|check)\b)[^.?!;\n]){0,80}?\b(?:e-?cards?|greeting\s+cards?|(?:thank(?:\s+you)?|thanks|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz)\s+cards?|(?:season'?s?|seasons|seasonal)\s+greetings?|holiday\s+greetings?|thank(?:\s+you)?|thanks|birthday|halloween|holidays?)\b|\be-?cards?\b|\bgreeting\s+cards?\b|\b(?:season'?s?|seasons|seasonal)\s+greetings?\b/gi,
+  /\b(?:send|give|mail)\b(?:(?!\b(?:and(?:\s+then)?|then)\s+(?:send|book|schedule|create|write|check|arrange|set|make)\b)[^.?!;\n]){0,80}?\b(?:e-?cards?|greeting\s+cards?|(?:thank(?:\s+you)?|thanks|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz|season'?s?|seasons|seasonal)\s+cards?|(?:season'?s?|seasons|seasonal)\s+greetings?|holiday\s+greetings?|thank(?:\s+you)?|thanks|birthday|halloween|holidays?)\b|\be-?cards?\b|\bgreeting\s+cards?\b|\b(?:season'?s?|seasons|seasonal)\s+greetings?\b/gi,
   /\b(?:book|schedule|set(?:\s+up)?|arrange|make)\b[^.?!;\n]{0,48}\b(?:zoom(?:\s+meeting)?|meetings?|appointments?)\b|\bzoom\s+meetings?\b|\bin[-\s]?person\s+(?:meetings?|appointments?)\b/gi,
   /\b(?:show|see|read|check|open|what(?:'s| is)|list)\b[^.?!;\n]{0,40}\b(?:calendars?|schedule|agenda|meetings?)\b|\b(?:my|the)\s+calendar\b/gi,
   /\b(?:read|check|show|open|any|new)\b[^.?!;\n]{0,28}\b(?:e-?mails?|inbox|mailbox)\b/gi,
