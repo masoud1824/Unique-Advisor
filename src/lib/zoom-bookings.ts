@@ -1,6 +1,6 @@
 import { deleteConnectedEvent } from "@/lib/calendar-delete";
 import { contactMatchesQuery, resolveSpokenContact } from "@/lib/contact-match";
-import { getSql } from "@/lib/db";
+import { dbSource, getSql } from "@/lib/db";
 import { PREVIEW_WRITE_BLOCK, previewWritesBlocked } from "@/lib/preview-readonly";
 import { externalSideEffectsBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { linkAccessToken, readCalendars, accessToken } from "@/lib/advisor-links";
@@ -374,8 +374,35 @@ async function loadBusySlots(advisorId: number, zone: string) {
   });
 }
 
+async function saveDeskOnlyBooking(advisorId: number, pending: PendingBooking) {
+  const start = new Date(pending.start_at);
+  if (!pending.start_at || Number.isNaN(start.getTime())) {
+    return { ok: false as const, booked: false as const, error: "The appointment has no date. Nothing was booked." };
+  }
+  const sql = await getSql();
+  const title = pending.topic || `Meeting with ${pending.contact_name}`;
+  const same = await sql<{ id: number }>`
+    select id from desk_calendar_events
+    where advisor_id = ${advisorId} and title = ${title} and start_at = ${start.toISOString()}
+    limit 1
+  `;
+  const limit = "Zoom was not created and no invitation was sent, because this staging desk does not call Zoom or send mail.";
+  if (same[0]) {
+    return { ok: true as const, booked: true as const, join: "", message: `Already on this desk: ${title} on ${pending.label}. I did not book it again. ${limit}` };
+  }
+  await sql`
+    insert into desk_calendar_events (advisor_id, source, title, start_at, minutes)
+    values (${advisorId}, ${"Desk"}, ${title}, ${start.toISOString()}, ${pending.minutes || 30})
+  `;
+  if (pending.contact_id > 0) {
+    await writeContactLog(advisorId, pending.contact_id, "meeting", `Desk appointment. ${title}. ${pending.label}. ${limit}`).catch(() => undefined);
+  }
+  return { ok: true as const, booked: true as const, join: "", message: `Booked on this desk: ${title} on ${pending.label}. ${limit}` };
+}
+
 async function placePending(advisorId: number, pending: PendingBooking) {
-  if (previewWritesBlocked()) return { ok: false as const, booked: false as const, error: PREVIEW_WRITE_BLOCK };
+  if (dbSource === "pglite") return { ok: false as const, booked: false as const, error: PREVIEW_WRITE_BLOCK };
+  if (externalSideEffectsBlocked()) return saveDeskOnlyBooking(advisorId, pending);
   const host = globalThis as { __uaInviteState?: Map<string, "sent" | "failed" | "unknown" | "not-sent"> };
   const invites = host.__uaInviteState ||= new Map();
   const decision = await placePendingHandler({
