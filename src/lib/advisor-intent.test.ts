@@ -246,7 +246,7 @@ describe("misheard advisor commands", () => {
     assert.equal(questions.length, 2);
     assert.equal(questionAnswer(questions[0].text, "yes"), "The Seasons Greeting card");
     assert.match(questionAnswer(questions[0].text, "no"), /not the Seasons Greeting card/i);
-    assert.equal(questionAnswer(questions[1].text, "yes"), "yes");
+    assert.equal(questionAnswer(questions[1].text, "yes"), "Yes, book that appointment.");
     assert.match(questionAnswer(questions[1].text, "no"), /do not book/i);
     assert.equal(questionAnswer(questions[1].text, "Friday at 2"), "Friday at 2");
     const open = openQuestions(asked, [questionKey(questions[0].text)]);

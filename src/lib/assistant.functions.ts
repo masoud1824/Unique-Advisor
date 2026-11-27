@@ -792,7 +792,9 @@ ${rawBody}`.slice(0, 8e3);
   }
   const people = await peopleForMail(input.advisorId, input.args, input.request || "");
   if (!people.ok) return people;
-  let letterBody = body;
+  const recipientName = people.rows.length === 1 ? String(people.rows[0].full_name || "").trim() : "";
+  let letterBody = recipientName ? personalize(body, recipientName) : body;
+  if (recipientName) letterBody = letterBody.replace(/^Dear \[Contact Name\],?/i, `Dear ${recipientName},`);
   if (people.rows.length === 1 && /\b(?:zoom|in[- ]person|meetings?|appointments?|booking link|book a meeting)\b/i.test(`${input.request || ""}
 ${letterBody}`)) {
     const person = people.rows[0];
@@ -829,7 +831,7 @@ ${letterBody}`)) {
     contactName: names,
     approvedSnapshot: { kind: "letter", recipients: people.rows.map((row) => ({ name: row.full_name, email: row.email })), subject: title, design, body: letterBody, attachments: [] },
   });
-  return { ok: true as const, pending: true, actionId: saved.actionId, summary, preview: body, html, message: `The e-letter \u201C${title}\u201D is ready for ${names}. Tags were checked. It has not been sent. Press Approve and send.` };
+  return { ok: true as const, pending: true, actionId: saved.actionId, summary, preview: letterBody, html, message: `The e-letter \u201C${title}\u201D is ready for ${names}. Tags were checked. It has not been sent. Press Approve and send.` };
 }
 function newsletterWords(value: string) {
   return value.trim().split(/\s+/).filter(Boolean).length;
@@ -2784,9 +2786,12 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     });
     if (!prepared.ok) {
       const reason = String(prepared.error || "The letter was not sent.");
-      const who = reason.split("—")[0].trim();
+      const askedName = recipients[0] || "";
+      const found = askedName ? await findNamedContacts(advisorId, askedName) : [];
+      const fullName = found.length === 1 ? String(found[0].full_name || askedName) : askedName;
       if (letter) {
-        return previewComposedEletter({ advisorId, slug, code, request: tidy, title, body, who: who || recipients[0] || "", reason, saved });
+        const namedBody = fullName ? personalize(body, fullName) : body;
+        return previewComposedEletter({ advisorId, slug, code, request: tidy, title, body: namedBody, who: fullName, reason, saved });
       }
       return preparedWork(reason || "The letter was not prepared.");
     }
@@ -2968,9 +2973,17 @@ async function confirmSpokenZoom(advisorId: number, thread: Array<{ role?: strin
   const placed = await confirmPendingZoom(advisorId);
   if (placed?.reply) return placed.reply;
   const earlier = [...thread].reverse().find((turn): turn is { role?: string; content: string } => turn.role === "user" && typeof turn.content === "string" && /\b(?:zoom|meetings?|appointments?)\b/i.test(turn.content) && !isTimeAgreement(turn.content));
-  if (!earlier) return "";
-  const result = await bookZoom(advisorId, { contactName: contactPhrase(earlier.content), whenText: earlier.content, minutes: 30 }, [earlier.content, "yes"], /* @__PURE__ */ new Date());
+  const asked = [...thread].reverse().find((turn) => turn.role === "assistant" && /shall i book it\?/i.test(String(turn.content || "")));
+  const whenText = String(earlier?.content || asked?.content || "");
+  if (!whenText) return "";
+  const named = whenText.match(/\bwith\s+([\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*){0,2})/u);
+  const name = (named?.[1] || contactPhrase(whenText)).replace(/\s+\b(?:on|at|for|tomorrow|today)\b.*$/i, "").trim();
+  if (name.length < 2) return "Which contact is the appointment with?";
+  const result = await bookZoom(advisorId, { contactName: name, whenText, minutes: 30 }, [whenText, "yes"], new Date());
   return meetingReply(result);
+}
+function latestBookingReply(thread: Array<{ role?: string; content?: string }>) {
+  return [...thread].reverse().find((turn) => turn.role === "assistant" && /shall i book it\?/i.test(String(turn.content || "")))?.content || "";
 }
 function revisedParagraph(body: string, text: string) {
   return reviseNamedParagraph(body, text);
@@ -3606,7 +3619,7 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
     const revised = await revisePendingNewsletter(advisorId, slug, code, tidy, pickingPart);
     return replyWith(advisorId, chatId, revised.reply, onDelta, revised.actions);
   }
-  if ((agreesToSendCard(tidy) || isTimeAgreement(tidy)) && /shall i book|just to confirm: a \d+-minute zoom|zoom meeting with/i.test(lastAssistant)) {
+  if ((agreesToSendCard(tidy) || isTimeAgreement(tidy) || /\bbook that appointment\b/i.test(tidy)) && (/shall i book|just to confirm: a \d+-minute zoom|zoom meeting with/i.test(lastAssistant) || latestBookingReply(thread))) {
     const paused = await taskReady(advisorId, "meetings");
     if (paused) return replyWith(advisorId, chatId, paused, onDelta);
     const reply = await confirmSpokenZoom(advisorId, thread);
@@ -4010,7 +4023,7 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
       handled = "fixed";
       return replyWith(gate.row.id, chatId, await searchPublicFormPages(pendingFormRequest(lastSaid)), onDelta);
     }
-    if (grokMayRewrite(command)) {
+    if (grokMayRewrite(command) && !isTimeAgreement(command) && !/\bbook that appointment\b/i.test(command)) {
       const heard = await hearWithGrok(gate.row.id, command, note, lastSaid, calls);
       command = deskCommandAfterGrok(command, heard ? heardCommand(heard) || "" : "");
     }
@@ -4081,7 +4094,9 @@ export async function answerAdvisor(data: { slug?: string; code?: string; messag
         handled = "fixed";
         return kept;
       }
-      if (isTimeAgreement(command) && /zoom|meeting|shall i book|toronto time|\d{1,2}:\d{2}\s*[ap]\.?m/i.test(lastSaid)) {
+      const bookingWaiting = latestBookingReply(thread) || (/shall i book it\?/i.test(lastSaid) ? lastSaid : "");
+      const bookingYes = isTimeAgreement(command) || isTimeAgreement(latest.content) || /\bbook that appointment\b/i.test(`${command}\n${latest.content}`);
+      if (bookingYes && bookingWaiting) {
         const reply2 = await confirmSpokenZoom(gate.row.id, thread);
         if (reply2) {
           handled = "fixed";

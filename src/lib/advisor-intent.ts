@@ -583,7 +583,7 @@ export function questionAnswer(question: string, choice: string) {
     if (card) return `No, not the ${card} card.`;
     return "No";
   }
-  if (booking && !card) return "yes";
+  if (booking && !card) return "Yes, book that appointment.";
   if (card) return `The ${card} card`;
   return "yes";
 }
