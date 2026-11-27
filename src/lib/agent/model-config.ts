@@ -1,5 +1,5 @@
 /** Written assistant model. OpenAI is not a fallback. */
-export const V1_MAIN_MODEL = "grok-4.5";
+export const V1_MAIN_MODEL = "grok-4.7";
 export const XAI_BASE = "https://api.x.ai/v1";
 
 export function configuredModelId() {

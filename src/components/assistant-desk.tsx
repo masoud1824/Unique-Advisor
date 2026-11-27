@@ -2156,7 +2156,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
               {error && <p className="ua-assist-note text-sm font-semibold" style={{ color: "#b42318" }}>{error}</p>}
               {playbackNote && <p className="ua-playback-note" data-playback-note>{playbackNote}</p>}
               <div className="ua-command-row">
-                <span className="text-sm font-extrabold" style={{ color: "#0f4c81" }}>Grok</span>
+                <span className="text-sm font-extrabold" style={{ color: "#0f4c81" }}>Grok 4.7</span>
                 <button type="submit" className="ua-btn ua-ask" data-ask disabled={busy}>{busy ? "Thinking…" : "Ask"}</button>
                 <button type="button" className="ua-btn-line" style={{ padding: "8px 12px" }} disabled={busy} onClick={() => void ask("List who has not been contacted for a long time, whose yearly KYC is due, and any upsell or cross-sell opportunities.")}>Review clients</button>
               </div>
