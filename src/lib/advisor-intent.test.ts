@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { letterOnTemplate, starterEletter } from "./eletter.ts";
 import { describe, it } from "node:test";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies } from "./advisor-intent.ts";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies, askedSavedLetterName, chooseSavedEletter } from "./advisor-intent.ts";
 import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
 import { SECRETARY_RULES, taskOn } from "./secretary-rules.ts";
 import { orchestrationControl } from "./orchestration.ts";
@@ -429,6 +429,20 @@ describe("misheard advisor commands", () => {
     assert.match(drafted?.body || "", /replace income/i);
     assert.match(drafted?.body || "", /not a quote/i);
     assert.ok((drafted?.body || "").split(/\s+/).length > 60);
+    assert.equal(askedSavedLetterName("send a letter to masoud zangeneh and tell him about the importance of life insurance"), "");
+    assert.equal(askedSavedLetterName(rrsp), "");
+    assert.equal(askedSavedLetterName("send acceptance letter to masoud zangeneh"), "acceptance");
+    const saved = chooseSavedEletter("acceptance", [
+      { title: "Source seed — original fictional retirement draft" },
+      { title: "Acceptance — Retirement Note" },
+    ]);
+    assert.equal(saved && "match" in saved ? saved.match.title : "", "Acceptance — Retirement Note");
+    const ambiguous = chooseSavedEletter("acceptance", [
+      { title: "Acceptance — Retirement Note" },
+      { title: "Acceptance — Welcome Note" },
+    ]);
+    assert.equal(ambiguous && "choices" in ambiguous ? ambiguous.choices.length : 0, 2);
+    assert.equal(grokMayRewrite("send acceptance letter to masoud zangeneh"), false);
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);

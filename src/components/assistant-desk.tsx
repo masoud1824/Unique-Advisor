@@ -972,6 +972,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const listRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true);
   const pinningRef = useRef(false);
+  const settleUntil = useRef(0);
   rulesOpenRef.current = rulesOpen;
   chatIdRef.current = chatId;
   phaseRef.current = voicePhase;
@@ -1012,6 +1013,35 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
 
   useLayoutEffect(() => {
     const log = logRef.current;
+    if (!log) return;
+    stickRef.current = true;
+    settleUntil.current = performance.now() + 1200;
+    const pin = () => {
+      const node = logRef.current;
+      if (!node) return;
+      stickRef.current = true;
+      pinningRef.current = true;
+      node.scrollTop = node.scrollHeight;
+      setShowJump(false);
+    };
+    pin();
+    const observer = new ResizeObserver(() => pin());
+    observer.observe(log);
+    const timers = [40, 160, 400, 900].map((ms) => window.setTimeout(pin, ms));
+    const frame = requestAnimationFrame(() => {
+      pin();
+      pinningRef.current = false;
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      timers.forEach((id) => window.clearTimeout(id));
+      pinningRef.current = false;
+    };
+  }, [chatId]);
+
+  useLayoutEffect(() => {
+    const log = logRef.current;
     if (!log || !stickRef.current) {
       if (log && log.scrollHeight - log.scrollTop - log.clientHeight > 80) setShowJump(true);
       return;
@@ -1025,10 +1055,10 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
       pinningRef.current = false;
     });
     return () => cancelAnimationFrame(frame);
-  }, [turns, busy, chatId, rulesOpen, actions.length]);
+  }, [turns, busy, rulesOpen, actions.length]);
 
   function onLogScroll() {
-    if (pinningRef.current) return;
+    if (pinningRef.current || performance.now() < settleUntil.current) return;
     const log = logRef.current;
     if (!log) return;
     const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;

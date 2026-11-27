@@ -9,7 +9,7 @@ import { SIGNATURE_TEST } from "@/lib/signature-test-preview";
 import { asksForTestSignature, approvesExactPreview, signaturePreviewPayload, signaturePreviewWaiting } from "@/lib/signature-conversation";
 import { namedService, chooseSignatureWorkflow } from "@/lib/signature-workflow";
 import { modelContext, orchestrationControl, previewApprovalDecision } from "@/lib/orchestration";
-import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
+import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, assistantChatTitle, audienceChoiceReply, batchAwaitingYes, blockedRecipientReply, blocksLookup, campaignAudience, campaignAwaitingYes, campaignConfirmLine, campaignIntervalDays, campaignStepWait, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardMessageReplacement, cardSentLine, cardTitleHint, contactPhrase, coordinatedAudience, decideTurn, declinesCard, deskCommandAfterGrok, deskKeepsTurn, earlierDraftReply, editListedText, eletterAwaitingYes, eletterConfirmLine, eletterFromRequest, eletterRecipient, eletterRecipients, askedSavedLetterName, chooseSavedEletter, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, greetingDraft, heardCommand, holdsDelivery, isBareRefusal, isCalendarAsk, isCampaignAsk, isCampaignTimingEdit, isCardAsk, isCardMessageEdit, isCancellation, isEletterAsk, isFileAsk, isFormAsk, isClientFileAsk, isInboxAsk, isLetterParagraphEdit, recentLetterToShow, isSignatureAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterAsk, isNewsletterArchiveAsk, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isNewsletterDelivery, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isTextEdit, isZoomAsk, keepCardCorrection, looksLikeInstruction, matchCardByName, namedPreviewRecipient, namedPreviewRecipients, newsletterArticle, newsletterArchiveTopics, addedArticleTopic, suppliedArticle, newsletterMoveTarget, newsletterArticleTarget, reviseSectionBody, firstSentences, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterSentLine, newsletterTitle, newsletterTopics, onboardingDraft, parseHeardJob, pendingQuestion, recipientAfterDirection, replacesWithBookingRefusal, resolveCardCorrection, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, shouldIgnorePending, splitSecretaryTasks, summaryMentionsPerson, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, yesApplies } from "@/lib/advisor-intent";
 import { assistantHistoryMessage, readCompletionMessage, takeSentences } from "@/lib/voice-stream";
 import { assistantClock, isTimeAgreement } from "@/lib/meeting-time";
 import { appointmentGrounding, calendarListingFromThread, calendarSpan, isCalendarListing, presentCalendar, refersToAppointment, type CalendarRecord } from "@/lib/calendar-span";
@@ -27,7 +27,7 @@ import { getSql } from "@/lib/db";
 import { attachPreviews, bindPreviewMessages, readChatPreviewRows, type ChatPreviewRow } from "@/lib/chat-previews";
 import { composeAdvisorPrompt, OPERATING_INSTRUCTIONS, operatingSystemBlock } from "@/lib/assistant-operating";
 import { nameQuestion, resolveSpokenContact, spokenNameOptions } from "@/lib/contact-match";
-import { ELETTER_DESIGNS, ELETTER_GREETING, eletterDesignName, isEletterPack, letterOnTemplate, packEletter, plainEletter, renderEletter, unpackEletter, type EletterDesign } from "@/lib/eletter";
+import { ELETTER_DESIGNS, ELETTER_GREETING, eletterDesignName, isEletterPack, letterOnTemplate, packEletter, plainEletter, renderEletter, unpackEletter, type Eletter, type EletterDesign } from "@/lib/eletter";
 import { bookingHref, createAppointmentLink } from "@/lib/appointments";
 import { accessTokenForAdvisor, graphInbox } from "@/lib/microsoft-mail";
 import { taskOn, taskPaused } from "@/lib/secretary-rules";
@@ -808,7 +808,7 @@ ${letterBody}`)) {
 [[book:${link.token}]]`.slice(0, 8e3);
   }
   const title = eletterTitle(String(input.args.title ?? ""), letterBody.replace(/\[\[book:[a-f0-9]+\]\]/gi, ""));
-  const design = await chooseEletterDesign(input.advisorId, input.request || "");
+  const design = input.args.design ? asEletterDesign(input.args.design) : await chooseEletterDesign(input.advisorId, input.request || "");
   const designName = ELETTER_DESIGNS.find((item) => item.id === design)?.name ?? "Letter";
   const names = whoLine2(people.rows);
   const logo = brand.photoOn && brand.gate.site.publicPhoto.startsWith("data:image/") && brand.gate.site.publicPhoto.length < 18e4 ? brand.gate.site.publicPhoto : "";
@@ -2568,8 +2568,10 @@ async function pickEletterStationery(advisorId: number, request: string) {
   const design = await chooseEletterDesign(advisorId, request);
   return { letter: { ...letterOnTemplate({ template: null, design, title: "", body: "", who: "" }), body: "" }, name: eletterDesignName(design) };
 }
-async function previewComposedEletter(input: { advisorId: number; slug: string; code: string; request: string; title: string; body: string; who: string; reason: string }) {
-  const stationery = await pickEletterStationery(input.advisorId, input.request);
+async function previewComposedEletter(input: { advisorId: number; slug: string; code: string; request: string; title: string; body: string; who: string; reason: string; saved?: Eletter | null }) {
+  const stationery = input.saved
+    ? { letter: input.saved, name: input.saved.title || "saved letter" }
+    : await pickEletterStationery(input.advisorId, input.request);
   let body = input.body;
   if (input.who && /\b(?:zoom|in[- ]person|meetings?|appointments?)\b/i.test(`${input.request}\n${body}`) && !/\[\[book:[a-f0-9]+\]\]/i.test(body)) {
     const rows = await findNamedContacts(input.advisorId, input.who);
@@ -2603,7 +2605,7 @@ async function previewComposedEletter(input: { advisorId: number; slug: string; 
   const reason = input.reason.trim();
   return preparedWork([
     reason,
-    `I wrote this on the ${stationery.name} e-letter template. Nothing was sent.`,
+    input.saved ? `I used the saved letter “${input.saved.title}”. Nothing was sent.` : `I wrote this on the ${stationery.name} e-letter template. Nothing was sent.`,
     "",
     readable,
   ].filter((line, index) => line || index > 0).join("\n"), [{
@@ -2737,7 +2739,21 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
   if (isEletterAsk(tidy)) {
     const paused = await taskReady(advisorId, "eletters");
     if (paused) return preparedWork(paused);
-    const letter = eletterFromRequest(tidy);
+    const savedName = askedSavedLetterName(tidy);
+    let saved: Eletter | null = null;
+    if (savedName) {
+      await ensureAcceptanceRecords(advisorId);
+      const rows = await (await getSql())<{ id: number; title: string; body: string }>`select id, title, body from saved_letters where advisor_id = ${advisorId} order by id desc limit 30`;
+      const stored = rows.flatMap((row) => {
+        const unpacked = unpackEletter(String(row.body || ""));
+        return unpacked ? [{ title: unpacked.title || String(row.title || ""), letter: unpacked }] : [];
+      });
+      const pick = chooseSavedEletter(savedName, stored);
+      if (pick && "choices" in pick) return preparedWork(`Which saved letter should I use? ${pick.choices.map((item) => item.title).join(", ")}. Nothing was sent.`);
+      if (!pick || !("match" in pick)) return preparedWork(`I could not find a saved letter named “${savedName}”. Nothing was written.`);
+      saved = pick.match.letter;
+    }
+    const letter = saved ? { title: saved.title, body: saved.body } : eletterFromRequest(tidy);
     const named = eletterRecipients(tidy);
     const choice = audienceChoice(tidy);
     if (choice) return preparedWork(choice);
@@ -2747,25 +2763,30 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     if (!letter && topics.length === 0) return null;
     if (recipients.length === 0 && !audience.tag) return preparedWork("Who should I send the letter to?");
     const article = letter || newsletterArticle(topics[0]);
-    const body = letter ? letter.body : [article.body, ...topics.slice(1).map((topic) => newsletterArticle(topic).body)].join("\n\n");
+    const spoken = recipients.length === 1 ? recipients[0] : "";
+    const body = letter ? (saved && spoken ? personalize(letter.body, spoken) : letter.body) : [article.body, ...topics.slice(1).map((topic) => newsletterArticle(topic).body)].join("\n\n");
     const title = letter ? letter.title : article.title;
     const prepared = await sendAdvisorEletter({
       advisorId,
       slug,
       code,
-      args: { title, body, contactName: (recipients.length ? recipients : audience.names).join(" and "), tag: audience.tag },
+      args: { title, body, design: saved?.design, contactName: (recipients.length ? recipients : audience.names).join(" and "), tag: audience.tag },
       request: tidy
     });
     if (!prepared.ok) {
       const reason = String(prepared.error || "");
       const who = reason.split("—")[0].trim();
       if (letter && /No email is recorded|Unsubscribed/i.test(reason)) {
-        return previewComposedEletter({ advisorId, slug, code, request: tidy, title, body, who: who || recipients[0] || "", reason });
+        return previewComposedEletter({ advisorId, slug, code, request: tidy, title, body, who: who || recipients[0] || "", reason, saved });
       }
       return preparedWork(reason || "The letter was not prepared.");
     }
     await keepOnlyPending(advisorId, "eletter", Number(prepared.actionId));
-    return preparedWork(`${eletterConfirmLine(title, recipients.length ? recipients : [audience.tag || "your contacts"])} This preview is waiting for approval. Nothing was sent.`, [{
+    const who = recipients.length ? recipients : [audience.tag || "your contacts"];
+    const confirm = saved
+      ? `Just to confirm: send the saved letter “${title}” to ${who.join(" and ")}? Nothing was sent yet.`
+      : `${eletterConfirmLine(title, who)} This preview is waiting for approval. Nothing was sent.`;
+    return preparedWork(confirm, [{
       id: Number(prepared.actionId),
       kind: "eletter",
       summary: prepared.summary || title,
@@ -2955,7 +2976,14 @@ async function holdEletter(advisorId: number, slug: string, code: string, text: 
   });
   const asked = `${text}\n${lastAssistant}`.toLowerCase();
   const quoted = String(lastAssistant || "").match(/preview of [“"]([^"”]+)[”"]/i)?.[1]?.toLowerCase() || "";
-  const chosen = letters.find((item) => item.letter.title && asked.includes(item.letter.title.toLowerCase()))
+  const savedName = askedSavedLetterName(text);
+  const titled = letters.map((item) => ({ ...item, title: item.letter.title }));
+  const namedPick = savedName ? chooseSavedEletter(savedName, titled) : null;
+  if (namedPick && "choices" in namedPick) {
+    return { reply: `Which saved letter should I use? ${namedPick.choices.map((item) => item.title).join(", ")}. Nothing was sent.`, actions: [] };
+  }
+  const chosen = (namedPick && "match" in namedPick ? namedPick.match : null)
+    || letters.find((item) => item.letter.title && asked.includes(item.letter.title.toLowerCase()))
     || letters.find((item) => quoted && item.letter.title.toLowerCase() === quoted)
     || (letters.length === 1 ? letters[0] : null);
   if (!chosen) return { reply: `Which saved e-letter should I open? ${letters.map((item) => item.letter.title).join(", ") || "None yet."} ${holdNote("e-letter")}`, actions: [] };

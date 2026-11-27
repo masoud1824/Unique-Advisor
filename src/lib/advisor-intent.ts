@@ -489,6 +489,7 @@ export function grokMayRewrite(text: string) {
   const tidy = tidyHeard(text);
   if (!tidy) return false;
   if (asksToShowRecentLetter(tidy)) return false;
+  if (askedSavedLetterName(tidy)) return false;
   if (isEletterAsk(tidy) && eletterFromRequest(tidy)?.body) return false;
   if (asksExplicitWebFormSearch(tidy) || isNewNewsletterDraft(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy) || isNewsletterArticleAdd(tidy)) return false;
   if (isBareRefusal(tidy) || agreesToSendCard(tidy) || declinesCard(tidy)) return false;
@@ -1440,6 +1441,31 @@ const LETTER_STOP = /\s+\b(?:and|to|that|about|regarding|tell|telling|saying|say
 export function eletterRecipient(text: string) {
   const people = eletterRecipients(text);
   return people[0] || "";
+}
+
+const SAVED_LETTER_WORDS = new Set(["letter", "note", "email", "eletter", "e-letter", "saved", "new", "blank"]);
+
+/** The name in “send the acceptance letter”, not a topic in “a letter about …”. */
+export function askedSavedLetterName(text: string) {
+  const tidy = tidyHeard(text);
+  const quoted = tidy.match(/[“"]([^"”]{3,80})[”"]/);
+  if (quoted && /\b(?:e-?letter|letter|note)\b/i.test(tidy)) return quoted[1].trim();
+  const named = tidy.match(/\b(?:send|email|mail|open|show|preview|use)\s+(?:me\s+)?(?:the\s+|an?\s+|my\s+|saved\s+)?(.+?)\s+(?:e-?letter|letter|note)\b/i);
+  const name = String(named?.[1] || "").replace(/^(?:a|an|the|my|saved)\s+/i, "").replace(/[.?!]+$/g, "").trim();
+  if (!name || name.length < 4 || SAVED_LETTER_WORDS.has(name.toLowerCase())) return "";
+  return name;
+}
+
+export function chooseSavedEletter<T extends { title: string }>(asked: string, letters: T[]) {
+  const key = asked.toLowerCase().replace(/\s+/g, " ").trim();
+  if (key.length < 4) return null;
+  const titled = letters.map((item) => ({ item, title: item.title.toLowerCase().replace(/\s+/g, " ").trim() }));
+  const exact = titled.filter((row) => row.title === key);
+  if (exact.length === 1) return { match: exact[0].item };
+  const starts = titled.filter((row) => row.title === key || row.title.startsWith(`${key} `) || row.title.startsWith(`${key} —`) || row.title.startsWith(`${key}—`) || row.title.startsWith(`${key}-`));
+  if (starts.length === 1) return { match: starts[0].item };
+  if (starts.length > 1) return { choices: starts.map((row) => row.item) };
+  return null;
 }
 
 /** Every person joined by and. "or" stays unresolved so the caller can ask. */
