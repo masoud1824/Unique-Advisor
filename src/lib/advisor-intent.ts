@@ -81,8 +81,8 @@ export function textHitsRuleCard(text: string, rules: Array<{ text?: string; on?
 export function isZoomAsk(text: string) {
   const tidy = tidyHeard(text);
   const allowed = withoutNegatedDelivery(tidy);
-  if (/\b(?:book|schedule|set\s+up)\b/i.test(allowed) && /\b(?:zoom|meetings?|appointments?)\b/i.test(allowed)) return true;
-  return /\b(?:book(?:ed)?\s+(?:a\s+)?zoom|book\s+zoom|zoom\s+meeting)\b/i.test(allowed);
+  if (/\b(?:book|schedule|set(?:\s+up)?|arrange|make)\b/i.test(allowed) && /\b(?:zoom|meetings?|appointments?)\b/i.test(allowed)) return true;
+  return /\b(?:book(?:ed)?\s+(?:a\s+)?zoom|book\s+zoom|zoom\s+meeting|in[-\s]?person\s+(?:meetings?|appointments?))\b/i.test(allowed);
 }
 
 export function isDropboxListAsk(text: string) {
@@ -472,6 +472,12 @@ export function heardCommand(heard: HeardJob) {
 
 export function rewriteAllowed(original: string, rewrite: string) {
   if (isOnboardingDemo(original)) return false;
+  const parts = splitSecretaryTasks(original);
+  if (parts.length > 1) {
+    const wanted = parts.map((part) => taskKind(part)).filter(Boolean);
+    const got = splitSecretaryTasks(rewrite).map((part) => taskKind(part)).filter(Boolean);
+    return wanted.every((kind) => got.includes(kind));
+  }
   const left = taskKind(original);
   const right = taskKind(rewrite);
   if (!left || !right) return true;
@@ -496,6 +502,7 @@ export function grokMayRewrite(text: string) {
   if (isEletterAsk(tidy) && eletterFromRequest(tidy)?.body) return false;
   if (asksExplicitWebFormSearch(tidy) || isNewNewsletterDraft(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy) || isNewsletterArticleAdd(tidy)) return false;
   if (isBareRefusal(tidy) || agreesToSendCard(tidy) || declinesCard(tidy)) return false;
+  if (splitSecretaryTasks(tidy).length > 1) return false;
   return true;
 }
 
@@ -536,7 +543,7 @@ export function deskKeepsTurn(text: string, lastAssistant = "") {
   if (!(askingCard && tidy.length <= 80) && taskKind(tidy) && !agreesToSendCard(tidy) && !declinesCard(tidy) && !isNewsletterEdit(tidy)) return false;
   if (agreesToSendCard(tidy) || declinesCard(tidy)) return true;
   if (/^change(?: the)? time\b/i.test(tidy)) return true;
-  if (isTimeAgreement(tidy) && /\b(?:zoom|meeting|book it|toronto time)\b|\d{1,2}:\d{2}\s*[ap]\.?m/i.test(last)) return true;
+  if (isTimeAgreement(tidy) && /\b(?:zoom|meeting|appointment|book it|toronto time)\b|\d{1,2}:\d{2}\s*[ap]\.?m/i.test(last)) return true;
   if (askingCard && tidy.length <= 80 && !isNewsletterAsk(tidy) && !isZoomAsk(tidy) && !isNewsletterEdit(tidy)) return true;
   if (/which part should i take out/i.test(last) && tidy.length < 80 && !taskKind(tidy)) return true;
   if (isNewsletterEdit(tidy)) return true;
@@ -1791,8 +1798,8 @@ const TASK_PATTERNS: RegExp[] = [
   /\b(?:create|write|make|prepare|draft|send|build)\b(?:(?!\b(?:e-?cards?|cards?|letters?|notes?|appointments?|meetings?|calendars?)\b)[^.?!;\n]){0,48}\bnewsletters?\b|\bnewsletters?\b/gi,
   /\b(?:create|write|make|prepare|draft|send)\b[^.?!;\n]{0,40}\be-?letters?\b|\be-?letters?\b|\b(?:write|send|draft|prepare)\b[^.?!;\n]{0,24}\b(?:a\s+)?(?:letter|note)\b/gi,
   /\b(?:send|run|start|launch)\b[^.?!;\n]{0,48}\b(?:drip\s+campaigns?|campaigns?|drips?)\b|\bdrip\s+campaigns?\b|\bdrips?\b/gi,
-  /\b(?:send|give|mail)\b[^.?!;\n]{0,80}\b(?:e-?cards?|greeting\s+cards?|(?:thank(?:\s+you)?|thanks|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz)\s+cards?|(?:season'?s?|seasons|seasonal)\s+greetings?|holiday\s+greetings?|thank(?:\s+you)?|thanks|birthday|halloween|holidays?)\b|\be-?cards?\b|\bgreeting\s+cards?\b|\b(?:season'?s?|seasons|seasonal)\s+greetings?\b/gi,
-  /\b(?:book|schedule|set\s+up)\b[^.?!;\n]{0,48}\b(?:zoom(?:\s+meeting)?|meetings?|appointments?)\b|\bzoom\s+meetings?\b/gi,
+  /\b(?:send|give|mail)\b(?:(?!\b(?:and|then)\s+(?:send|book|schedule|create|write|check)\b)[^.?!;\n]){0,80}?\b(?:e-?cards?|greeting\s+cards?|(?:thank(?:\s+you)?|thanks|birthday|holiday|welcome|halloween|anniversary|norooz|nowruz)\s+cards?|(?:season'?s?|seasons|seasonal)\s+greetings?|holiday\s+greetings?|thank(?:\s+you)?|thanks|birthday|halloween|holidays?)\b|\be-?cards?\b|\bgreeting\s+cards?\b|\b(?:season'?s?|seasons|seasonal)\s+greetings?\b/gi,
+  /\b(?:book|schedule|set(?:\s+up)?|arrange|make)\b[^.?!;\n]{0,48}\b(?:zoom(?:\s+meeting)?|meetings?|appointments?)\b|\bzoom\s+meetings?\b|\bin[-\s]?person\s+(?:meetings?|appointments?)\b/gi,
   /\b(?:show|see|read|check|open|what(?:'s| is)|list)\b[^.?!;\n]{0,40}\b(?:calendars?|schedule|agenda|meetings?)\b|\b(?:my|the)\s+calendar\b/gi,
   /\b(?:read|check|show|open|any|new)\b[^.?!;\n]{0,28}\b(?:e-?mails?|inbox|mailbox)\b/gi,
   /\b(?:who needs|who should i|who do i|which clients? (?:need|needs|are due|is due|should)|who is due|cross-?sell|upsell|not contacted|kyc due|needs attention|review (?:my |the )?clients|clients? (?:need|needs) (?:a )?review|due (?:for|to) (?:a )?(?:review|contact)|hasn'?t been contacted|have not been contacted)\b/gi,
@@ -1817,8 +1824,10 @@ export function splitSecretaryTasks(text: string) {
     if (previous && hit.index < previous.end) continue;
     if (previous && hit.pattern === previous.pattern) {
       const between = tidy.slice(previous.end, hit.index);
+      const next = tidy.slice(hit.index, hit.index + 32);
       const fresh = /\b(?:then|also|plus|next)\b/i.test(between)
-        || /\band\s+(?:send|create|write|make|prepare|draft|book|check|show|give)\b/i.test(between)
+        || (/\b(?:and|then)\s*$/i.test(between) && /^(?:send|create|write|make|prepare|draft|book|check|show|give|schedule|arrange|set)\b/i.test(next))
+        || /\band\s+(?:send|create|write|make|prepare|draft|book|check|show|give|schedule|arrange|set)\b/i.test(between)
         || /\band\s+(?:a|an|the|another)\s+(?:e-?card|card|newsletter|letter|note|meeting|appointment|campaign|drip)\b/i.test(between);
       if (!fresh) continue;
     }

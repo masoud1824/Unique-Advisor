@@ -219,6 +219,20 @@ describe("misheard advisor commands", () => {
     assert.match(added.body, /Please call me this week/);
     assert.equal(nextTemplate([{ id: "plum", name: "Royal Plum" }, { id: "azure", name: "Azure Ribbon" }], "plum", "change the template").id, "azure");
     assert.equal(nextTemplate([{ id: "plum", name: "Royal Plum" }, { id: "azure", name: "Azure Ribbon" }], "plum", "use the Azure Ribbon template").id, "azure");
+    const cardsAndZoom = "send a seasons greeting card to avery and send a happy birthday card to masoud and book a zoom meeting with masoud";
+    const cardJobs = splitSecretaryTasks(cardsAndZoom);
+    assert.deepEqual(cardJobs.map((part) => taskKind(part)), ["e-card", "e-card", "meeting"]);
+    assert.match(cardJobs[0], /seasons greeting/i);
+    assert.doesNotMatch(cardJobs[0], /birthday|zoom/i);
+    assert.match(cardJobs[1], /birthday/i);
+    assert.match(cardJobs[2], /zoom meeting with masoud/i);
+    assert.equal(grokMayRewrite(cardsAndZoom), false);
+    assert.equal(taskKind("book a zoom meeting with Masoud"), "meeting");
+    assert.equal(taskKind("book an appointment with Masoud"), "meeting");
+    assert.equal(taskKind("make an appointment with Avery"), "meeting");
+    assert.equal(taskKind("arrange a meeting with Riley"), "meeting");
+    assert.equal(taskKind("set an appointment with Jordan"), "meeting");
+    assert.equal(isZoomAsk("Show my appointments for today"), false);
     assert.equal(eletterAwaitingYes([{ role: "assistant", content: "Just to confirm: send the e-letter “Disability Insurance” to Ali Mortazavi?" }]), true);
     assert.equal(campaignAwaitingYes([{ role: "assistant", content: "Just to confirm: start the Welcome campaign, every week, for Majid Hashemi?" }]), true);
     const batch = [

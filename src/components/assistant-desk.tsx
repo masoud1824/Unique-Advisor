@@ -66,7 +66,7 @@ function MailPreview({ action, busy, onApprove, onDiscard }: { action: Action; b
           <button type="button" className="ua-btn-line" disabled={busy} onClick={() => onDiscard(action.id)}>Discard</button>
         </div>
       )}
-      {action.previewImage && (
+      {action.previewImage && !action.previewHtml && (
         <img src={action.previewImage} alt="" className="mt-3 w-full rounded-lg border bg-white" style={{ borderColor: "#e1e8ef" }} />
       )}
       {action.previewHtml ? (

@@ -3728,7 +3728,7 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
       return stageCard(picked.card, { id: Number(person.id), full_name: person.full_name }, changingRecipient ? personHint : "");
     }
     const choices = picked && "cards" in picked ? picked.cards : cards.slice(0, 4);
-    const shortAnswer = tidy.length <= 80 && !/\b(?:newsletter|e-?letter|campaign|meeting|zoom|book)\b/i.test(tidy);
+    const shortAnswer = tidy.length <= 80 && !/\b(?:newsletter|e-?letter|campaign|meeting|appointment|zoom|book)\b/i.test(tidy);
     if (picked || shortAnswer) return replyWith(advisorId, chatId, cardDoubtLine(choices.map((item) => String(item.title ?? "")), personHint), onDelta);
   }
   const parts3 = splitSecretaryTasks(tidy);
