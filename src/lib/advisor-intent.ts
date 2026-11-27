@@ -490,6 +490,7 @@ export function grokMayRewrite(text: string) {
   if (!tidy) return false;
   if (asksToShowRecentLetter(tidy)) return false;
   if (askedSavedLetterName(tidy)) return false;
+  if (isNewsletterAsk(tidy)) return false;
   if (isEletterAsk(tidy) && eletterFromRequest(tidy)?.body) return false;
   if (asksExplicitWebFormSearch(tidy) || isNewNewsletterDraft(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy) || isNewsletterArticleAdd(tidy)) return false;
   if (isBareRefusal(tidy) || agreesToSendCard(tidy) || declinesCard(tidy)) return false;
@@ -1292,10 +1293,19 @@ export function newsletterReadyLine(title: string, names: string[], articles: st
   return `${newsletterConfirmLine(title, names)}\n\n${list}\n\nSay yes to send it. Say remove 2, or remove the part by name, to take a part out.`;
 }
 
+/** “Notes on life insurance” is a newsletter. “A note to Avery” stays a letter. */
+export function isNotesNewsletter(text: string) {
+  const tidy = tidyHeard(text);
+  if (/\b(?:e-?letters?|letters?)\b/i.test(tidy)) return false;
+  if (/\b(?:a|the|this)\s+note\b/i.test(tidy)) return false;
+  return /\bnotes\b/i.test(tidy) && /\b(?:on|about|regarding)\b/i.test(tidy);
+}
+
 export function isNewsletterAsk(text: string) {
   const tidy = tidyHeard(text).replace(/\bseznd\b/gi, "send");
   if (isNewsletterArchiveAsk(tidy)) return true;
   if (ordinaryBlocked(tidy) || isNewsletterEdit(tidy) || isNewsletterHold(tidy) || isNewsletterArticleRevision(tidy) || isNewsletterReorder(tidy)) return false;
+  if (isNotesNewsletter(tidy)) return true;
   if (!/\bnewsletters?\b/i.test(tidy)) return false;
   return /\b(?:create|write|make|prepare|draft|send|build|about|with)\b/i.test(tidy);
 }
@@ -1309,7 +1319,12 @@ export function newsletterTopics(text: string) {
     .replace(/\s+\b(?:show me|preview|do not send|don't send)\b[\s\S]*$/i, "")
     .replace(/\s+\b(?:and\s+)?(?:send|email|mail)\b[\s\S]*$/i, "")
     .replace(/\s+\b(?:to|for)\s+[A-Z][\s\S]*$/i, "");
-  const topics = rest
+  let phrase = rest.replace(/\s+/g, " ").trim();
+  if (/\s+and\s+(?:its|it's|their|the)\s+importance$/i.test(phrase) && !/,/.test(phrase)) {
+    const subject = phrase.replace(/\s+and\s+(?:its|it's|their|the)\s+importance$/i, "").replace(/^(?:the|a|an)\s+/i, "").trim();
+    if (subject) phrase = `the importance of ${subject}`;
+  }
+  const topics = phrase
     .split(/\s*,\s*|\s+\band\b\s+/i)
     .map((part) => part.replace(/^(?:a|an|the|\d+)\s+/i, "").replace(/[.?!]+$/g, "").trim())
     .filter((part) => part.length > 2 && !/^(?:articles?|stories|story|sections?|parts?)$/i.test(part))

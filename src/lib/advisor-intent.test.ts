@@ -443,6 +443,16 @@ describe("misheard advisor commands", () => {
     ]);
     assert.equal(ambiguous && "choices" in ambiguous ? ambiguous.choices.length : 0, 2);
     assert.equal(grokMayRewrite("send acceptance letter to masoud zangeneh"), false);
+    const notes = "send notes on life insurance and its importance to avery";
+    assert.equal(isNewsletterAsk(notes), true);
+    assert.equal(isEletterAsk(notes), false);
+    assert.equal(taskKind(notes), "newsletter");
+    assert.equal(grokMayRewrite(notes), false);
+    assert.deepEqual(newsletterTopics(notes), ["importance of life insurance"]);
+    assert.deepEqual(newsletterRecipients(notes), ["avery"]);
+    assert.match(newsletterArticle("importance of life insurance").body, /not a quote/i);
+    assert.equal(isNewsletterAsk("send a note to avery about life insurance"), false);
+    assert.equal(isEletterAsk("send a note to avery about life insurance"), true);
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);

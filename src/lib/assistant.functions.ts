@@ -2724,7 +2724,16 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
       args: { title, articles: topics.map((topic) => newsletterArticle(topic)), contactName: (recipients.length ? recipients : audience.names).join(" and "), tag: audience.tag },
       request: tidy
     });
-    if (!prepared.ok) return preparedWork(prepared.error);
+    if (!prepared.ok) {
+      const reason = String(prepared.error || "");
+      if (topics.length > 0 && /No email is recorded|Unsubscribed/i.test(reason)) {
+        const articles = topics.map((topic) => newsletterArticle(topic));
+        const issue: NewsletterIssue = { design: "pine", kicker: "Newsletter", title, subject: title, articles, social: emptySocial() };
+        const shown = await rememberNewsletterPreview(advisorId, slug, code, issue, 0, `${reason}\n\nThe newsletter is below. It was not sent.`);
+        return preparedWork(shown.reply, shown.actions);
+      }
+      return preparedWork(prepared.error);
+    }
     await keepOnlyPending(advisorId, "newsletter", Number(prepared.actionId));
     const names = Array.isArray(prepared.to) ? prepared.to : recipients;
     return preparedWork(newsletterReadyLine(title, names, topics.map((topic) => newsletterArticle(topic).title)), [{
