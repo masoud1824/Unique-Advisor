@@ -161,6 +161,8 @@ describe("identity confirmation is not delivery approval", () => {
     assert.equal(previewApprovalDecision("Yes.", IDENTITY, STALE).action, "skip");
     assert.equal(previewApprovalDecision("Yes, send it to Jordan Example.", IDENTITY, STALE).action, "skip");
     assert.equal(previewApprovalDecision("Yes.", PREVIEW, STALE).action, "stale");
+    const bookingReply = "E-card: Avery Sample — No email is recorded. Nothing was sent.\n\nAppointment: Just to confirm: a 30-minute Zoom meeting with Morgan Sample on Saturday, Nov 28 at 10:00 AM Toronto time. Shall I book it?";
+    assert.equal(previewApprovalDecision("yes", bookingReply, STALE).action, "skip");
     assert.equal(previewApprovalDecision("Send it.", PREVIEW, STALE).action, "stale");
     assert.equal(previewApprovalDecision("Yes.", PREVIEW, PENDING).action, "send");
     assert.equal(previewApprovalDecision("Yes, send it to Riley Sample.", PREVIEW, PENDING).action, "skip");

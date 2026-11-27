@@ -237,6 +237,7 @@ describe("misheard advisor commands", () => {
     const mixed = splitSecretaryTasks(letterAndCard);
     assert.deepEqual(mixed.map((part) => taskKind(part)), ["e-letter", "e-card", "meeting"]);
     assert.match(mixed[0], /letter to masoud/i);
+    assert.doesNotMatch(mixed[0], /\band$/i);
     assert.doesNotMatch(mixed[0], /season card|appointment/i);
     assert.match(mixed[1], /season card to avery/i);
     assert.match(mixed[2], /appointment with morgan/i);

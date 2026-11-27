@@ -65,15 +65,23 @@ export function resolveConfirmation(userText: string, staged: StagedAction[]) {
 
 /** A yes approves only the pending action named by the latest confirm line. Other valid pending actions stay pending. */
 export function previewApprovalDecision(userText: string, lastAssistant: string, staged: StagedAction[]) {
-  if (!/just to confirm:/i.test(String(lastAssistant || ""))) return { action: "skip" as const };
+  const last = String(lastAssistant || "");
+  const lines = last.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const confirmLines = lines.filter((line) => /just to confirm:|shall i book it\?/i.test(line));
+  const lastConfirm = confirmLines[confirmLines.length - 1] || "";
+  const bareYes = /^(?:please\s+)?(?:yes|yeah|yep|yup|ok|okay)\b[.!]?$/i.test(String(userText || "").trim());
+  if (/shall i book it\?/i.test(lastConfirm) && bareYes) return { action: "skip" as const };
+  const mailLines = confirmLines.filter((line) => /just to confirm:/i.test(line) && !/shall i book it\?/i.test(line) && !/\bzoom meeting\b/i.test(line));
+  const scope = mailLines.length ? mailLines.join("\n") : last;
+  if (!/just to confirm:/i.test(scope) || /shall i book it\?/i.test(scope) && mailLines.length === 0) return { action: "skip" as const };
   const named = recipientAfterDirection(userText);
-  const previewName = String(lastAssistant || "").match(/\bto ([^?\n]+)\?/i)?.[1]?.trim() || "";
+  const previewName = scope.match(/\bto ([^?\n]+)\?/i)?.[1]?.trim() || "";
   const previewPerson = previewName.replace(/[<>].*$/g, "").trim();
   if (named && previewPerson && !previewPerson.toLowerCase().includes(named.toLowerCase()) && named.toLowerCase() !== previewPerson.toLowerCase()) {
     return { action: "skip" as const };
   }
-  const kind = confirmKind(lastAssistant);
-  const names = confirmNames(lastAssistant);
+  const kind = confirmKind(scope);
+  const names = confirmNames(scope);
   const rows = Array.isArray(staged) ? staged : [];
   const pool = kind ? rows.filter((row) => row.kind === kind) : rows;
   const pending = pool.filter((row) => row.status === "pending" && row.approval !== "withdrawn" && row.approval !== "cancelled" && row.approval !== "superseded");

@@ -1872,7 +1872,7 @@ export function splitSecretaryTasks(text: string) {
   for (let index = 0; index < kept.length; index += 1) {
     const start = kept[index].index;
     const end = index + 1 < kept.length ? kept[index + 1].index : tidy.length;
-    const slice = tidy.slice(start, end).replace(/[,;]?\s*(?:and|then|also|plus)\s*$/i, "").replace(/^[,;.\s]+/, "").trim();
+    const slice = tidy.slice(start, end).replace(/(?:[,;]?\s*(?:and|then|also|plus)\s*)+$/i, "").replace(/^[,;.\s]+/, "").trim();
     if (slice.length > 2) slices.push(slice);
   }
   return slices.length > 1 ? slices : [text];

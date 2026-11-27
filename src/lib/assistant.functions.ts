@@ -2783,9 +2783,9 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
       request: tidy
     });
     if (!prepared.ok) {
-      const reason = String(prepared.error || "");
+      const reason = String(prepared.error || "The letter was not sent.");
       const who = reason.split("—")[0].trim();
-      if (letter && /No email is recorded|Unsubscribed/i.test(reason)) {
+      if (letter) {
         return previewComposedEletter({ advisorId, slug, code, request: tidy, title, body, who: who || recipients[0] || "", reason, saved });
       }
       return preparedWork(reason || "The letter was not prepared.");
@@ -2863,38 +2863,40 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
     }
     if (people.length > 1) return preparedWork(withDroppedRecipient(dropped, `Did you mean ${people.slice(0, 4).map((row) => row.full_name).join(" or ")}?`));
     const person = people[0];
-    if (holdsDelivery(tidy)) {
-      const chosen = picked && "card" in picked ? cards.find((item) => item.id === picked.card.id) : undefined;
-      return preparedWork(greetingDraft(tidy, String(chosen?.message || "")));
-    }
     const blocked = await deliveryBlockFor(advisorId, person, dropped);
+    const pickedCard = picked && "card" in picked ? cards.find((item) => item.id === picked.card.id) : undefined;
+    if (!pickedCard) {
+      const choices = picked && "cards" in picked ? picked.cards : cards.slice(0, 4);
+      const doubt = cardDoubtLine(choices.map((item) => String(item.title ?? "")), String(person.full_name ?? ""));
+      return preparedWork(withDroppedRecipient(dropped, blocked ? `${blocked}\n\n${doubt}` : doubt));
+    }
+    if (holdsDelivery(tidy)) {
+      return preparedWork(greetingDraft(tidy, String(pickedCard.message || "")));
+    }
     if (blocked) {
       await cancelWaitingCard(advisorId, dropped);
-      const chosen = picked && "card" in picked ? cards.find((item) => item.id === picked.card.id) : undefined;
-      if (chosen && /No email is recorded|Unsubscribed/i.test(blocked)) {
+      if (/No email is recorded|Unsubscribed/i.test(blocked)) {
         const who = String(person.full_name || name);
-        const message = personalize(String(chosen.message || ""), who);
-        const previewHtml = cardPreviewHtml(String(chosen.image || ""), message, chosen.title, "", who);
-        const stored = await saveAction(advisorId, "card-preview", `${chosen.title} · ${who} · not for sending`, { title: chosen.title, message, image: chosen.image || "", recipient: who });
+        const message = personalize(String(pickedCard.message || ""), who);
+        const previewHtml = cardPreviewHtml(String(pickedCard.image || ""), message, pickedCard.title, "", who);
+        const stored = await saveAction(advisorId, "card-preview", `${pickedCard.title} · ${who} · not for sending`, { title: pickedCard.title, message, image: pickedCard.image || "", recipient: who });
         return preparedWork([
           blocked,
-          `Preview of the ${chosen.title} card. It was not sent.`,
+          `Preview of the ${pickedCard.title} card. It was not sent.`,
           message,
         ].join("\n\n"), [{
           id: stored.actionId,
           kind: "card-preview",
-          summary: `${chosen.title} · ${who} · not for sending`,
+          summary: `${pickedCard.title} · ${who} · not for sending`,
           preview: message,
           previewHtml,
-          previewImage: String(chosen.image || ""),
+          previewImage: String(pickedCard.image || ""),
         }]);
       }
       return preparedWork(blocked);
     }
-    if (!picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(cards.slice(0, 4).map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
-    if ("cards" in picked) return preparedWork(withDroppedRecipient(dropped, cardDoubtLine(picked.cards.map((item) => String(item.title ?? "")), String(person.full_name ?? ""))));
-    const action = await cardSendAction(advisorId, picked.card, [{ id: Number(person.id), full_name: person.full_name }]);
-    return preparedWork(withDroppedRecipient(dropped, cardConfirmLine(picked.card.title, person.full_name)), [action]);
+    const action = await cardSendAction(advisorId, pickedCard, [{ id: Number(person.id), full_name: person.full_name }]);
+    return preparedWork(withDroppedRecipient(dropped, cardConfirmLine(pickedCard.title, person.full_name)), [action]);
   }
   if (isZoomAsk(tidy)) {
     const paused = await taskReady(advisorId, "meetings");
@@ -2965,7 +2967,7 @@ async function fulfillSecretary(advisorId: number, slug: string, code: string, t
 async function confirmSpokenZoom(advisorId: number, thread: Array<{ role?: string; content?: string }>) {
   const placed = await confirmPendingZoom(advisorId);
   if (placed?.reply) return placed.reply;
-  const earlier = [...thread].reverse().find((turn): turn is { role?: string; content: string } => turn.role === "user" && typeof turn.content === "string" && /\b(?:zoom|meeting)\b/i.test(turn.content) && !isTimeAgreement(turn.content));
+  const earlier = [...thread].reverse().find((turn): turn is { role?: string; content: string } => turn.role === "user" && typeof turn.content === "string" && /\b(?:zoom|meetings?|appointments?)\b/i.test(turn.content) && !isTimeAgreement(turn.content));
   if (!earlier) return "";
   const result = await bookZoom(advisorId, { contactName: contactPhrase(earlier.content), whenText: earlier.content, minutes: 30 }, [earlier.content, "yes"], /* @__PURE__ */ new Date());
   return meetingReply(result);
@@ -3758,7 +3760,7 @@ async function directAdvisorCommand(advisorId: number, slug: string, code: strin
     }
     const reply = [
       done.filter(Boolean).join("\n\n"),
-      confirms.join("\n"),
+      confirms.join("\n\n"),
       confirms.length > 1 ? "Say yes and I will send all of these." : ""
     ].filter(Boolean).join("\n\n");
     return replyWith(advisorId, chatId, reply || "Tell me which part to do first.", onDelta, actions);
