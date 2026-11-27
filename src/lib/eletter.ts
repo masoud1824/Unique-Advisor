@@ -46,6 +46,21 @@ export function starterEletter(): Eletter {
   };
 }
 
+export function eletterDesignName(design: EletterDesign) {
+  return ELETTER_DESIGNS.find((item) => item.id === design)?.name || "E-letter";
+}
+
+/** Write the requested letter onto a template. The template keeps its design. */
+export function letterOnTemplate(input: { template: Eletter | null; design: EletterDesign; title: string; body: string; who: string }): Eletter {
+  const who = input.who.trim();
+  const greeting = who ? `Dear ${who},` : ELETTER_GREETING;
+  const rest = input.body.replace(/^dear\s+[^\n]+\n*/i, "").trim();
+  const body = `${greeting}\n\n${rest}`;
+  const title = input.title.trim() || "A letter";
+  const base = input.template || { ...starterEletter(), design: input.design };
+  return { ...base, title, subject: title, body };
+}
+
 export function packEletter(letter: Eletter) {
   return JSON.stringify({ v: 2, ...letter, kind: "eletter", body: letter.body.slice(0, 8000) });
 }

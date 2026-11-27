@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { letterOnTemplate, starterEletter } from "./eletter.ts";
 import { describe, it } from "node:test";
 import { agreesToSendCard, asksForPlan, asksToComposeEmail, asksToResume, batchAwaitingYes, campaignAudience, campaignAwaitingYes, cardAwaitingApprove, cardAwaitingYes, cardConfirmLine, cardDoubtAllowed, cardDoubtLine, cardSentLine, cardTitleHint, contactPhrase, decideTurn, declinesCard, deskCommandAfterGrok, earlierDraftReply, editListedText, eletterAwaitingYes, fileSubject, freshDraft, grokDoubtReply, grokMayRewrite, heardCommand, isCalendarAsk, isCampaignAsk, isCardAsk, isEletterAsk, isFileAsk, isInboxAsk, isNewsletterArticleAdd, isNewsletterArticleRevision, isNewsletterArchiveAsk, isNewsletterAsk, isNewsletterDelivery, isNewsletterEdit, isNewsletterHold, isNewsletterReorder, isOnboardingDemo, isReviewAsk, isRevisionAsk, isStandaloneDraft, isTaskSwitch, isZoomAsk, looksLikeInstruction, matchCardByName, addedArticleTopic, firstSentences, newsletterArchiveTopics, newsletterArticle, newsletterArticleTarget, newsletterMoveTarget, sentenceCount, newsletterAwaitingYes, newsletterConfirmLine, newsletterDropIndex, newsletterReadyLine, newsletterRecipients, newsletterTitle, newsletterTopics, reviseSectionBody, onboardingDraft, parseHeardJob, pendingQuestion, replacesWithBookingRefusal, revisionFollows, revisionMessages, revisionOf, rewriteAllowed, ruleCardPhrases, shouldIgnorePending, showUnclearChoice, splitSecretaryTasks, taskKind, textHitsRuleCard, tidyHeard, toolsAllowed, workloadPlan, deskKeepsTurn, eletterFromRequest, eletterRecipient, letterBlockedPreview, recentLetterToShow, yesApplies } from "./advisor-intent.ts";
 import { contentHoldKind, isNewNewsletterDraft } from "./workspace-policy.ts";
@@ -409,6 +410,17 @@ describe("misheard advisor commands", () => {
     assert.equal(grokMayRewrite("show me the letter"), false);
     assert.equal(deskCommandAfterGrok(rrsp, "open the saved e-letter"), rrsp);
     assert.equal(deskCommandAfterGrok("show me the letter", "Which saved e-letter should I open?"), "show me the letter");
+    const placed = letterOnTemplate({
+      template: { ...starterEletter(), design: "ruled", title: "Old template", subject: "Old template" },
+      design: "plum",
+      title: season?.title || "",
+      body: season?.body || "",
+      who: "Avery Sample",
+    });
+    assert.equal(placed.design, "ruled");
+    assert.match(placed.body, /Dear Avery Sample/);
+    assert.match(placed.body, /RRSP season is approaching/);
+    assert.match(placed.body, /ask for a meeting/i);
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);
