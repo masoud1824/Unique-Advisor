@@ -2,12 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { groupLibraryArticles } from "@/lib/article-library";
 import { searchLibrary } from "@/lib/platform.functions";
 
-const TITLE_COLORS = ["#0c2f6b", "#1C3D36", "#8c4a32", "#1f4d3a", "#6b3a2a", "#1e4d8c"];
+const TITLE_PAIRS = [
+  { group: "#0c2f6b", article: "#9C5A38" },
+  { group: "#1C3D36", article: "#0f4c81" },
+  { group: "#8c4a32", article: "#1C3D36" },
+  { group: "#1f4d3a", article: "#8c4a32" },
+  { group: "#6b3a2a", article: "#0c2f6b" },
+  { group: "#1e4d8c", article: "#9a7b4f" },
+];
 
-function topicColor(topic: string) {
+function topicColors(topic: string) {
   let n = 0;
-  for (const ch of topic) n = (n + ch.charCodeAt(0)) % TITLE_COLORS.length;
-  return TITLE_COLORS[n];
+  for (const ch of topic) n = (n + ch.charCodeAt(0)) % TITLE_PAIRS.length;
+  return TITLE_PAIRS[n];
 }
 
 type Row = { id: number; title: string; bodyHtml: string; bodyText: string; topics: string; language: string; version: number };
@@ -66,15 +73,15 @@ export function ArticleLibraryDesk({
       <div className="ua-library-scroll">
         {shown.length === 0 && <p className="text-sm" style={{ color: "#5a6a7a" }}>No published articles match.</p>}
         {shown.map((group) => {
-          const color = topicColor(group.topic);
+          const colors = topicColors(group.topic);
           return (
           <section key={group.title} className="mb-5">
-            <h3 className="mb-2 text-base font-semibold" style={{ color }}>{group.title}</h3>
+            <h3 className="mb-2 text-base font-semibold" style={{ color: colors.group }}>{group.title}</h3>
             <ul className="grid gap-2">
               {group.articles.map((row) => (
                 <li key={row.id}>
                   <button type="button" className="ua-library-article" onClick={() => choose(row)}>
-                    <strong style={{ color }}>{row.title}</strong>
+                    <strong style={{ color: colors.article }}>{row.title}</strong>
                     <span>{row.bodyText}</span>
                   </button>
                 </li>
