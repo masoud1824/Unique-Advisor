@@ -1704,7 +1704,7 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 				style: { color: "#5a6a7a" },
 				children: "Select a card, edit the note, choose who should receive it, then press Send. Delete removes a card from this gallery only."
 			}), /* @__PURE__ */ jsxs("div", {
-				className: "grid gap-5 sm:grid-cols-2 xl:grid-cols-3",
+				className: "ua-card-gallery",
 				children: [
 					stock.map((card) => /* @__PURE__ */ jsxs("div", {
 						className: `ua-cardart ${title === card.title ? "selected" : ""}`,
@@ -1798,7 +1798,7 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 										display: "block"
 									}
 								}) : /* @__PURE__ */ jsx("div", {
-									className: "flex h-[120px] items-end p-4 text-white",
+									className: "flex h-[104px] items-end p-3 text-white",
 									style: { background: "linear-gradient(135deg,#0f4c81,#1a6bb5)" },
 									children: /* @__PURE__ */ jsx("span", {
 										className: "text-lg font-semibold",
@@ -1862,7 +1862,7 @@ function CardsTab({ code, desk, reload, ping }: DeskTabProps) {
 										display: "block"
 									}
 								}) : /* @__PURE__ */ jsx("div", {
-									className: "flex h-[120px] items-end p-4 text-white",
+									className: "flex h-[104px] items-end p-3 text-white",
 									style: { background: wash },
 									children: /* @__PURE__ */ jsx("span", {
 										className: "text-lg font-semibold",

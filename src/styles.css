@@ -950,8 +950,39 @@ body:has(.ua-assistant-lock) {
   width: 20px;
   height: 20px;
 }
+.ua-card-gallery {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ua-card-gallery .ua-cardart {
+  min-width: 0;
+}
+.ua-card-gallery img {
+  width: 100%;
+  height: 104px !important;
+  object-fit: cover;
+  display: block;
+}
+.ua-card-gallery h3 {
+  font-size: 0.82rem;
+  line-height: 1.2;
+  margin: 0;
+}
+.ua-card-gallery .p-3,
+.ua-card-gallery .m-3 {
+  padding: 8px;
+  margin: 8px;
+}
+.ua-card-gallery .ua-btn-line {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+@media (min-width: 760px) {
+  .ua-card-gallery { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
 .ua-card-preview {
-  max-width: 280px;
+  max-width: 200px;
 }
 .ua-grow {
   width: 100%;
