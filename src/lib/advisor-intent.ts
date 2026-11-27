@@ -1455,6 +1455,49 @@ export function eletterRecipients(text: string) {
   return one ? [one] : [];
 }
 
+function letterSubject(point: string) {
+  return point
+    .replace(/^(?:tell|telling|say(?:ing)?)\s+(?:him|her|them)\s+/i, "")
+    .replace(/^(?:ask(?:ing)?|request(?:ing)?|invit(?:e|ing))\s+(?:(?:him|her|them)\s+)?(?:for\s+)?/i, "")
+    .replace(/^(?:about|regarding)\s+/i, "")
+    .replace(/\s+and\s+(?:ask|suggest|request|invite)\b[\s\S]*$/i, "")
+    .replace(/\bits\b/gi, "it is")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** A real letter about the subject the advisor named. It does not quote a product or invent the client's facts. */
+export function draftLetterCopy(topic: string) {
+  const key = topic.toLowerCase();
+  const lines = /life insurance/.test(key)
+    ? [
+        "Life insurance is there so a household can replace income and pay immediate costs if the person they depend on dies.",
+        "It can keep a home, cover a mortgage, and give the people left behind time to decide what comes next, instead of having to make those decisions in a crisis.",
+        "The amount and the names on the policy matter as much as having a policy at all. A new child, a mortgage, a business, or a change in income can leave last year's coverage too small, or leave the wrong person named.",
+        "This letter is not a quote and it is not a recommendation to buy a particular policy. It asks only whether the coverage still fits the people who depend on that income.",
+      ]
+    : /rrsp|retirement/.test(key)
+      ? [
+          "An RRSP is a way to set money aside for a later year, and the contribution window is a date on the calendar rather than a surprise.",
+          "The useful question is whether this year's room has been used, and whether the plan still matches the retirement the household actually wants.",
+          "Leaving it until the last week usually means a rushed decision.",
+          "This letter does not name a deadline date and it is not tax advice.",
+        ]
+      : /disabilit/.test(key)
+        ? [
+            "Disability insurance is about income in the months when someone cannot work.",
+            "A review asks how long the household could pay its bills, what is already covered at work, and what would still be missing.",
+            "The waiting period and the definition of disability are the parts people forget until they need them.",
+            "This letter is not a quote and it does not say which contract to buy.",
+          ]
+        : [
+            `${topic.charAt(0).toUpperCase()}${topic.slice(1)} is worth a proper look, not a passing mention.`,
+            "The useful check is what is already in place, who is named, and whether a change in the family, the home, or the business has left a gap.",
+            "This letter does not choose a product and it does not say what to buy, sell, or replace.",
+          ];
+  return lines.join("\n\n");
+}
+
 export function eletterFromRequest(text: string) {
   const tidy = tidyHeard(text);
   const afterName = tidy.match(/\b(?:e-?letter|letter|note|email)\s+to\s+.+?\s+((?:and\s+)?(?:ask|asking|tell|telling|say|saying|request|requesting|invite|inviting|about|regarding)\b[\s\S]+)$/i);
@@ -1483,11 +1526,19 @@ export function eletterFromRequest(text: string) {
     .trim();
   if (!/[.!?]$/.test(sentence)) sentence += ".";
   sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1);
-  const title = sentence.replace(/^I am writing to ask for\s+/i, "").split(/[.!?]/)[0].split(/\s+/).slice(0, 8).join(" ");
+  const subject = letterSubject(point);
+  if (subject && !/\b(?:is|are|am|ask|would|can|will)\b/i.test(sentence)) {
+    sentence = `I am writing about ${subject.charAt(0).toLowerCase()}${subject.slice(1)}.`;
+  }
+  const nice = subject ? subject.charAt(0).toUpperCase() + subject.slice(1) : "";
+  const title = nice && nice.split(/\s+/).length <= 12
+    ? nice.replace(/[.!?]+$/g, "")
+    : sentence.replace(/^I am writing to ask for\s+/i, "").split(/[.!?]/)[0].split(/\s+/).slice(0, 8).join(" ");
   const meeting = /\b(?:zoom|in[- ]person|meetings?|appointments?)\b/i.test(`${point} ${sentence}`)
-    ? "\n\nPlease use the Book a meeting button in this letter. You can meet by Zoom or in person. The page shows only the times that are still open."
-    : "\n\nPlease reply if you would like to go over this.";
-  return { title: title.charAt(0).toUpperCase() + title.slice(1), body: `${sentence}${meeting}` };
+    ? "Please use the Book a meeting button in this letter. You can meet by Zoom or in person. The page shows only the times that are still open."
+    : "Please reply if you would like to go over this.";
+  const draft = subject ? draftLetterCopy(subject) : "";
+  return { title: title.charAt(0).toUpperCase() + title.slice(1), body: [sentence, draft, meeting].filter(Boolean).join("\n\n") };
 }
 
 /** A letter for someone who cannot receive mail. The text is shown and nothing is queued. */

@@ -421,6 +421,14 @@ describe("misheard advisor commands", () => {
     assert.match(placed.body, /Dear Avery Sample/);
     assert.match(placed.body, /RRSP season is approaching/);
     assert.match(placed.body, /ask for a meeting/i);
+    const life = "send a letter to masoud zangeneh and tell him about the importance of life insurance";
+    const drafted = eletterFromRequest(life);
+    assert.equal(eletterRecipient(life).toLowerCase(), "masoud zangeneh");
+    assert.match(drafted?.title || "", /importance of life insurance/i);
+    assert.match(drafted?.body || "", /I am writing about the importance of life insurance/i);
+    assert.match(drafted?.body || "", /replace income/i);
+    assert.match(drafted?.body || "", /not a quote/i);
+    assert.ok((drafted?.body || "").split(/\s+/).length > 60);
     assert.match(letter?.body || "", /Zoom or in person/i);
     assert.equal(isReviewAsk("which client need review"), true);
     assert.equal(isReviewAsk("who is due to contact"), true);
