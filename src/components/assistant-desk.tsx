@@ -3,7 +3,7 @@ import { approveAssistantAction, approveAssistantDraft, askAssistant, deleteAssi
 import { assistantPieces } from "@/lib/assistant-reply";
 import { isEcho, playStoredReply, playableReplyLine, prepareDeskCommand, preferredBrowserVoice, repeatsRequest, shouldBargeIn, shouldCaptureSpeech, spokenBrief, transcriptHold, voiceAudible, type ClipPlay } from "@/lib/voice-desk";
 import { applyChosenName, isHearingCheck, resolveSpokenContact, spokenNameOptions, type SpokenMatch } from "@/lib/contact-match";
-import { assistantQuestions, isOnboardingDemo, questionAnswer, showUnclearChoice } from "@/lib/advisor-intent";
+import { assistantQuestions, isOnboardingDemo, openQuestions, questionAnswer, questionKey, showUnclearChoice } from "@/lib/advisor-intent";
 import { shouldReplacePreview } from "@/lib/delivery-audience";
 import { refersToAppointment } from "@/lib/calendar-span";
 import { decideTranscript, micFailureMessage, microphoneTestReport, publicTranscriptionError, soundsLikeNoise, transcriptEchoesPrompt, transcriptionPrompt } from "@/lib/transcript-guard";
@@ -972,6 +972,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [choices, setChoices] = useState<string[]>([]);
+  const [answeredQuestions, setAnsweredQuestions] = useState<string[]>([]);
   const [choiceNote, setChoiceNote] = useState("");
   const [correction, setCorrection] = useState("");
   const [voicePhase, setVoicePhase] = useState<VoicePhase>("off");
@@ -1164,6 +1165,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setActions([]);
     setText("");
     setError("");
+    setAnsweredQuestions([]);
     void refresh(0);
   }, [desk.slug, code]);
 
@@ -1763,6 +1765,7 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
     setActions([]);
     setChoices([]);
     setChoiceNote("");
+    setAnsweredQuestions([]);
     setError("");
     resumeAdvisorListening();
     try {
@@ -2058,11 +2061,17 @@ export function AssistantDesk({ code, desk, spoken = null, assistFrom = null, he
                     {stamp(turn.at) && <span className="text-xs" style={{ color: "#5a6a7a" }}>{stamp(turn.at)}</span>}
                   </div>
                   <div className="mt-1 whitespace-pre-wrap">
-                    {turn.role === "assistant" && index === turns.length - 1 && assistantQuestions(turn.content).some((item) => item.asks)
-                      ? assistantQuestions(turn.content).map((item, itemIndex) => (
+                    {turn.role === "assistant" && openQuestions(turn.content, answeredQuestions).some((item) => item.asks)
+                      ? openQuestions(turn.content, answeredQuestions).map((item, itemIndex) => (
                         <div key={itemIndex} className={itemIndex ? "mt-3" : ""}>
                           <AssistantText text={item.text} />
-                          {item.asks && <QuestionChoices question={item.text} busy={busy} onAnswer={(line) => { setChoices([]); setChoiceNote(""); void ask(line); }} />}
+                          {item.open && <QuestionChoices question={item.text} busy={busy} onAnswer={(line) => {
+                            const key = questionKey(item.text);
+                            setAnsweredQuestions((current) => current.includes(key) ? current : [...current, key]);
+                            setChoices([]);
+                            setChoiceNote("");
+                            void ask(line);
+                          }} />}
                         </div>
                       ))
                       : turn.role === "assistant" ? <AssistantText text={turn.content} /> : turn.content}

@@ -559,6 +559,18 @@ export function assistantQuestions(text: string) {
   return blocks.map((part) => ({ text: part, asks: /\?/.test(part) }));
 }
 
+export function questionKey(text: string) {
+  return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export function openQuestions(text: string, answered: string[] = []) {
+  const done = new Set(answered.map(questionKey));
+  return assistantQuestions(text).map((item) => ({
+    ...item,
+    open: item.asks && !done.has(questionKey(item.text)),
+  }));
+}
+
 export function questionAnswer(question: string, choice: string) {
   const typed = String(choice || "").trim();
   const lower = typed.toLowerCase();
