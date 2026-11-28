@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { dbSource, getSql } from "@/lib/db";
+import { saveDeskAppointment } from "@/lib/desk-appointment";
 import { PREVIEW_WRITE_BLOCK, previewWritesBlocked } from "@/lib/preview-readonly";
 import { externalSideEffectsBlocked, connectionSetupBlocked, ISOLATED_EXTERNAL_BLOCK } from "@/lib/isolated-test-desk";
 import { loadMicrosoftConfig, openSecret, sealSecret, accessTokenForAdvisor } from "@/lib/microsoft-mail";
@@ -791,9 +792,22 @@ function stamp(value: string) {
   return parsed.toISOString().replace(/\.\d{3}Z$/, "Z");
 }
 async function createCalendarEvent(advisorId: number, input: { timeZone?: string; localStart?: string; localEnd?: string; start?: string; minutes?: number; provider: string; title?: string; details?: string; location?: string }) {
-  if (previewWritesBlocked()) return { ok: false as const, error: PREVIEW_WRITE_BLOCK };
+  const title = String(input.title || "Meeting").trim() || "Meeting";
+  const minutes = Number(input.minutes) || 30;
   const zoned = Boolean(input.timeZone && input.localStart && input.localEnd);
   const start = zoned ? input.localStart || "" : stamp(input.start || "");
+  if (previewWritesBlocked()) {
+    const instant = zoned ? new Date(input.start || "") : new Date(start);
+    if (!start || Number.isNaN(instant.getTime())) return { ok: false as const, error: "The meeting time could not be read. Ask again with a date and a time." };
+    const saved = await saveDeskAppointment(await getSql(), {
+      advisorId,
+      title,
+      startIso: instant.toISOString(),
+      minutes,
+      label: input.localStart || input.start || instant.toISOString(),
+    });
+    return saved.ok ? { ok: true as const, detail: saved.message, eventId: "" } : { ok: false as const, error: saved.error };
+  }
   const end = zoned ? input.localEnd || "" : "";
   if (!start) return { ok: false as const, error: "The meeting time could not be read. Ask again with a date and a time." };
   const endDate = zoned ? null : new Date(new Date(start).getTime() + (Number(input.minutes) || 30) * 6e4);
@@ -844,9 +858,18 @@ async function createCalendarEvent(advisorId: number, input: { timeZone?: string
   return { ok: false as const, error: input.provider === "outlook_calendar" ? "Outlook Calendar is not connected." : "Google Calendar is not connected." };
 }
 async function createZoomMeeting(advisorId: number, input: { start?: string; title: string; minutes: number }) {
-  if (previewWritesBlocked()) return { ok: false as const, error: PREVIEW_WRITE_BLOCK };
   const start = stamp(input.start || "");
   if (!start) return { ok: false as const, error: "The meeting time could not be read. Ask again with a date and a time." };
+  if (previewWritesBlocked()) {
+    const saved = await saveDeskAppointment(await getSql(), {
+      advisorId,
+      title: input.title,
+      startIso: new Date(start).toISOString(),
+      minutes: input.minutes,
+      label: input.start || start,
+    });
+    return saved.ok ? { ok: true as const, detail: saved.message } : { ok: false as const, error: saved.error };
+  }
   const token = await accessToken(advisorId, "zoom");
   if (!token) return { ok: false as const, error: "Zoom is not signed in. Press Sign in with Zoom." };
   const response = await fetch("https://api.zoom.us/v2/users/me/meetings", {
